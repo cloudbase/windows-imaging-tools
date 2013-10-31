@@ -4,7 +4,7 @@ $wallpaper = "Wallpaper-Cloudbase-2013.png"
 $virtioscript = "InstallVirtIODrivers.js"
 $gpoZipFile = "GPO.zip"
 
-$resources = @("FirstLogon.sp1", "Logon.sp1", $virtioscript, $gpoZipFile, $wallpaper)
+$resources = @("FirstLogon.ps1", "Logon.ps1", $virtioscript, $gpoZipFile, $wallpaper)
 
 $temp = "$ENV:SystemRoot\Temp"
 $baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
@@ -30,23 +30,27 @@ switch($virtPlatform)
     }
     "KVM"
     {
-        $Host.UI.RawUI.WindowTitle = "Installing VirtIO drivers..."    
+        $Host.UI.RawUI.WindowTitle = "Installing VirtIO drivers..."
         & cscript $temp\$virtioscript "E:\Win8\AMD64\*.inf"
         if (!$?) { throw "InstallVirtIO failed"}
         del $temp\$virtioscript
     }
 }
 
-$Host.UI.RawUI.WindowTitle = "Configuring GPOs..."    
+$Host.UI.RawUI.WindowTitle = "Configuring GPOs..."
 
 # Put the wallpaper in place
 $wallpaper_dir = "$ENV:SystemRoot\web\Wallpaper\Cloudbase"
-mkdir $wallpaper_dir
-move "$temp\$wallpaper" $wallpaper_dir
+if (!(Test-Path $wallpaper_dir))
+{
+    mkdir $wallpaper_dir
+}
+move "$temp\$wallpaper" $wallpaper_dir -Force
 
 $gpoZipPath = "$temp\$gpoZipFile"
-foreach($item in (New-Object -com shell.application).NameSpace(gpoZipPath).Items())
+foreach($item in (New-Object -com shell.application).NameSpace($gpoZipPath).Items())
 {
-    (New-Object -com shell.application).NameSpace("$ENV:SystemRoot\System32\GroupPolicy").copyhere($item)
+    $yesToAll = 16
+    (New-Object -com shell.application).NameSpace("$ENV:SystemRoot\System32\GroupPolicy").copyhere($item, $yesToAll)
 }
-del gpoZipPath
+del $gpoZipPath
