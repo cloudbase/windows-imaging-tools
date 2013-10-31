@@ -18,7 +18,7 @@ http://alt.fedoraproject.org/pub/alt/virtio-win/latest/images/bin/
 You'll need also your Windows installation ISO. In the following example we'll use a Windows Server 2012 R2 
 evaluation.
 
-    IMAGE=windows2012r2.qcow2
+    IMAGE=windows-server-2012-r2.qcow2
     FLOPPY=Autounattend.flp
     VIRTIO_ISO=virtio-win-0.1-65.iso
     ISO=9600.16384.WINBLUE_RTM.130821-1623_X64FRE_SERVER_EVAL_EN-US-IRM_SSS_X64FREE_EN-US_DV5.ISO
