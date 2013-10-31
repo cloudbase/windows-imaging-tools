@@ -9,7 +9,7 @@ Note: the provided Autounattend.xml targets x64 versions, but it can be easily a
 
 
 
-### How to create a Windows template in KVM
+### How to create a Windows template image in KVM
 
 
 Download the VirtIO tools ISO, e.g. from:
