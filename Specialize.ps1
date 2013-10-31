@@ -4,7 +4,7 @@ $wallpaper = "Wallpaper-Cloudbase-2013.png"
 $virtioscript = "InstallVirtIODrivers.js"
 $gpoZipFile = "GPO.zip"
 
-$resources = @("FirstLogon.sp1", "Logon.sp1", $virtioscript, $gpoZipFile, $wallpaper)
+$resources = @("FirstLogon.ps1", "Logon.ps1", $virtioscript, $gpoZipFile, $wallpaper)
 
 $temp = "$ENV:SystemRoot\Temp"
 $baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
@@ -30,14 +30,14 @@ switch($virtPlatform)
     }
     "KVM"
     {
-        $Host.UI.RawUI.WindowTitle = "Installing VirtIO drivers..."    
+        $Host.UI.RawUI.WindowTitle = "Installing VirtIO drivers..."
         & cscript $temp\$virtioscript "E:\Win8\AMD64\*.inf"
         if (!$?) { throw "InstallVirtIO failed"}
         del $temp\$virtioscript
     }
 }
 
-$Host.UI.RawUI.WindowTitle = "Configuring GPOs..."    
+$Host.UI.RawUI.WindowTitle = "Configuring GPOs..."
 
 # Put the wallpaper in place
 $wallpaper_dir = "$ENV:SystemRoot\web\Wallpaper\Cloudbase"
