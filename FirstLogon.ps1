@@ -9,15 +9,20 @@ switch($virtPlatform)
     "VMware Virtual Platform"
     {
         $Host.UI.RawUI.WindowTitle = "Installing VMware tools..."
-        E:\setup64.exe `/s `/v `"/qn REBOOT=ReallySuppress`" `/l $temp\vmware_tools_install.log
+        E:\setup64.exe `/s `/v `"/qn REBOOT=ReallySuppress`" `/l `"$ENV:Temp\vmware_tools_install.log`"
         if (!$?) { throw "VMware tools setup failed"}
     }
     "KVM"
     {
+        $Host.UI.RawUI.WindowTitle = "Downloading VirtIO drivers script..."
+        $virtioScriptPath = "$ENV:Temp\InstallVirtIODrivers.js"
+        $url = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master/InstallVirtIODrivers.js"
+        (new-object System.Net.WebClient).DownloadFile($url, $virtioScriptPath)
+
         $Host.UI.RawUI.WindowTitle = "Installing VirtIO drivers..."
-        & cscript $temp\$virtioscript "E:\Win8\AMD64\*.inf"
+        & cscript $virtioScriptPath "E:\Win8\AMD64\*.inf"
         if (!$?) { throw "InstallVirtIO failed"}
-        del $temp\$virtioscript
+        del $virtioScriptPath
     }
 }
 

@@ -1,10 +1,9 @@
 $ErrorActionPreference = "Stop"
 
 $wallpaper = "Wallpaper-Cloudbase-2013.png"
-$virtioscript = "InstallVirtIODrivers.js"
 $gpoZipFile = "GPO.zip"
 
-$resources = @("FirstLogon.ps1", "Logon.ps1", $virtioscript, $gpoZipFile, $wallpaper)
+$resources = @("FirstLogon.ps1", "Logon.ps1", $gpoZipFile, $wallpaper)
 
 $temp = "$ENV:SystemRoot\Temp"
 $baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
