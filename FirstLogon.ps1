@@ -9,7 +9,7 @@ switch($virtPlatform)
     "VMware Virtual Platform"
     {
         $Host.UI.RawUI.WindowTitle = "Installing VMware tools..."
-        E:\setup64.exe `/s `/v `"/qn REBOOT=ReallySuppress`" `/l `"$ENV:Temp\vmware_tools_install.log`"
+        E:\setup64.exe `/s `/v `/qn `/l `"$ENV:Temp\vmware_tools_install.log`"
         if (!$?) { throw "VMware tools setup failed"}
     }
     "KVM"
@@ -23,6 +23,8 @@ switch($virtPlatform)
         & cscript $virtioScriptPath "E:\Win8\AMD64\*.inf"
         if (!$?) { throw "InstallVirtIO failed"}
         del $virtioScriptPath
+        
+        shutdown /r /t 0
     }
 }
 
