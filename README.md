@@ -9,7 +9,7 @@ Note: the provided Autounattend.xml targets x64 versions, but it can be easily a
 
 
 
-### How to create a Windows template image in KVM
+### How to create a Windows template image on KVM
 
 
 Download the VirtIO tools ISO, e.g. from:
@@ -41,9 +41,40 @@ on this port, e.g.:
     iptables -I INPUT -p tcp --dport 5901 -j ACCEPT
 
 
+### How to create a Windows template image on Hyper-V
+
+The following Powershell snippet works on both Windows Server and Hyper-V Server 2012 and above:
+
+    $vmname = "OpenStack WS 2012 R2 Standard Evaluation"
+    $vhdpath = "C:\VM\windows-server-2012-r2.vhd"
+
+    $isoPath = "C:\your\path\9600.16384.WINBLUE_RTM.130821-1623_X64FRE_SERVER_EVAL_EN-US-IRM_SSS_X64FREE_EN-US_DV5.ISO"
+    $floppyPath = "C:\your\path\Autounattend.vfd"
+
+    # Set the vswitch accordingly with your configuration
+    $vmSwitch = "external"
+
+    New-VHD $vhdpath -Dynamic -SizeBytes (16 * 1024 * 1024 * 1024)
+    $vm = New-VM $vmname -MemoryStartupBytes (2048 * 1024 *1024)
+    $vm | Set-VM -ProcessorCount 2
+    $vm.NetworkAdapters | Connect-VMNetworkAdapter -SwitchName $vmSwitch
+    $vm | Add-VMHardDiskDrive -ControllerType IDE -Path $vhdpath
+    $vm | Add-VMDvdDrive -Path $isopath
+    $vm | Set-VMFloppyDiskDrive -Path $floppyPath
+
+    $vm | Start-Vm
+
+Now you can simply wait for the VM to get installed and configured. It will automatically shutdown once done.
+You can check the status with: 
+
+    get-VM $vmname
+
+If you have Cloudbase Hyper-V Nova Compute installed, you can also connect to the VM console with:
+
+    $vm | Get-VMConsole
 
 
-#### How to choose the proper Windows version
+#### How to set the proper Windows version
 
 The Windows version and edition to be installed can be specified in the Autounattend.xml file contained 
 in the Autounattend.flp floppy image. The default is Windows Server 2012 R2 Standard edition. 
