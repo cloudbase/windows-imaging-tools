@@ -38,7 +38,7 @@ the status, no user interaction is required.
 Note: if you plan to connect remotely via VNC, make sure that the KVM host firewall allows traffic
 on this port, e.g.:
 
-    IPTABLES -I INPUT -p tcp --dport 5901 -j ACCEPT
+    iptables -I INPUT -p tcp --dport 5901 -j ACCEPT
 
 
 
