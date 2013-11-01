@@ -32,3 +32,8 @@ foreach($item in (New-Object -com shell.application).NameSpace($gpoZipPath).Item
     (New-Object -com shell.application).NameSpace("$ENV:SystemRoot\System32\GroupPolicy").copyhere($item, $yesToAll)
 }
 del $gpoZipPath
+
+# Enable ping (ICMP Echo Request on IPv4 and IPv6)
+# TODO: replace with with a netsh advfirewall command
+# possibly avoiding duplicates with "File and printer sharing (Echo Request - ICMPv[4,6]-In)"
+netsh firewall set icmpsetting 8
