@@ -8,7 +8,7 @@ fi
 
 BASEDIR=$(dirname $0)
 
-FLOPPY_IMAGE=$BASEDIR/Autounattend.flp
+FLOPPY_IMAGE=$BASEDIR/Autounattend.vfd
 CONTENT_SRC=$BASEDIR/Autounattend.xml
 
 TMP_FLOPPY_IMAGE=`/bin/mktemp`
