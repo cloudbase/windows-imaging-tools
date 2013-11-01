@@ -46,7 +46,10 @@ on this port, e.g.:
 The following Powershell snippet works on both Windows Server and Hyper-V Server 2012 and above:
 
     $vmname = "OpenStack WS 2012 R2 Standard Evaluation"
-    $vhdpath = "C:\VM\windows-server-2012-r2.vhd"
+    
+    # Set the extension to VHD instead of VHDX only if you plan to deploy
+    # this image on Grizzly or on Windows / Hyper-V Server 2008 R2
+    $vhdpath = "C:\VM\windows-server-2012-r2.vhdx"
 
     $isoPath = "C:\your\path\9600.16384.WINBLUE_RTM.130821-1623_X64FRE_SERVER_EVAL_EN-US-IRM_SSS_X64FREE_EN-US_DV5.ISO"
     $floppyPath = "C:\your\path\Autounattend.vfd"
