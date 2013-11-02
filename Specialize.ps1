@@ -21,6 +21,7 @@ if (!(Test-Path $wallpaper_dir))
 }
 
 $Host.UI.RawUI.WindowTitle = "Downloading wallpaper..."
+$wallpaper = "Wallpaper-Cloudbase-2013.png"
 (new-object System.Net.WebClient).DownloadFile("$baseUrl/$wallpaper", "$wallpaper_dir\$wallpaper")
 
 $Host.UI.RawUI.WindowTitle = "Configuring GPOs..."
