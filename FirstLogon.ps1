@@ -1,12 +1,13 @@
 $ErrorActionPreference = "Stop"
 
-$Host.UI.RawUI.WindowTitle = "Downloading Logon script..."
 $logonScriptPath = "$ENV:SystemRoot\Temp\Logon.ps1"
-$baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
-(new-object System.Net.WebClient).DownloadFile("$baseUrl/Logon.ps1", $logonScriptPath)
 
 try
 {
+    $Host.UI.RawUI.WindowTitle = "Downloading Logon script..."
+    $baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
+    (new-object System.Net.WebClient).DownloadFile("$baseUrl/Logon.ps1", $logonScriptPath)
+
     $virtPlatform = (gwmi Win32_ComputerSystem).Model
     Write-Host "Virtual platform: $virtPlatform"
 
@@ -36,10 +37,12 @@ try
             shutdown /r /t 0
         }
     }
-    catch
-    {
-        # Prevents the setup from proceeding
-        del $logonScriptPath
-        throw
-    }
+}
+catch
+{
+    $host.ui.WriteErrorLine($_.Exception.ToString())
+    $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    # Prevents the setup from proceeding
+    if ( Test-Path $logonScriptPath ) { del $logonScriptPath }
+    throw
 }
