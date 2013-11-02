@@ -32,9 +32,5 @@ del $gpoZipPath
 # possibly avoiding duplicates with "File and printer sharing (Echo Request - ICMPv[4,6]-In)"
 netsh firewall set icmpsetting 8
 
-foreach($resource in @("FirstLogon.ps1", "Logon.ps1"))
-{
-    $url = "$baseUrl/$resource"
-    $Host.UI.RawUI.WindowTitle = "Downloading $resource..."
-    (new-object System.Net.WebClient).DownloadFile($url, "$temp\$resource")
-}
+$Host.UI.RawUI.WindowTitle = "Downloading FirstLogon script..."
+(new-object System.Net.WebClient).DownloadFile("$baseUrl/FirstLogon.ps1", "$temp\FirstLogon.ps1")
