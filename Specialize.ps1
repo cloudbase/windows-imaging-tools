@@ -1,9 +1,7 @@
 $ErrorActionPreference = "Stop"
 
-$wallpaper = "Wallpaper-Cloudbase-2013.png"
 $gpoZipFile = "GPO.zip"
-
-$resources = @("FirstLogon.ps1", "Logon.ps1", $gpoZipFile, $wallpaper)
+$resources = @("FirstLogon.ps1", "Logon.ps1", $gpoZipFile)
 
 $temp = "$ENV:SystemRoot\Temp"
 $baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
@@ -15,15 +13,17 @@ foreach($resource in $resources)
     (new-object System.Net.WebClient).DownloadFile($url, "$temp\$resource")
 }
 
-$Host.UI.RawUI.WindowTitle = "Configuring GPOs..."
-
 # Put the wallpaper in place
 $wallpaper_dir = "$ENV:SystemRoot\web\Wallpaper\Cloudbase"
 if (!(Test-Path $wallpaper_dir))
 {
     mkdir $wallpaper_dir
 }
-move "$temp\$wallpaper" $wallpaper_dir -Force
+
+$Host.UI.RawUI.WindowTitle = "Downloading wallpaper..."
+(new-object System.Net.WebClient).DownloadFile("$url/$wallpaper", "$wallpaper_dir\$wallpaper")
+
+$Host.UI.RawUI.WindowTitle = "Configuring GPOs..."
 
 $gpoZipPath = "$temp\$gpoZipFile"
 foreach($item in (New-Object -com shell.application).NameSpace($gpoZipPath).Items())
