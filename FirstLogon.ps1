@@ -15,8 +15,6 @@ function removeLogonScriptAndThrow($msg)
 $virtPlatform = (gwmi Win32_ComputerSystem).Model
 Write-Host "Virtual platform: $virtPlatform"
 
-$rebootRequired = $false
-
 # TODO: Add XenServer / XCP
 switch($virtPlatform)
 {
