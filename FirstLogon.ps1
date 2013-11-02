@@ -1,5 +1,17 @@
 $ErrorActionPreference = "Stop"
 
+$Host.UI.RawUI.WindowTitle = "Downloading Logon script..."
+$logonScriptPath = "$ENV:SystemRoot\Temp\Logon.ps1"
+$baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
+(new-object System.Net.WebClient).DownloadFile("$baseUrl/Logon.ps1", $logonScriptPath)
+
+function removeLogonScriptAndThrow($msg)
+{
+    # Prevents the setup from proceeding
+    del $logonScriptPath
+    throw $msg
+}
+
 $virtPlatform = (gwmi Win32_ComputerSystem).Model
 Write-Host "Virtual platform: $virtPlatform"
 
@@ -10,11 +22,11 @@ switch($virtPlatform)
 {
     "VMware Virtual Platform"
     {
+        # Note: this command will generate a reboot.
+        # "/qn REBOOT=ReallySuppress" does not seem to work properly
         $Host.UI.RawUI.WindowTitle = "Installing VMware tools..."
-        E:\setup64.exe `/s `/v `"/qn REBOOT=ReallySuppress`" `/l `"$ENV:Temp\vmware_tools_install.log`"
-        if (!$?) { throw "VMware tools setup failed"}
-
-        $rebootRequired = $true
+        E:\setup64.exe `/s `/v `/qn `/l `"$ENV:Temp\vmware_tools_install.log`"
+        if (!$?) { removeLogonScriptAndThrow "VMware tools setup failed" }
     }
     "KVM"
     {
@@ -25,19 +37,9 @@ switch($virtPlatform)
 
         $Host.UI.RawUI.WindowTitle = "Installing VirtIO drivers..."
         & cscript $virtioScriptPath "E:\Win8\AMD64\*.inf"
-        if (!$?) { throw "InstallVirtIO failed"}
+        if (!$?) { removeLogonScriptAndThrow "InstallVirtIO failed"}
         del $virtioScriptPath
 
-        $rebootRequired = $true
+        shutdown /r /t 0
     }
-}
-
-$Host.UI.RawUI.WindowTitle = "Downloading Logon script..."
-$temp = "$ENV:SystemRoot\Temp"
-$baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
-(new-object System.Net.WebClient).DownloadFile("$baseUrl/Logon.ps1", "$temp\Logon.ps1")
-
-if ($rebootRequired)
-{
-    shutdown /r /t 0
 }
