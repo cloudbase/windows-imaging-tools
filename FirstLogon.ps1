@@ -22,7 +22,7 @@ try
             E:\setup64.exe `/s `/v `/qn `/l `"$ENV:Temp\vmware_tools_install.log`"
             if (!$?) { throw "VMware tools setup failed" }
         }
-        "KVM"
+        {($_ -eq "KVM") -or ($_ -eq "Bochs")}
         {
             $Host.UI.RawUI.WindowTitle = "Downloading VirtIO drivers script..."
             $virtioScriptPath = "$ENV:Temp\InstallVirtIODrivers.js"
