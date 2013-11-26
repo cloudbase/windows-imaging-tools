@@ -30,7 +30,7 @@ try
             (new-object System.Net.WebClient).DownloadFile($url, $virtioScriptPath)
 
             $Host.UI.RawUI.WindowTitle = "Installing VirtIO drivers..."
-            & cscript $virtioScriptPath "E:\Win8\AMD64\*.inf"
+            & cscript $virtioScriptPath "E:\"
             if (!$?) { throw "InstallVirtIO failed" }
             del $virtioScriptPath
 
