@@ -48,8 +48,12 @@
                         <MetaData wcm:action="add">
                             <Key>/IMAGE/NAME</Key>
                             <!--
+                                Windows 8 ENTERPRISE
+                                Windows 8 PROFESSIONAL
                                 Windows 8.1 ENTERPRISE
                                 Windows 8.1 PROFESSIONAL
+                                Windows Server 2008 R2 SERVERHYPERCORE
+                                Windows Server 2008 R2 SERVERSTANDARD
                                 Hyper-V Server 2012 SERVERHYPERCORE
                                 Windows Server 2012 SERVERSTANDARD
                                 Hyper-V Server 2012 R2 SERVERHYPERCORE
@@ -95,20 +99,23 @@
                 -->
                 <ProtectYourPC>3</ProtectYourPC>
                 <NetworkLocation>Work</NetworkLocation>
+                <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+                <!-- Comment the following two options on Windows Vista / 7 and Windows Server 2008 / 2008 R2 -->
+                <!--
                 <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
                 <HideLocalAccountScreen>true</HideLocalAccountScreen>
-                <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+                -->
             </OOBE>
             <!-- Use FirstLogonCommands instead of LogonCommands if you don't need to install Windows Updates -->
             <LogonCommands>
                 <AsynchronousCommand wcm:action="add">
-                    <CommandLine>powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File C:\Windows\Temp\Logon.ps1</CommandLine>
+                    <CommandLine>%SystemRoot%\system32\WindowsPowerShell\v1.0\powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File C:\Windows\Temp\Logon.ps1</CommandLine>
                     <Order>1</Order>
                 </AsynchronousCommand>
             </LogonCommands>
             <FirstLogonCommands>
                 <SynchronousCommand wcm:action="add">
-                    <CommandLine>powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File C:\Windows\Temp\FirstLogon.ps1</CommandLine>
+                    <CommandLine>%SystemRoot%\system32\WindowsPowerShell\v1.0\powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File C:\Windows\Temp\FirstLogon.ps1</CommandLine>
                     <Order>2</Order>
                 </SynchronousCommand>
             </FirstLogonCommands>
