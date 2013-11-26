@@ -86,11 +86,11 @@ This can be easily changed here:
 
 https://github.com/cloudbase/windows-openstack-imaging-tools/blob/05b03fa64dc3d8e5c2c5af97c94aecea61616365/Autounattend.xml#L58
 
+For Windows 8 and above, uncomment also the following two options:
+
+    <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+    <HideLocalAccountScreen>true</HideLocalAccountScreen>
+
 Once done, the floppy image can be easily generated on Linux with:
 
     ./create-autounattend-floppy.sh
-    
-
-
-
-
