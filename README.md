@@ -91,6 +91,14 @@ For Windows 8 and above, uncomment also the following two options:
     <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
     <HideLocalAccountScreen>true</HideLocalAccountScreen>
 
+For x86 builds, replace all occurrences of:
+
+    processorArchitecture="amd64"
+
+with:
+
+    processorArchitecture="x86"
+
 Once done, the floppy image can be easily generated on Linux with:
 
     ./create-autounattend-floppy.sh
