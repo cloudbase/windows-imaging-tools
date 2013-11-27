@@ -1,104 +1,116 @@
-windows-openstack-imaging-tools
+Windows Imaging Tools
 ===============================
+[![Master branch](https://ci.appveyor.com/api/projects/status/github/cloudbase/windows-openstack-imaging-tools?branch=master&svg=true)](https://ci.appveyor.com/project/ader1990/windows-openstack-imaging-tools-w885m)
 
-Tools to automate the creation of a Windows image for OpenStack, supporting KVM, Hyper-V, ESXi and more.
+Windows OpenStack Imaging Tools automates the generation of Windows images.<br/>
+The tools are a bundle of PowerShell modules and scripts.
 
-Supports any version of Windows starting with Windows 2008 and Windows Vista.
+The supported target environments for the Windows images are:
+* OpenStack with KVM, Hyper-V, VMware and baremetal hypervisor types
+* MAAS with KVM, Hyper-V, VMware and baremetal
 
-Note: the provided Autounattend.xml targets x64 versions, but it can be easily adapted to x86.
+The generation environment needs to be a Windows one, with Hyper-V virtualization enabled.<br/>
+If you plan to run the online Windows setup step on another system / hypervisor, the Hyper-V virtualization is not required.
+
+The following versions of Windows images (both x86 / x64, if existent) to be generated are supported:
+* Windows Server 2008 / 2008 R2
+* Windows Server 2012 / 2012 R2
+* Windows Server 2016 
+* Windows 7 / 8 / 8.1 / 10
+
+To generate Windows Nano Server 2016, please use the following repository:
+
+https://github.com/cloudbase/cloudbase-init-offline-install
+
+## Fast path to create a Windows image
+
+### Requirements:
+
+* A Windows host, with Hyper-V virtualization enabled, PowerShell >=v4 support<br/>
+and Windows Assessment and Deployment Kit (ADK)
+* A Windows installation ISO or DVD
+* Windows compatible drivers, if required by the target environment
+* Git environment
+
+### Steps to generate the Windows image
+* Clone this repository
+* Mount or extract the Windows ISO file
+* Download and / or extract the Windows compatible drivers
+* If the target environment is MAAS or the image generation is configured to install updates,<br/>
+the windows-curtin-hooks and WindowsUpdates git submodules are required.<br/>
+Run `git submodule update --init` to retrieve them
+* Import the WinImageBuilder.psm1 module
+* Use the New-WindowsCloudImage or New-WindowsOnlineCloudImage methods with <br/> the appropriate configuration options
+
+### PowerShell image generation example for OpenStack KVM (host requires Hyper-V enabled)
+```powershell
+git clone https://github.com/cloudbase/windows-openstack-imaging-tools.git
+pushd windows-openstack-imaging-tools
+Import-Module .\WinImageBuilder.psm1
+
+# The Windows image file path that will be generated
+$windowsImagePath = "C:\images\my-windows-image.qcow2"
+
+# The wim file path is the installation image on the Windows ISO
+$wimFilePath = "D:\Sources\install.wim"
+
+# Every Windows ISO can contain multiple Windows flavors like Core, Standard, Datacenter
+# Usually, the first image version is the Core one
+$image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[0]
+
+New-WindowsOnlineImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
+    -WindowsImagePath $windowsImagePath -Type 'KVM' `
+    -SizeBytes 30GB -CpuCores 4 -Memory 4GB -SwitchName 'external'
+
+popd
+
+```
+
+## Image generation workflow
+
+### New-WindowsCloudImage
+
+This command does not require Hyper-V to be enabled, but the generated image<br/>
+is not ready to be deployed, as it needs to be started manually on another hypervisor.<br/>
+The image is ready to be used when it shuts down.
+
+You can find a PowerShell example to generate a raw OpenStack Ironic image that also works on KVM<br/>
+in `Examples/create-windows-cloud-image.ps1`
+
+### New-WindowsOnlineImage
+This command requires Hyper-V to be enabled, a VMSwitch to be configured for external<br/>
+network connectivity if the updates are to be installed, which is highly recommended.
+
+This command uses internally the `New-WindowsCloudImage` to generate the base image and<br/>
+start a Hyper-V instance using the base image. After the Hyper-V instance shuts down, <br/>
+the resulting VHDX is shrinked to a minimum size and converted to the required format.
+
+You can find a PowerShell example to generate a raw OpenStack Ironic image that also works on KVM<br/>
+in `Examples/create-windows-online-cloud-image.ps1`
 
 
+## For developers
 
-### How to create a Windows template image on KVM
+### Running unit tests
 
+You will need PowerShell Pester package installed on your system.
 
-Download the VirtIO tools ISO, e.g. from:
-http://alt.fedoraproject.org/pub/alt/virtio-win/latest/images/bin/
+It should already be installed on your system if you are running Windows 10.<br/>
+If it is not installed you can install it on Windows 10 or greater:
 
-You'll need also your Windows installation ISO. In the following example we'll use a Windows Server 2012 R2 
-evaluation.
+```powershell
+Install-Package Pester
+```
 
-    IMAGE=windows-server-2012-r2.qcow2
-    FLOPPY=Autounattend.vfd
-    VIRTIO_ISO=virtio-win-0.1-52.iso
-    ISO=9600.16384.WINBLUE_RTM.130821-1623_X64FRE_SERVER_EVAL_EN-US-IRM_SSS_X64FREE_EN-US_DV5.ISO
-
-    KVM=/usr/libexec/qemu-kvm
-    if [ ! -f "$KVM" ]; then
-        KVM=/usr/bin/kvm
-    fi
-
-    qemu-img create -f qcow2 -o preallocation=metadata $IMAGE 16G
-
-    $KVM -m 2048 -smp 2 -cdrom $ISO -drive file=$VIRTIO_ISO,index=3,media=cdrom -fda $FLOPPY $IMAGE -boot d -vga std -k en-us -vnc :1
-
-Now you can just wait for the KVM command to exit. You can also connect to the VM via VNC on port 5901 to check 
-the status, no user interaction is required.
-
-Note: if you plan to connect remotely via VNC, make sure that the KVM host firewall allows traffic
-on this port, e.g.:
-
-    iptables -I INPUT -p tcp --dport 5901 -j ACCEPT
+or you can clone it from: https://github.com/pester/Pester
 
 
-### How to create a Windows template image on Hyper-V
+Running the tests in a closed environment:
 
-The following Powershell snippet works on both Windows Server and Hyper-V Server 2012 and above:
+```cmd
+cmd /c 'powershell.exe -NonInteractive { Invoke-Pester }'
+```
 
-    $vmname = "OpenStack WS 2012 R2 Standard Evaluation"
-    
-    # Set the extension to VHD instead of VHDX only if you plan to deploy
-    # this image on Grizzly or on Windows / Hyper-V Server 2008 R2
-    $vhdpath = "C:\VM\windows-server-2012-r2.vhdx"
+This will run all tests without polluting your current shell environment. <br/>
+This is not needed if you run it in a Continuous Integration environment.
 
-    $isoPath = "C:\your\path\9600.16384.WINBLUE_RTM.130821-1623_X64FRE_SERVER_EVAL_EN-US-IRM_SSS_X64FREE_EN-US_DV5.ISO"
-    $floppyPath = "C:\your\path\Autounattend.vfd"
-
-    # Set the vswitch accordingly with your configuration
-    $vmSwitch = "external"
-
-    New-VHD $vhdpath -Dynamic -SizeBytes (16 * 1024 * 1024 * 1024)
-    $vm = New-VM $vmname -MemoryStartupBytes (2048 * 1024 *1024)
-    $vm | Set-VM -ProcessorCount 2
-    $vm.NetworkAdapters | Connect-VMNetworkAdapter -SwitchName $vmSwitch
-    $vm | Add-VMHardDiskDrive -ControllerType IDE -Path $vhdpath
-    $vm | Add-VMDvdDrive -Path $isopath
-    $vm | Set-VMFloppyDiskDrive -Path $floppyPath
-
-    $vm | Start-Vm
-
-Now you can simply wait for the VM to get installed and configured. It will automatically shutdown once done.
-You can check the status with: 
-
-    get-VM $vmname
-
-If you have Cloudbase Hyper-V Nova Compute installed, you can also connect to the VM console with:
-
-    $vm | Get-VMConsole
-
-
-#### How to set the proper Windows version
-
-The Windows version and edition to be installed can be specified in the Autounattend.xml file contained 
-in the Autounattend.flp floppy image. The default is Windows Server 2012 R2 Standard edition. 
-
-This can be easily changed here:
-
-https://github.com/cloudbase/windows-openstack-imaging-tools/blob/05b03fa64dc3d8e5c2c5af97c94aecea61616365/Autounattend.xml#L58
-
-For Windows 8 and above, uncomment also the following two options:
-
-    <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
-    <HideLocalAccountScreen>true</HideLocalAccountScreen>
-
-For x86 builds, replace all occurrences of:
-
-    processorArchitecture="amd64"
-
-with:
-
-    processorArchitecture="x86"
-
-Once done, the floppy image can be easily generated on Linux with:
-
-    ./create-autounattend-floppy.sh
