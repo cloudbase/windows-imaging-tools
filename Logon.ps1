@@ -20,7 +20,7 @@ try
 
     $Host.UI.RawUI.WindowTitle = "Installing updates..."
 
-    Get-WUInstall -AcceptAll -IgnoreReboot
+    Get-WUInstall -AcceptAll -IgnoreReboot -IgnoreUserInput
     if (Get-WURebootStatus -Silent)
     {
         $Host.UI.RawUI.WindowTitle = "Updates installation finished. Rebooting."
