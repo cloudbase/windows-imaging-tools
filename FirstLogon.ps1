@@ -12,13 +12,16 @@ function getVirtioDriversFolder(){
 
     $osArchitecture = (Get-WmiObject Win32_OperatingSystem).OSArchitecture
     $archFolder = $architectureMapping[$osArchitecture]
+    
     $osVersion = [int]::Parse((Get-WmiObject Win32_OperatingSystem).Version[2])
     $versionFolder = $osVersionMapping[$osVersion]
     if (! $versionFolder) { throw "Unsupported Windows version" }
-    $virtioPath = $($versionFolder + "\" +$archFolder)
-    $basePath = (get-Volume | where {$_.DriveType -eq "CD-ROM" -and (Test-Path (join-path -Path ($_.DriveLetter + ":") -ChildPath $virtioPath ))}).DriveLetter
     
-    return join-path -Path ($basePath + ":") -ChildPath $versionFolder | join-path -childPath $archFolder | join-path -childPath "*.inf"
+    $virtIOPath = Join-Path -Path $versionFolder -ChildPath $archFolder
+    $basePath = (get-Volume | where {$_.DriveType -eq "CD-ROM" -and `
+                 (Test-Path (join-path -Path ($_.DriveLetter + ":") -ChildPath $virtIOPath ))}).DriveLetter
+    
+    return join-path -Path ($basePath + ":") -ChildPath $virtIOPath | join-path -ChildPath "*.inf"
 }
 
 $logonScriptPath = "$ENV:SystemRoot\Temp\Logon.ps1"
