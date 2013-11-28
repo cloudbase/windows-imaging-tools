@@ -16,8 +16,7 @@ function getVirtioDriversFolder(){
     $versionFolder = $osVersionMapping[$osVersion]
     if (! $versionFolder) { throw "Unsupported Windows version" }
     $virtioPath = $($versionFolder + "\" +$archFolder)
-    $basePath = (get-Volume | where {$_.DriveType -eq "CD-ROM" -and (Test-Path (join-path -Path ($_.DriveLetter + ":") `
--ChildPath $virtioPath ))}).DriveLetter
+    $basePath = (get-Volume | where {$_.DriveType -eq "CD-ROM" -and (Test-Path (join-path -Path ($_.DriveLetter + ":") -ChildPath $virtioPath ))}).DriveLetter
     
     return join-path -Path ($basePath + ":") -ChildPath $versionFolder | join-path -childPath $archFolder | join-path -childPath "*.inf"
 }
