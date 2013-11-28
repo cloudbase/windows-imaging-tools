@@ -18,10 +18,10 @@ function getVirtioDriversFolder(){
     if (! $versionFolder) { throw "Unsupported Windows version" }
     
     $virtIOPath = Join-Path -Path $versionFolder -ChildPath $archFolder
-    $basePath = (get-Volume | where {$_.DriveType -eq "CD-ROM" -and `
-                 (Test-Path (join-path -Path ($_.DriveLetter + ":") -ChildPath $virtIOPath ))}).DriveLetter
+    $drive = (gwmi Win32_CDROMDrive | where {(Test-Path (join-path -Path $_.Drive -ChildPath $virtIOPath ))}).Drive
+    if (! $drive) { throw "VirtIO drivers not found" }    
     
-    return join-path -Path ($basePath + ":") -ChildPath $virtIOPath | join-path -ChildPath "*.inf"
+    return join-path -Path $drive -ChildPath $virtIOPath | join-path -ChildPath "*.inf"
 }
 
 $logonScriptPath = "$ENV:SystemRoot\Temp\Logon.ps1"
