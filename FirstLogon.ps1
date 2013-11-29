@@ -47,17 +47,26 @@ try
         }
         {($_ -eq "KVM") -or ($_ -eq "Bochs")}
         {
-            $Host.UI.RawUI.WindowTitle = "Downloading VirtIO drivers script..."
-            $virtioScriptPath = "$ENV:Temp\InstallVirtIODrivers.js"
-            $url = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master/InstallVirtIODrivers.js"
-            (new-object System.Net.WebClient).DownloadFile($url, $virtioScriptPath)
-            
+            $Host.UI.RawUI.WindowTitle = "Downloading VirtIO certificate..."
+            $virtioCertPath = "$ENV:Temp\VirtIO.cer"
+            $url = "$baseUrl/VirtIO.cer"
+            (new-object System.Net.WebClient).DownloadFile($url, $virtioCertPath)
+                        
+            $Host.UI.RawUI.WindowTitle = "Installing VirtIO certificate..."
+            $cacert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($virtioCertPath)
+            $castore = New-Object System.Security.Cryptography.X509Certificates.X509Store([System.Security.Cryptography.X509Certificates.StoreName]::TrustedPublisher,`
+                                 [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
+            $castore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+            $castore.Add($cacert)
+
             $virtioDriversPath = getVirtioDriversFolder
             Write-Host "Installing VirtIO drivers from: $virtioDriversPath"
-            & cscript $virtioScriptPath $virtioDriversPath
+            Start-process -Wait pnputil "-i -a $virtioDriversPath"
             if (!$?) { throw "InstallVirtIO failed" }
-            del $virtioScriptPath
 
+            del $virtioCertPath
+            $castore.Remove($cacert)
+            
             shutdown /r /t 0
         }
     }
