@@ -110,3 +110,21 @@ with:
 Once done, the floppy image can be easily generated on Linux with:
 
     ./create-autounattend-floppy.sh
+
+
+----------------------------------------------
+Windows XP instructions:
+edit Winnt.sif and xp-support/sysprep.inf and enter your product key
+run:
+  sudo ./create-autounattend-floppy.sh -x
+  ./create-xp-support-iso.sh
+  ./download-virtio.sh
+  ./create-xp.sh windows-xp-sp3-filename.iso
+In a new window run:
+  vncviewer :1
+When prompted:
+ * Select unpartitioned space.
+ * Select Format the partition using the NTFS file system (Quick)
+ * Whenever you see the dialog "Hardware Installation" Press "Continue Anyway"
+Once the vm shuts down, you should be able to upload the image directly to OpenStack.
+

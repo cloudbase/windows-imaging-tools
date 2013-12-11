@@ -1,0 +1,38 @@
+;SetupMgrTag
+[Data]
+    AutoPartition=1
+    MsDosInitiated="0"
+    UnattendedInstall="Yes"
+    AutomaticUpdates=no
+
+[Unattended]
+    UnattendMode=FullUnattended
+    OemSkipEula=Yes
+    OemPreinstall=No
+    TargetPath=\WINDOWS
+    UnattendSwitch=Yes
+
+[GuiUnattended]
+    AdminPassword="foo"
+    EncryptedAdminPassword=NO
+    AutoLogon=Yes
+    AutoLogonCount=1
+    OEMSkipRegional=1
+    TimeZone=85
+    OemSkipWelcome=1
+
+[UserData]
+    ProductKey=XXXXX-XXXXX-XXXXX-XXXXX-XXXXX
+    FullName="YOUR NAME"
+    OrgName="YOUR ORG"
+    ComputerName=*
+
+[Identification]
+    JoinWorkgroup=WORKGROUP
+
+[Networking]
+    InstallDefaultComponents=Yes
+
+[GuiRunOnce]
+"f:\first.cmd"
+
