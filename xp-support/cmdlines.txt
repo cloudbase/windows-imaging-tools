@@ -1,2 +1,2 @@
 [Commands]
-""C:\Windows\Setup\Scripts\SetupComplete.cmd""
+"C:\Windows\Setup\Scripts\SetupComplete.cmd"
