@@ -10,3 +10,6 @@ for (var i = 0; i < 3; i++) {
     ws.AppActivate("Windows Security");
     ws.SendKeys("i");
 }
+
+//Wait for PNPUtil to finish
+WScript.Sleep(5000)
