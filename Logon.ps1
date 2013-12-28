@@ -4,7 +4,18 @@ try
 {
     $Host.UI.RawUI.WindowTitle = "Downloading PSWindowsUpdate..."
 
-    $psWindowsUpdateUrl = "http://gallery.technet.microsoft.com/scriptcenter/2d191bcd-3308-4edd-9de2-88dff796b0bc/file/41459/25/PSWindowsUpdate.zip"
+    $psWindowsUpdateBaseUrl = "http://gallery.technet.microsoft.com/scriptcenter/2d191bcd-3308-4edd-9de2-88dff796b0bc/file/"
+    
+    #Fixes Windows Server 2008 R2 inexistent Unblock-File command Bug    
+    if ($(Get-Host).version.major -eq 2)
+    {
+        $psWindowsUpdateUrl = $psWindowsUpdateBaseUrl + "66095/1/PSWindowsUpdate_1.4.5.zip"
+    }
+    else
+    {
+        $psWindowsUpdateUrl = $psWindowsUpdateBaseUrl + "41459/25/PSWindowsUpdate.zip"   
+    }
+
     $psWindowsUpdatePath = "$ENV:Temp\PSWindowsUpdate.zip"
     (new-object System.Net.WebClient).DownloadFile($psWindowsUpdateUrl, $psWindowsUpdatePath)
 
