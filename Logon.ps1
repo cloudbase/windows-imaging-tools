@@ -5,15 +5,15 @@ try
     $Host.UI.RawUI.WindowTitle = "Downloading PSWindowsUpdate..."
 
     $psWindowsUpdateBaseUrl = "http://gallery.technet.microsoft.com/scriptcenter/2d191bcd-3308-4edd-9de2-88dff796b0bc/file/"
-    
-    #Fixes Windows Server 2008 R2 inexistent Unblock-File command Bug    
+
+    #Fixes Windows Server 2008 R2 inexistent Unblock-File command Bug
     if ($(Get-Host).version.major -eq 2)
     {
         $psWindowsUpdateUrl = $psWindowsUpdateBaseUrl + "66095/1/PSWindowsUpdate_1.4.5.zip"
     }
     else
     {
-        $psWindowsUpdateUrl = $psWindowsUpdateBaseUrl + "41459/25/PSWindowsUpdate.zip"   
+        $psWindowsUpdateUrl = $psWindowsUpdateBaseUrl + "41459/25/PSWindowsUpdate.zip"
     }
 
     $psWindowsUpdatePath = "$ENV:Temp\PSWindowsUpdate.zip"
@@ -49,7 +49,9 @@ try
 
         $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
-        $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList "/i $CloudbaseInitMsi /qn /l*v $CloudbaseInitMsiLog"
+        $serialPortName = @(Get-WmiObject Win32_SerialPort)[0].DeviceId
+
+        $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList "/i $CloudbaseInitMsi /qn /l*v $CloudbaseInitMsiLog LOGGINGSERIALPORTNAME=$serialPortName"
         if ($p.ExitCode -ne 0)
         {
             throw "Installing $CloudbaseInitMsi failed. Log: $CloudbaseInitMsiLog"
