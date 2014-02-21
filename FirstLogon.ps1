@@ -2,12 +2,12 @@ $ErrorActionPreference = "Stop"
 
 function getOSVersion(){
     $v = (Get-WmiObject Win32_OperatingSystem).Version.Split('.')
-    
+
     return New-Object psobject -Property @{
         Major = [int]::Parse($v[0])
         Minor = [int]::Parse($v[1])
         Build = [int]::Parse($v[2])
-    }    
+    }
 }
 
 function getVirtioDriversFolder(){
@@ -32,6 +32,39 @@ function getVirtioDriversFolder(){
     if (! $drive) { throw "VirtIO drivers not found" }
 
     return join-path -Path $drive -ChildPath $virtIOPath | join-path -ChildPath "*.inf"
+}
+
+function installVirtIOTools2012($virtioDriversPath) {
+    $Host.UI.RawUI.WindowTitle = "Downloading VirtIO drivers script..."
+    $virtioScriptPath = "$ENV:Temp\InstallVirtIODrivers.js"
+    $url = "$baseUrl/InstallVirtIODrivers.js"
+    (new-object System.Net.WebClient).DownloadFile($url, $virtioScriptPath)
+
+    Write-Host "Installing VirtIO drivers from: $virtioDriversPath"
+    & cscript $virtioScriptPath $virtioDriversPath
+    if (!$?) { throw "InstallVirtIO failed" }
+    del $virtioScriptPath
+}
+
+function installVirtIOToolsPre2012($virtioDriversPath) {
+    $Host.UI.RawUI.WindowTitle = "Downloading VirtIO certificate..."
+    $virtioCertPath = "$ENV:Temp\VirtIO.cer"
+    $url = "$baseUrl/VirtIO.cer"
+    (new-object System.Net.WebClient).DownloadFile($url, $virtioCertPath)
+
+    $Host.UI.RawUI.WindowTitle = "Installing VirtIO certificate..."
+    $cacert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($virtioCertPath)
+    $castore = New-Object System.Security.Cryptography.X509Certificates.X509Store([System.Security.Cryptography.X509Certificates.StoreName]::TrustedPublisher,`
+                     [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
+    $castore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+    $castore.Add($cacert)
+
+    Write-Host "Installing VirtIO drivers from: $virtioDriversPath"
+    Start-process -Wait pnputil "-i -a $virtioDriversPath"
+    if (!$?) { throw "InstallVirtIO failed" }
+
+    del $virtioCertPath
+    $castore.Remove($cacert)
 }
 
 $logonScriptPath = "$ENV:SystemRoot\Temp\Logon.ps1"
@@ -60,36 +93,11 @@ try
             $virtioDriversPath = getVirtioDriversFolder
             $osVersion = getOSVersion
 
-            if ($osVersion.Minor -gt 1) {
-                $Host.UI.RawUI.WindowTitle = "Downloading VirtIO drivers script..."
-                $virtioScriptPath = "$ENV:Temp\InstallVirtIODrivers.js"
-                $url = "$baseUrl/InstallVirtIODrivers.js"
-                (new-object System.Net.WebClient).DownloadFile($url, $virtioScriptPath)
-
-                Write-Host "Installing VirtIO drivers from: $virtioDriversPath"
-                & cscript $virtioScriptPath $virtioDriversPath
-                if (!$?) { throw "InstallVirtIO failed" }
-                del $virtioScriptPath
+            if (($osVersion.Major -ge 6) -and ($osVersion.Minor -ge 2)) {
+                installVirtIOTools2012 $virtioDriversPath
             }
             else {
-                $Host.UI.RawUI.WindowTitle = "Downloading VirtIO certificate..."
-                $virtioCertPath = "$ENV:Temp\VirtIO.cer"
-                $url = "$baseUrl/VirtIO.cer"
-                (new-object System.Net.WebClient).DownloadFile($url, $virtioCertPath)
-
-                $Host.UI.RawUI.WindowTitle = "Installing VirtIO certificate..."
-                $cacert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($virtioCertPath)
-                $castore = New-Object System.Security.Cryptography.X509Certificates.X509Store([System.Security.Cryptography.X509Certificates.StoreName]::TrustedPublisher,`
-                                 [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
-                $castore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-                $castore.Add($cacert)
-
-                Write-Host "Installing VirtIO drivers from: $virtioDriversPath"
-                Start-process -Wait pnputil "-i -a $virtioDriversPath"
-                if (!$?) { throw "InstallVirtIO failed" }
-
-                del $virtioCertPath
-                $castore.Remove($cacert)
+                installVirtIOToolsPre2012 $virtioDriversPath
             }
 
             shutdown /r /t 0
