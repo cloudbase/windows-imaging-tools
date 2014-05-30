@@ -31,9 +31,8 @@ try
 
     $Host.UI.RawUI.WindowTitle = "Installing updates..."
 
-    #Get-WUInstall -AcceptAll -IgnoreReboot -IgnoreUserInput -NotCategory "Language packs"
-    #if (Get-WURebootStatus -Silent)
-    if($false)
+    Get-WUInstall -AcceptAll -IgnoreReboot -IgnoreUserInput -NotCategory "Language packs"
+    if (Get-WURebootStatus -Silent)
     {
         $Host.UI.RawUI.WindowTitle = "Updates installation finished. Rebooting."
         shutdown /r /t 0
