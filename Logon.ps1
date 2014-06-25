@@ -45,10 +45,12 @@ try
         if($osArch -eq "64-bit")
         {
             $CloudbaseInitMsi = "CloudbaseInitSetup_Beta_x64.msi"
+            $programFilesDir = ${ENV:ProgramFiles(x86)}
         }
         else
         {
             $CloudbaseInitMsi = "CloudbaseInitSetup_Beta_x86.msi"
+            $programFilesDir = $ENV:ProgramFiles
         }
 
         $CloudbaseInitMsiPath = "$ENV:Temp\$CloudbaseInitMsi"
@@ -70,15 +72,6 @@ try
          # We're done, remove LogonScript and disable AutoLogon
         Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name Unattend*
         Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name AutoLogonCount
-
-        if($osArch -eq "64-bit")
-        {
-            $programFilesDir = ${ENV:ProgramFiles(x86)}
-        }
-        else
-        {
-            $programFilesDir = $ENV:ProgramFiles
-        }
 
         $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
         & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
