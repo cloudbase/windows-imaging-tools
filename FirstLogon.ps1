@@ -75,12 +75,12 @@ try
     $baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
     (new-object System.Net.WebClient).DownloadFile("$baseUrl/Logon.ps1", $logonScriptPath)
 
-    $virtPlatform = (gwmi Win32_ComputerSystem).Model
+    $virtPlatform = (gwmi Win32_ComputerSystem).Manufacturer
     Write-Host "Virtual platform: $virtPlatform"
     # TODO: Add XenServer / XCP
     switch($virtPlatform)
     {
-        "VMware Virtual Platform"
+        "VMware, Inc."
         {
             # Note: this command will generate a reboot.
             # "/qn REBOOT=ReallySuppress" does not seem to work properly
@@ -88,7 +88,7 @@ try
             E:\setup64.exe `/s `/v `/qn `/l `"$ENV:Temp\vmware_tools_install.log`"
             if (!$?) { throw "VMware tools setup failed" }
         }
-        {($_ -eq "KVM") -or ($_ -eq "Bochs")}
+        "QEMU"
         {
             $virtioDriversPath = getVirtioDriversFolder
             $osVersion = getOSVersion
