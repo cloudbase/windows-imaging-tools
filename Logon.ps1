@@ -31,7 +31,7 @@ try
 
     $Host.UI.RawUI.WindowTitle = "Installing updates..."
 
-    Get-WUInstall -AcceptAll -IgnoreReboot -IgnoreUserInput -NotCategory "Language packs"
+    Get-WUInstall -AcceptAll -IgnoreReboot -IgnoreUserInput -NotCategory "Language packs" -NotKBArticleID "KB2975719"
     if (Get-WURebootStatus -Silent)
     {
         $Host.UI.RawUI.WindowTitle = "Updates installation finished. Rebooting."
