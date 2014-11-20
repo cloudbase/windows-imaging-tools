@@ -67,6 +67,20 @@ function installVirtIOToolsPre2012($virtioDriversPath) {
     $castore.Remove($cacert)
 }
 
+function getHypervisor() {
+    $checkHypervisorExeUrl = "https://github.com/cloudbase/checkhypervisor/raw/master/bin/checkhypervisor.exe"
+    $checkHypervisorExePath = "$ENV:Temp\checkhypervisor.exe"
+    Invoke-WebRequest -Uri $checkHypervisorExeUrl -OutFile $checkHypervisorExePath
+
+    $hypervisor = & $checkHypervisorExePath
+
+    if ($LastExitCode -eq 1) {
+        Write-Host "No hypervisor detected."
+    } else {
+        return $hypervisor
+    }
+}
+
 $logonScriptPath = "$ENV:SystemRoot\Temp\Logon.ps1"
 
 try
@@ -75,12 +89,12 @@ try
     $baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
     (new-object System.Net.WebClient).DownloadFile("$baseUrl/Logon.ps1", $logonScriptPath)
 
-    $virtPlatform = (gwmi Win32_ComputerSystem).Manufacturer
-    Write-Host "Virtual platform: $virtPlatform"
+    $hypervisorStr = getHypervisor
+    Write-Host "Hypervisor: $hypervisorStr"
     # TODO: Add XenServer / XCP
-    switch($virtPlatform)
+    switch($hypervisorStr)
     {
-        "VMware, Inc."
+        "VMwareVMware"
         {
             # Note: this command will generate a reboot.
             # "/qn REBOOT=ReallySuppress" does not seem to work properly
@@ -88,7 +102,7 @@ try
             E:\setup64.exe `/s `/v `/qn `/l `"$ENV:Temp\vmware_tools_install.log`"
             if (!$?) { throw "VMware tools setup failed" }
         }
-        "QEMU"
+        "KVMKVMKVM"
         {
             $virtioDriversPath = getVirtioDriversFolder
             $osVersion = getOSVersion
