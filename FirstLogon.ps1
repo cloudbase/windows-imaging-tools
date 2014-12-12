@@ -70,7 +70,7 @@ function installVirtIOToolsPre2012($virtioDriversPath) {
 function getHypervisor() {
     $checkHypervisorExeUrl = "https://github.com/cloudbase/checkhypervisor/raw/master/bin/checkhypervisor.exe"
     $checkHypervisorExePath = "$ENV:Temp\checkhypervisor.exe"
-    Invoke-WebRequest -Uri $checkHypervisorExeUrl -OutFile $checkHypervisorExePath
+    (new-object System.Net.WebClient).DownloadFile($checkHypervisorExeUrl, $checkHypervisorExePath)
 
     $hypervisor = & $checkHypervisorExePath
 
