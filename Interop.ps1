@@ -31,7 +31,9 @@ namespace WIMInterop {
 
         public const Int32 ERROR_SUCCESS = 0;
         public const int OPEN_VIRTUAL_DISK_RW_DEPTH_DEFAULT = 1;
+        public const int VIRTUAL_STORAGE_TYPE_DEVICE_ISO = 1;
         public const int VIRTUAL_STORAGE_TYPE_DEVICE_VHD = 2;
+        public const int VIRTUAL_STORAGE_TYPE_DEVICE_VHDX = 3;
         public const int CREATE_VIRTUAL_DISK_PARAMETERS_DEFAULT_SECTOR_SIZE = 0x200;
         public static readonly Guid VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT = new Guid("EC984AEC-A0F9-47e9-901F-71415A66345B");
 
@@ -1171,13 +1173,15 @@ namespace WIMInterop {
     public class VirtualDisk: IDisposable
     {
         private IntPtr handle;
+        private bool readOnly;
 
-        private VirtualDisk(IntPtr handle)
+        private VirtualDisk(IntPtr handle, bool readOnly)
         {
             this.handle = handle;
+            this.readOnly = readOnly;
         }
 
-        public static VirtualDisk OpenVirtualDisk(string vhdPath)
+        public static VirtualDisk OpenVirtualDisk(string diskPath)
         {
             IntPtr handle = IntPtr.Zero;
 
@@ -1186,19 +1190,40 @@ namespace WIMInterop {
             openParameters.Version1.RWDepth = NativeMethods.OPEN_VIRTUAL_DISK_RW_DEPTH_DEFAULT;
 
             var openStorageType = new NativeMethods.VIRTUAL_STORAGE_TYPE();
-            openStorageType.DeviceId = NativeMethods.VIRTUAL_STORAGE_TYPE_DEVICE_VHD;
             openStorageType.VendorId = NativeMethods.VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT;
 
-            int openResult = NativeMethods.OpenVirtualDisk(ref openStorageType, vhdPath, NativeMethods.VIRTUAL_DISK_ACCESS_MASK.VIRTUAL_DISK_ACCESS_ALL, NativeMethods.OPEN_VIRTUAL_DISK_FLAG.OPEN_VIRTUAL_DISK_FLAG_NONE, ref openParameters, ref handle);
+            var accessMask = NativeMethods.VIRTUAL_DISK_ACCESS_MASK.VIRTUAL_DISK_ACCESS_ALL;
+            bool readOnly = false;
+
+            var ext = Path.GetExtension(diskPath).Substring(1).ToUpper();
+            switch(ext)
+            {
+                case "ISO":
+                    openStorageType.DeviceId = NativeMethods.VIRTUAL_STORAGE_TYPE_DEVICE_ISO;
+                    accessMask = NativeMethods.VIRTUAL_DISK_ACCESS_MASK.VIRTUAL_DISK_ACCESS_READ;
+                    readOnly = true;
+                    break;
+                case "VHD":
+                    openStorageType.DeviceId = NativeMethods.VIRTUAL_STORAGE_TYPE_DEVICE_VHD;
+                    break;
+                case "VHDX":
+                    // TODO: handle v2
+                    openStorageType.DeviceId = NativeMethods.VIRTUAL_STORAGE_TYPE_DEVICE_VHDX;
+                    break;
+                default:
+                    throw new Exception("Unrecognized file format: " + ext);
+            }
+
+            int openResult = NativeMethods.OpenVirtualDisk(ref openStorageType, diskPath, accessMask, NativeMethods.OPEN_VIRTUAL_DISK_FLAG.OPEN_VIRTUAL_DISK_FLAG_NONE, ref openParameters, ref handle);
             if (openResult != NativeMethods.ERROR_SUCCESS)
             {
                 throw new Win32Exception(openResult);
             }
 
-            return new VirtualDisk(handle);
+            return new VirtualDisk(handle, readOnly);
         }
 
-        public static VirtualDisk CreateVirtualDisk(string vhdPath, UInt64 size, bool expandable=true)
+        public static VirtualDisk CreateVirtualDisk(string diskPath, UInt64 size, bool expandable=true)
         {
             IntPtr handle = IntPtr.Zero;
 
@@ -1215,15 +1240,14 @@ namespace WIMInterop {
             storageType.DeviceId = NativeMethods.VIRTUAL_STORAGE_TYPE_DEVICE_VHD;
             storageType.VendorId = NativeMethods.VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT;
 
-            var flag = expandable ? NativeMethods.CREATE_VIRTUAL_DISK_FLAG.CREATE_VIRTUAL_DISK_FLAG_NONE : NativeMethods.CREATE_VIRTUAL_DISK_FLAG.CREATE_VIRTUAL_DISK_FLAG_FULL_PHYSICAL_ALLOCATION;
-
-            int res = NativeMethods.CreateVirtualDisk(ref storageType, vhdPath, NativeMethods.VIRTUAL_DISK_ACCESS_MASK.VIRTUAL_DISK_ACCESS_ALL, IntPtr.Zero, flag, 0, ref parameters, IntPtr.Zero, ref handle);
+            var flags = expandable ? NativeMethods.CREATE_VIRTUAL_DISK_FLAG.CREATE_VIRTUAL_DISK_FLAG_NONE : NativeMethods.CREATE_VIRTUAL_DISK_FLAG.CREATE_VIRTUAL_DISK_FLAG_FULL_PHYSICAL_ALLOCATION;
+            int res = NativeMethods.CreateVirtualDisk(ref storageType, diskPath, NativeMethods.VIRTUAL_DISK_ACCESS_MASK.VIRTUAL_DISK_ACCESS_ALL, IntPtr.Zero, flags, 0, ref parameters, IntPtr.Zero, ref handle);
             if (res != NativeMethods.ERROR_SUCCESS)
             {
                 throw new Win32Exception(res);
             }
 
-            return new VirtualDisk(handle);
+            return new VirtualDisk(handle, false);
         }
 
         public void Close()
@@ -1247,7 +1271,12 @@ namespace WIMInterop {
         {
             var attachParameters = new NativeMethods.ATTACH_VIRTUAL_DISK_PARAMETERS();
             attachParameters.Version = NativeMethods.ATTACH_VIRTUAL_DISK_VERSION.ATTACH_VIRTUAL_DISK_VERSION_1;
-            int attachResult = NativeMethods.AttachVirtualDisk(this.handle, IntPtr.Zero, NativeMethods.ATTACH_VIRTUAL_DISK_FLAG.ATTACH_VIRTUAL_DISK_FLAG_PERMANENT_LIFETIME, 0, ref attachParameters, IntPtr.Zero);
+
+            var flags = NativeMethods.ATTACH_VIRTUAL_DISK_FLAG.ATTACH_VIRTUAL_DISK_FLAG_PERMANENT_LIFETIME;
+            if(this.readOnly)
+                flags |= NativeMethods.ATTACH_VIRTUAL_DISK_FLAG.ATTACH_VIRTUAL_DISK_FLAG_READ_ONLY;
+
+            int attachResult = NativeMethods.AttachVirtualDisk(this.handle, IntPtr.Zero, flags, 0, ref attachParameters, IntPtr.Zero);
             if (attachResult != NativeMethods.ERROR_SUCCESS)
             {
                 throw new Win32Exception(attachResult);

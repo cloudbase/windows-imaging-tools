@@ -22,16 +22,6 @@
     </xsl:copy>
   </xsl:template>
 
-  <xsl:template match='u:unattend/u:settings/u:component'>
-    <xsl:copy>
-      <xsl:apply-templates select="@*"/>
-      <xsl:attribute name="processorArchitecture">
-        <xsl:value-of select="$processorArchitecture"/>
-      </xsl:attribute>
-      <xsl:apply-templates select="node()"/>
-    </xsl:copy>
-  </xsl:template>
-
   <xsl:template match='u:unattend/u:settings/u:component[@name="Microsoft-Windows-Setup"]/u:ImageInstall/u:OSImage/u:InstallFrom/u:MetaData/u:Value'>
     <xsl:copy>
       <xsl:apply-templates select="@*"/>
@@ -57,18 +47,20 @@
   </xsl:template>
 
   <xsl:template match='u:unattend/u:settings/u:component[@name="Microsoft-Windows-Shell-Setup"]/u:UserAccounts[not(u:LocalAccounts)]'>
-    <xsl:apply-templates select="@*|node()"/>
-    <xsl:if test="$installationType = 'Client'">
-      <xsl:element name="LocalAccounts" namespace="{namespace-uri()}">
-        <xsl:element name="LocalAccount" namespace="{namespace-uri()}">
-          <xsl:attribute name="wcm:action">add</xsl:attribute>
-          <xsl:element name="Description" namespace="{namespace-uri()}">Admin user</xsl:element>
-          <xsl:element name="DisplayName" namespace="{namespace-uri()}">Admin</xsl:element>
-          <xsl:element name="Group" namespace="{namespace-uri()}">Administrators</xsl:element>
-          <xsl:element name="Name" namespace="{namespace-uri()}">Admin</xsl:element>
+    <xsl:copy>
+      <xsl:apply-templates select="@*|node()"/>
+      <xsl:if test="$installationType = 'Client'">
+        <xsl:element name="LocalAccounts" namespace="{namespace-uri()}">
+          <xsl:element name="LocalAccount" namespace="{namespace-uri()}">
+            <xsl:attribute name="wcm:action">add</xsl:attribute>
+            <xsl:element name="Description" namespace="{namespace-uri()}">Admin user</xsl:element>
+            <xsl:element name="DisplayName" namespace="{namespace-uri()}">Admin</xsl:element>
+            <xsl:element name="Group" namespace="{namespace-uri()}">Administrators</xsl:element>
+            <xsl:element name="Name" namespace="{namespace-uri()}">Admin</xsl:element>
+          </xsl:element>
         </xsl:element>
-      </xsl:element>
-    </xsl:if>
+      </xsl:if>
+    </xsl:copy>
   </xsl:template>
 
   <xsl:template match='u:unattend/u:settings/u:component[@name="Microsoft-Windows-Setup"]/u:UserData'>
@@ -80,6 +72,31 @@
             <xsl:value-of select="$productKey"/>
           </xsl:element>
           <xsl:element name="WillShowUI" namespace="{namespace-uri()}">OnError</xsl:element>
+        </xsl:element>
+      </xsl:if>
+      <xsl:apply-templates select="node()"/>
+    </xsl:copy>
+  </xsl:template>
+
+  <xsl:template match='u:unattend/u:settings/u:component'>
+    <xsl:copy>
+      <xsl:apply-templates select="@*"/>
+      <xsl:attribute name="processorArchitecture">
+        <xsl:value-of select="$processorArchitecture"/>
+      </xsl:attribute>
+      <xsl:apply-templates select="node()"/>
+    </xsl:copy>
+  </xsl:template>
+
+  <xsl:template match='u:unattend/u:settings[@pass="specialize"]/u:component[@name="Microsoft-Windows-Shell-Setup"]'>
+    <xsl:copy>
+      <xsl:apply-templates select="@*"/>
+      <xsl:attribute name="processorArchitecture">
+        <xsl:value-of select="$processorArchitecture"/>
+      </xsl:attribute>
+      <xsl:if test="$productKey">
+        <xsl:element name="ProductKey" namespace="{namespace-uri()}">
+            <xsl:value-of select="$productKey"/>
         </xsl:element>
       </xsl:if>
       <xsl:apply-templates select="node()"/>

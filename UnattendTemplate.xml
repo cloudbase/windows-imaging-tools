@@ -91,17 +91,21 @@
                 <!-- Comment the following two options on Windows Vista / 7 and Windows Server 2008 / 2008 R2 -->
                 <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
                 <HideLocalAccountScreen>true</HideLocalAccountScreen>
+                <!--
+                <SkipMachineOOBE>true</SkipMachineOOBE>
+                <SkipUserOOBE>true</SkipUserOOBE>
+                -->
             </OOBE>
             <!-- Use FirstLogonCommands instead of LogonCommands if you don't need to install Windows Updates -->
             <LogonCommands>
                 <AsynchronousCommand wcm:action="add">
-                    <CommandLine>%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File C:\Windows\Temp\Logon.ps1</CommandLine>
+                    <CommandLine>%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File %SystemDrive%\UnattendResources\Logon.ps1</CommandLine>
                     <Order>1</Order>
                 </AsynchronousCommand>
             </LogonCommands>
             <FirstLogonCommands>
                 <SynchronousCommand wcm:action="add">
-                    <CommandLine>%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File C:\Windows\Temp\FirstLogon.ps1</CommandLine>
+                    <CommandLine>%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File %SystemDrive%\UnattendResources\FirstLogon.ps1</CommandLine>
                     <Order>1</Order>
                 </SynchronousCommand>
             </FirstLogonCommands>
@@ -137,6 +141,13 @@
             </AutoLogon>
             <ComputerName>*</ComputerName>
         </component>
+        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <InputLocale>en-US</InputLocale>
+            <UILanguage>en-US</UILanguage>
+            <UILanguageFallback>en-us</UILanguageFallback>
+            <SystemLocale>en-US</SystemLocale>
+            <UserLocale>en-US</UserLocale>
+        </component>
     </settings>
     <settings pass="specialize">
         <component name="Microsoft-Windows-TerminalServices-LocalSessionManager" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
@@ -157,17 +168,15 @@
         <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="NonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
             <TimeZone>UTC</TimeZone>
             <ComputerName>*</ComputerName>
+            <!--
+            <ProductKey>XXXXX-XXXXX-XXXXX-XXXXX-XXXXX</ProductKey>
+            -->
         </component>
         <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
             <RunSynchronous>
                 <RunSynchronousCommand wcm:action="add">
                     <Order>1</Order>
-                    <Path>powershell -NoLogo -Command "(new-object System.Net.WebClient).DownloadFile('https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master/Specialize.ps1', 'c:\Windows\Temp\Specialize.ps1')"</Path>
-                    <Description>Download Specialize script</Description>
-                </RunSynchronousCommand>
-                <RunSynchronousCommand wcm:action="add">
-                    <Order>2</Order>
-                    <Path>powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File C:\Windows\Temp\Specialize.ps1</Path>
+                    <Path>powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File %SystemDrive%\UnattendResources\Specialize.ps1</Path>
                     <Description>Run Specialize script</Description>
                 </RunSynchronousCommand>
             </RunSynchronous>

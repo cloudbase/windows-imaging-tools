@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+$resourcesDir = "$ENV:SystemDrive\UnattendResources"
 
 function getOSVersion(){
     $v = (Get-WmiObject Win32_OperatingSystem).Version.Split('.')
@@ -35,25 +36,14 @@ function getVirtioDriversFolder(){
 }
 
 function installVirtIOTools2012($virtioDriversPath) {
-    $Host.UI.RawUI.WindowTitle = "Downloading VirtIO drivers script..."
-    $virtioScriptPath = "$ENV:Temp\InstallVirtIODrivers.js"
-    $url = "$baseUrl/InstallVirtIODrivers.js"
-    (new-object System.Net.WebClient).DownloadFile($url, $virtioScriptPath)
-
     Write-Host "Installing VirtIO drivers from: $virtioDriversPath"
-    & cscript $virtioScriptPath $virtioDriversPath
+    & cscript "$resourcesDir\InstallVirtIODrivers.js" $virtioDriversPath
     if (!$?) { throw "InstallVirtIO failed" }
-    del $virtioScriptPath
 }
 
 function installVirtIOToolsPre2012($virtioDriversPath) {
-    $Host.UI.RawUI.WindowTitle = "Downloading VirtIO certificate..."
-    $virtioCertPath = "$ENV:Temp\VirtIO.cer"
-    $url = "$baseUrl/VirtIO.cer"
-    (new-object System.Net.WebClient).DownloadFile($url, $virtioCertPath)
-
     $Host.UI.RawUI.WindowTitle = "Installing VirtIO certificate..."
-    $cacert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($virtioCertPath)
+    $cacert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$resourcesDir\VirtIO.cer")
     $castore = New-Object System.Security.Cryptography.X509Certificates.X509Store([System.Security.Cryptography.X509Certificates.StoreName]::TrustedPublisher,`
                      [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
     $castore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
@@ -63,16 +53,11 @@ function installVirtIOToolsPre2012($virtioDriversPath) {
     Start-process -Wait pnputil "-i -a $virtioDriversPath"
     if (!$?) { throw "InstallVirtIO failed" }
 
-    del $virtioCertPath
     $castore.Remove($cacert)
 }
 
 function getHypervisor() {
-    $checkHypervisorExeUrl = "https://github.com/cloudbase/checkhypervisor/raw/master/bin/checkhypervisor.exe"
-    $checkHypervisorExePath = "$ENV:Temp\checkhypervisor.exe"
-    (new-object System.Net.WebClient).DownloadFile($checkHypervisorExeUrl, $checkHypervisorExePath)
-
-    $hypervisor = & $checkHypervisorExePath
+    $hypervisor = & "$resourcesDir\checkhypervisor.exe"
 
     if ($LastExitCode -eq 1) {
         Write-Host "No hypervisor detected."
@@ -81,14 +66,8 @@ function getHypervisor() {
     }
 }
 
-$logonScriptPath = "$ENV:SystemRoot\Temp\Logon.ps1"
-
 try
 {
-    $Host.UI.RawUI.WindowTitle = "Downloading Logon script..."
-    $baseUrl = "https://raw.github.com/cloudbase/windows-openstack-imaging-tools/master"
-    (new-object System.Net.WebClient).DownloadFile("$baseUrl/Logon.ps1", $logonScriptPath)
-
     $hypervisorStr = getHypervisor
     Write-Host "Hypervisor: $hypervisorStr"
     # TODO: Add XenServer / XCP
@@ -123,6 +102,8 @@ catch
     $host.ui.WriteErrorLine($_.Exception.ToString())
     $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     # Prevents the setup from proceeding
+
+    $logonScriptPath = "$resourcesDir\Logon.ps1"
     if ( Test-Path $logonScriptPath ) { del $logonScriptPath }
     throw
 }

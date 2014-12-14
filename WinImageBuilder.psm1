@@ -1,5 +1,7 @@
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version 2
 $scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
+$localResourcesDir = "$scriptPath\UnattendResources"
 
 . "$scriptPath\Interop.ps1"
 
@@ -32,22 +34,6 @@ function Get-WimFileImagesInfo
 
 function CreateImageVirtualDisk($vhdPath, $size)
 {
-<#
-$VHDXFile = $vhdPath
-$v = New-VHD -Path $VHDXFile -Dynamic -SizeBytes $size -Verbose
-$z = Mount-DiskImage -ImagePath $VHDXFile -Verbose
-$VHDXDisk = Get-DiskImage -ImagePath $VHDXFile | Get-Disk -Verbose
-$VHDXDiskNumber = [string]$VHDXDisk.Number
-Initialize-Disk -Number $VHDXDiskNumber -PartitionStyle MBR -Verbose
-$VHDXDrive = New-Partition -DiskNumber $VHDXDiskNumber -UseMaximumSize -IsActive -Verbose
-$k = $VHDXDrive | Format-Volume -FileSystem NTFS -NewFileSystemLabel OSDisk -Confirm:$false -Verbose
-$a = Add-PartitionAccessPath -DiskNumber $VHDXDiskNumber -PartitionNumber $VHDXDrive.PartitionNumber -AssignDriveLetter
-$VHDXDrive = Get-Partition -DiskNumber $VHDXDiskNumber -PartitionNumber $VHDXDrive.PartitionNumber
-
-return $VHDXDrive.DriveLetter
-#>
-
-
     $v = [WIMInterop.VirtualDisk]::CreateVirtualDisk($vhdPath, $size)
     try
     {
@@ -56,6 +42,7 @@ return $VHDXDrive.DriveLetter
 
         $m = $path -match "\\\\.\\PHYSICALDRIVE(?<num>\d+)"
         $diskNum = $matches["num"]
+        $volumeLabel = "OS"
 
         Initialize-Disk -Number $diskNum -PartitionStyle MBR
         $part = New-Partition -DiskNumber $diskNum -UseMaximumSize -AssignDriveLetter -IsActive
@@ -72,8 +59,6 @@ return $VHDXDrive.DriveLetter
 function ApplyImage($driveLetter, $wimFilePath, $imageIndex)
 {
     #Expand-WindowsImage -ImagePath $wimFilePath -Index $imageIndex -ApplyPath ${driveLetter}:\
-    write-warning "Dism /apply-image /imagefile:${wimFilePath} /index:${imageIndex} /ApplyDir:${driveLetter}:\"
-
     & Dism /apply-image /imagefile:${wimFilePath} /index:${imageIndex} /ApplyDir:${driveLetter}:\
     if($LASTEXITCODE) { throw "Dism apply-image failed" }
 }
@@ -90,11 +75,11 @@ function CreateBCDBootConfig($driveLetter)
     & $bcdbootPath ${driveLetter}:\windows /s ${driveLetter}: /v
     if($LASTEXITCODE) { throw "BCDBoot failed" }
 
-    & ${driveLetter}:\Windows\System32\bcdedit.exe /store ${driveLetter}:\boot\BCD
-    if($LASTEXITCODE) { throw "BCDEdit failed" }
+    #& ${driveLetter}:\Windows\System32\bcdedit.exe /store ${driveLetter}:\boot\BCD
+    #if($LASTEXITCODE) { throw "BCDEdit failed" }
 }
 
-function TransformXml($xsltPath, $inXmlPath, $outXmlPath, $args)
+function TransformXml($xsltPath, $inXmlPath, $outXmlPath, $xsltArgs)
 {
     $xslt = New-Object System.Xml.Xsl.XslCompiledTransform($false)
     $xsltSettings = New-Object System.Xml.Xsl.XsltSettings($false, $true)
@@ -102,29 +87,30 @@ function TransformXml($xsltPath, $inXmlPath, $outXmlPath, $args)
     $outXmlFile = New-Object System.IO.FileStream($outXmlPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
     $argList = new-object System.Xml.Xsl.XsltArgumentList
 
-    foreach($k in $args.Keys)
+    foreach($k in $xsltArgs.Keys)
     {
-        $argList.AddParam($k, "", $args[$k])
+        $argList.AddParam($k, "", $xsltArgs[$k])
     }
 
     $xslt.Transform($inXmlPath, $argList, $outXmlFile)
 }
 
-function ApplyUnattendXml($inUnattendXmlPath, $outUnattendXmlPath, $image, $productKey, $administratorPassword)
+function GenerateUnattendXml($inUnattendXmlPath, $outUnattendXmlPath, $image, $productKey, $administratorPassword)
 {
-    $args = @{}
-    $args["processorArchitecture"] = $image.ImageArchitecture.ToLow
-    $args["imageName"] = $image.ImageName
-    $args["versionMajor"] = $image.ImageVersion.Major
-    $args["versionMinor"] = $image.ImageVersion.Minor
-    $args["installationType"] = $image.ImageInstallationType
-    $args["administratorPassword"] = $administratorPassword
+    $xsltArgs = @{}
+
+    $xsltArgs["processorArchitecture"] = ([string]$image.ImageArchitecture).ToLower()
+    $xsltArgs["imageName"] = $image.ImageName
+    $xsltArgs["versionMajor"] = $image.ImageVersion.Major
+    $xsltArgs["versionMinor"] = $image.ImageVersion.Minor
+    $xsltArgs["installationType"] = $image.ImageInstallationType
+    $xsltArgs["administratorPassword"] = $administratorPassword
 
     if($productKey) {
-        $args["productKey"] =$productKey
+        $xsltArgs["productKey"] = $productKey
     }
 
-    TransformXml "$scriptPath\Unattend.xslt" $inUnattendXmlPath $outUnattendXmlPath $args
+    TransformXml "$scriptPath\Unattend.xslt" $inUnattendXmlPath $outUnattendXmlPath $xsltArgs
 }
 
 function DetachVirtualDisk($vhdPath)
@@ -161,6 +147,48 @@ function ConvertVirtualDisk($vhdPath, $outPath, $format)
     if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
 }
 
+function CopyUnattendResources($resourcesDir, $imageInstallationType)
+{
+    # Workaround to recognize the $resourcesDir drive. This seems a PowerShell bug
+    $drives = Get-PSDrive
+
+    if(!(Test-Path "$resourcesDir")) { $d = mkdir "$resourcesDir" }
+    copy -Recurse "$localResourcesDir\*" $resourcesDir
+
+    if ($imageInstallationType -eq "Server Core")
+    {
+        # Skip the wallpaper on server core
+        del -Force "$resourcesDir\Wallpaper.png"
+        del -Force "$resourcesDir\GPO.zip"
+    }
+}
+
+function DownloadCloudbaseInit($resourcesDir, $osArch)
+{
+    Write-Output "Downloading Cloudbase-Init..."
+
+    if($osArch -eq "AMD64")
+    {
+        $CloudbaseInitMsi = "CloudbaseInitSetup_Beta_x64.msi"
+    }
+    else
+    {
+        $CloudbaseInitMsi = "CloudbaseInitSetup_Beta_x86.msi"
+    }
+
+    $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
+    $CloudbaseInitMsiUrl = "https://www.cloudbase.it/downloads/$CloudbaseInitMsi"
+
+    (new-object System.Net.WebClient).DownloadFile($CloudbaseInitMsiUrl, $CloudbaseInitMsiPath)
+}
+
+function GenerateConfigFile($resourcesDir, $installUpdates)
+{
+    $configIniPath = "$resourcesDir\config.ini"
+    Import-Module "$localResourcesDir\ini.psm1"
+    Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Value $installUpdates
+}
+
 function New-WindowsCloudImage()
 {
     [CmdletBinding()]
@@ -180,9 +208,12 @@ function New-WindowsCloudImage()
         [ValidateSet("VHD", "QCow2", "VMDK", "RAW", ignorecase=$false)]
         [string]$VirtualDiskFormat = "VHD",
         [parameter(Mandatory=$false)]
-        [string]$AdministratorPassword = "Pa`$`$w0rd",
+        [switch]$InstallUpdates,
         [parameter(Mandatory=$false)]
-        [string]$UnattendXmlPath = "$scriptPath\Autounattend.xml"
+        [string]$AdministratorPassword = "Pa`$`$w0rd",
+
+        [parameter(Mandatory=$false)]
+        [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml"
     )
     PROCESS
     {
@@ -207,9 +238,14 @@ function New-WindowsCloudImage()
         try
         {
             $driveLetter = CreateImageVirtualDisk $VHDPath $SizeBytes
+            $resourcesDir = "${driveLetter}:\UnattendResources"
+
+            GenerateUnattendXml $UnattendXmlPath ${driveLetter}:\Unattend.xml $image $ProductKey $AdministratorPassword
+            CopyUnattendResources $resourcesDir $image.ImageInstallationType
+            GenerateConfigFile $resourcesDir $installUpdates
+            DownloadCloudbaseInit $resourcesDir [string]$image.ImageArchitecture
             ApplyImage $driveLetter $wimFilePath $image.ImageIndex
             CreateBCDBootConfig $driveLetter
-            ApplyUnattendXml $UnattendXmlPath ${driveLetter}:\Unattend.xml $image $ProductKey $AdministratorPassword
         }
         finally
         {
@@ -226,3 +262,5 @@ function New-WindowsCloudImage()
         }
     }
 }
+
+Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo
