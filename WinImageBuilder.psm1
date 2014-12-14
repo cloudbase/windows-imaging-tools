@@ -189,6 +189,49 @@ function GenerateConfigFile($resourcesDir, $installUpdates)
     Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Value $installUpdates
 }
 
+function AddDriversToImage($driveLetter, $driversPath)
+{
+    Write-Output 'Adding drivers from "{0}" to image "{1}:\"' -f $driversPath, $driveLetter
+    & Dism.exe /image:${driveLetter}:\ /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
+    if ($LASTEXITCODE) { throw "dism failed to add drivers from: $driversPath" }
+}
+
+function AddVirtIODriversFromISO($vhdDriveLetter, $image, $isoPath)
+{
+    $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($isoPath)
+    try
+    {
+        $v.AttachVirtualDisk()
+        $devicePath = $v.GetVirtualDiskPhysicalPath()
+        $isoDriveLetter = (Get-DiskImage -DevicePath $devicePath | Get-Volume).DriveLetter
+
+        if($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0)
+        {
+            $virtioVer = "VISTA"
+        }
+        elseif($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1)
+        {
+            $virtioVer = "WIN7"
+        }
+        elseif(($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 2) -or $image.ImageVersion.Major -gt 6)
+        {
+            $virtioVer = "WIN8"
+        }
+        else
+        {
+            throw "Unsupported Windows version for VirtIO drivers: {0}" -f $image.ImageVersion
+        }
+
+        $virtioDir = "{0}:\{1}\{2}" -f $isoDriveLetter, $virtioVer, $image.ImageArchitecture
+        AddDriversToImage $vhdDriveLetter $virtioDir
+    }
+    finally
+    {
+        $v.DetachVirtualDisk()
+        $v.Close()
+    }
+}
+
 function New-WindowsCloudImage()
 {
     [CmdletBinding()]
@@ -208,10 +251,11 @@ function New-WindowsCloudImage()
         [ValidateSet("VHD", "QCow2", "VMDK", "RAW", ignorecase=$false)]
         [string]$VirtualDiskFormat = "VHD",
         [parameter(Mandatory=$false)]
+        [string]$VirtIOISOPath,
+        [parameter(Mandatory=$false)]
         [switch]$InstallUpdates,
         [parameter(Mandatory=$false)]
         [string]$AdministratorPassword = "Pa`$`$w0rd",
-
         [parameter(Mandatory=$false)]
         [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml"
     )
@@ -246,6 +290,11 @@ function New-WindowsCloudImage()
             DownloadCloudbaseInit $resourcesDir [string]$image.ImageArchitecture
             ApplyImage $driveLetter $wimFilePath $image.ImageIndex
             CreateBCDBootConfig $driveLetter
+
+            if($VirtIOISOPath)
+            {
+                AddVirtIODriversFromISO $driveLetter $image $VirtIOISOPath
+            }
         }
         finally
         {
