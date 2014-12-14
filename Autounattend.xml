@@ -47,19 +47,6 @@
                     <InstallFrom>
                         <MetaData wcm:action="add">
                             <Key>/IMAGE/NAME</Key>
-                            <!--
-                                Windows 7 ENTERPRISE
-                                Windows 8 ENTERPRISE
-                                Windows 8 PROFESSIONAL
-                                Windows 8.1 ENTERPRISE
-                                Windows 8.1 PROFESSIONAL
-                                Windows Server 2008 R2 SERVERHYPERCORE
-                                Windows Server 2008 R2 SERVERSTANDARD
-                                Hyper-V Server 2012 SERVERHYPERCORE
-                                Windows Server 2012 SERVERSTANDARD
-                                Hyper-V Server 2012 R2 SERVERHYPERCORE
-                                Windows Server 2012 R2 SERVERSTANDARD
-                            -->
                             <Value>Windows Server 2012 R2 SERVERSTANDARD</Value>
                         </MetaData>
                     </InstallFrom>
@@ -75,7 +62,7 @@
                 -->
             </UserData>
         </component>
-        <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+        <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
             <SetupUILanguage>
                 <UILanguage>en-US</UILanguage>
             </SetupUILanguage>
@@ -102,10 +89,8 @@
                 <NetworkLocation>Work</NetworkLocation>
                 <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
                 <!-- Comment the following two options on Windows Vista / 7 and Windows Server 2008 / 2008 R2 -->
-                <!--
                 <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
                 <HideLocalAccountScreen>true</HideLocalAccountScreen>
-                -->
             </OOBE>
             <!-- Use FirstLogonCommands instead of LogonCommands if you don't need to install Windows Updates -->
             <LogonCommands>
@@ -123,7 +108,7 @@
             <UserAccounts>
                 <!--
                     Password to be used only during initial provisioning.
-                    Must be rest with final Sysprep.
+                    Must be reset with final Sysprep.
                 -->
                 <AdministratorPassword>
                     <Value>Passw0rd</Value>
