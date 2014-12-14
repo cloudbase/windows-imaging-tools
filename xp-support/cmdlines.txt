@@ -1,0 +1,2 @@
+[Commands]
+"C:\Windows\Setup\Scripts\SetupComplete.cmd"

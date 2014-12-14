@@ -11,6 +11,27 @@ BASEDIR=$(dirname $0)
 FLOPPY_IMAGE=$BASEDIR/Autounattend.vfd
 CONTENT_SRC=$BASEDIR/Autounattend.xml
 
+while getopts ":xh" opt; do
+	case $opt in
+		x)
+			CONTENT_SRC=$BASEDIR/Winnt.sif
+      		;;
+		h)
+			echo "Usage: create-autounattend-floppy.sh [-x]"
+			echo "    -x - xp mode"
+			exit 1
+      		;;
+		\?)
+			echo "Invalid option: -$OPTARG" >&2
+			exit 1
+			;;
+		:)
+			echo "Option -$OPTARG requires an argument." >&2
+			exit 1
+			;;
+	esac
+done
+
 TMP_FLOPPY_IMAGE=`/bin/mktemp`
 TMP_MOUNT_PATH=`/bin/mktemp -d`
 
