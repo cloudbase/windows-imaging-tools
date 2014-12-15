@@ -232,6 +232,18 @@ function AddVirtIODriversFromISO($vhdDriveLetter, $image, $isoPath)
     }
 }
 
+function SetDotNetCWD()
+{
+    # Make sure the PowerShell and .Net CWD match
+    [Environment]::CurrentDirectory = (Get-Location -PSProvider FileSystem).ProviderPath
+}
+
+function GetPathWithoutExtension($path)
+{
+    return Join-Path ([System.IO.Path]::GetDirectoryName($path)) `
+                     ([System.IO.Path]::GetFileNameWithoutExtension($path))
+}
+
 function New-WindowsCloudImage()
 {
     [CmdletBinding()]
@@ -261,6 +273,7 @@ function New-WindowsCloudImage()
     )
     PROCESS
     {
+        SetDotNetCWD
         CheckIsAdmin
 
         $image = Get-WimFileImagesInfo -WimFilePath $wimFilePath | where {$_.ImageName -eq $ImageName }
@@ -275,7 +288,7 @@ function New-WindowsCloudImage()
         }
         else
         {
-            $VHDPath = "{0}.vhd" -f [System.IO.Path]::GetFileNameWithoutExtension($VirtualDiskPath)
+            $VHDPath = "{0}.vhd" -f (GetPathWithoutExtension $VirtualDiskPath)
             if (Test-Path $VHDPath) { Remove-Item -Force $VHDPath }
         }
 
