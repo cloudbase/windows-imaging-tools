@@ -56,13 +56,13 @@ function CreateImageVirtualDisk($vhdPath, $size)
     }
 }
 
-function ApplyImage($driveLetter, $wimFilePath, $imageIndex)
+function ApplyImage($winImagePath, $wimFilePath, $imageIndex)
 {
-    Write-Output ('Applying Windows image "{0}" in "{1}"' -f $wimFilePath, "${driveLetter}:\")
-    #Expand-WindowsImage -ImagePath $wimFilePath -Index $imageIndex -ApplyPath "${driveLetter}:\"
+    Write-Output ('Applying Windows image "{0}" in "{1}"' -f $wimFilePath, $winImagePath)
+    #Expand-WindowsImage -ImagePath $wimFilePath -Index $imageIndex -ApplyPath $winImagePath
     # Use Dism in place of the PowerShell equivalent for better progress update
     # and for ease of interruption with CTRL+C
-    & Dism /apply-image /imagefile:${wimFilePath} /index:${imageIndex} /ApplyDir:${driveLetter}:\
+    & Dism.exe /apply-image /imagefile:${wimFilePath} /index:${imageIndex} /ApplyDir:${winImagePath}
     if($LASTEXITCODE) { throw "Dism apply-image failed" }
 }
 
@@ -96,6 +96,7 @@ function TransformXml($xsltPath, $inXmlPath, $outXmlPath, $xsltArgs)
     }
 
     $xslt.Transform($inXmlPath, $argList, $outXmlFile)
+    $outXmlFile.Close()
 }
 
 function GenerateUnattendXml($inUnattendXmlPath, $outUnattendXmlPath, $image, $productKey, $administratorPassword)
@@ -192,24 +193,24 @@ function GenerateConfigFile($resourcesDir, $installUpdates)
     Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Value $installUpdates
 }
 
-function AddDriversToImage($driveLetter, $driversPath)
+function AddDriversToImage($winImagePath, $driversPath)
 {
-    Write-Output ('Adding drivers from "{0}" to image "{1}:\"' -f $driversPath, $driveLetter)
-    Add-WindowsDriver -Path "${driveLetter}:\" -Driver $driversPath -ForceUnsigned -Recurse
-    #& Dism.exe /image:${driveLetter}:\ /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
+    Write-Output ('Adding drivers from "{0}" to image "{1}"' -f $driversPath, $winImagePath)
+    Add-WindowsDriver -Path $winImagePath -Driver $driversPath -ForceUnsigned -Recurse
+    #& Dism.exe /image:${winImagePath} /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
     #if ($LASTEXITCODE) { throw "Dism failed to add drivers from: $driversPath" }
 }
 
-function SetProductKeyInImage($driveLetter, $productKey)
+function SetProductKeyInImage($winImagePath, $productKey)
 {
-    Set-WindowsProductKey -Path "${driveLetter}:\" -ProductKey $productKey
+    Set-WindowsProductKey -Path $winImagePath -ProductKey $productKey
 }
 
-function EnableFeaturesInImage($driveLetter, $featureNames)
+function EnableFeaturesInImage($winImagePath, $featureNames)
 {
     if($featureNames)
     {
-        $featuresCmdStr = "& Dism.exe /image:${driveLetter}:\ /Enable-Feature"
+        $featuresCmdStr = "& Dism.exe /image:${winImagePath} /Enable-Feature"
         foreach($featureName in $featureNames)
         {
             $featuresCmdStr += " /FeatureName:$featureName"
@@ -221,7 +222,7 @@ function EnableFeaturesInImage($driveLetter, $featureNames)
     }
 }
 
-function CheckEnablePowerShellInImage($driveLetter, $image)
+function CheckEnablePowerShellInImage($winImagePath, $image)
 {
     # Windows 2008 R2 Server Core dows not enable powershell by default
     $v62 = new-Object System.Version 6, 2, 0, 0
@@ -230,7 +231,7 @@ function CheckEnablePowerShellInImage($driveLetter, $image)
         Write-Output "Enabling PowerShell in the Windows image"
         $psFeatures = @("NetFx2-ServerCore", "MicrosoftWindowsPowerShell", `
                         "NetFx2-ServerCore-WOW64", "MicrosoftWindowsPowerShell-WOW64")
-        EnableFeaturesInImage $driveLetter $psFeatures
+        EnableFeaturesInImage $winImagePath $psFeatures
     }
 }
 
@@ -333,27 +334,29 @@ function New-WindowsCloudImage()
         try
         {
             $driveLetter = CreateImageVirtualDisk $VHDPath $SizeBytes
-            $resourcesDir = "${driveLetter}:\UnattendResources"
+            $winImagePath = "${driveLetter}:\"
+            $resourcesDir = "${winImagePath}UnattendResources"
+            $unattedXmlPath = "${winImagePath}Unattend.xml"
 
-            GenerateUnattendXml $UnattendXmlPath ${driveLetter}:\Unattend.xml $image $ProductKey $AdministratorPassword
+            GenerateUnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
             CopyUnattendResources $resourcesDir $image.ImageInstallationType
             GenerateConfigFile $resourcesDir $installUpdates
             DownloadCloudbaseInit $resourcesDir [string]$image.ImageArchitecture
-            ApplyImage $driveLetter $wimFilePath $image.ImageIndex
+            ApplyImage $winImagePath $wimFilePath $image.ImageIndex
             CreateBCDBootConfig $driveLetter
-            CheckEnablePowerShellInImage $driveLetter $image
+            CheckEnablePowerShellInImage $winImagePath $image
 
             # Product key is applied by the unattend.xml
             # Evaluate if it's the case to set the product key here as well
             # which in case requires Dism /Set-Edition
             #if($ProductKey)
             #{
-            #    SetProductKeyInImage $driveLetter $ProductKey
+            #    SetProductKeyInImage $winImagePath $ProductKey
             #}
 
             if($VirtIOISOPath)
             {
-                AddVirtIODriversFromISO $driveLetter $image $VirtIOISOPath
+                AddVirtIODriversFromISO $winImagePath $image $VirtIOISOPath
             }
         }
         finally
