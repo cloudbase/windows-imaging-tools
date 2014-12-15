@@ -5,6 +5,8 @@ $localResourcesDir = "$scriptPath\UnattendResources"
 
 . "$scriptPath\Interop.ps1"
 
+Import-Module dism
+
 function CheckIsAdmin()
 {
     $wid = [System.Security.Principal.WindowsIdentity]::GetCurrent()
