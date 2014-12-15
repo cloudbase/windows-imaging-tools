@@ -58,7 +58,10 @@ function CreateImageVirtualDisk($vhdPath, $size)
 
 function ApplyImage($driveLetter, $wimFilePath, $imageIndex)
 {
-    #Expand-WindowsImage -ImagePath $wimFilePath -Index $imageIndex -ApplyPath ${driveLetter}:\
+    Write-Output ('Applying Windows image "{0}" in "{1}"' -f $wimFilePath, "${driveLetter}:\")
+    #Expand-WindowsImage -ImagePath $wimFilePath -Index $imageIndex -ApplyPath "${driveLetter}:\"
+    # Use Dism in place of the PowerShell equivalent for better progress update
+    # and for ease of interruption with CTRL+C
     & Dism /apply-image /imagefile:${wimFilePath} /index:${imageIndex} /ApplyDir:${driveLetter}:\
     if($LASTEXITCODE) { throw "Dism apply-image failed" }
 }
@@ -68,7 +71,7 @@ function CreateBCDBootConfig($driveLetter)
     $bcdbootPath = "${driveLetter}:\windows\system32\bcdboot.exe"
     if (!(Test-Path $bcdbootPath))
     {
-        Write-Warning '"$bcdbootPath" not found'
+        Write-Warning ('"{0}" not found, using online version' -f $bcdbootPath)
         $bcdbootPath = "bcdboot.exe"
     }
 
@@ -191,9 +194,44 @@ function GenerateConfigFile($resourcesDir, $installUpdates)
 
 function AddDriversToImage($driveLetter, $driversPath)
 {
-    Write-Output 'Adding drivers from "{0}" to image "{1}:\"' -f $driversPath, $driveLetter
-    & Dism.exe /image:${driveLetter}:\ /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
-    if ($LASTEXITCODE) { throw "dism failed to add drivers from: $driversPath" }
+    Write-Output ('Adding drivers from "{0}" to image "{1}:\"' -f $driversPath, $driveLetter)
+    Add-WindowsDriver -Path "${driveLetter}:\" -Driver $driversPath -ForceUnsigned -Recurse
+    #& Dism.exe /image:${driveLetter}:\ /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
+    #if ($LASTEXITCODE) { throw "Dism failed to add drivers from: $driversPath" }
+}
+
+function SetProductKeyInImage($driveLetter, $productKey)
+{
+    Set-WindowsProductKey -Path "${driveLetter}:\" -ProductKey $productKey
+}
+
+function EnableFeaturesInImage($driveLetter, $featureNames)
+{
+    if($featureNames)
+    {
+        $featuresCmdStr = "& Dism.exe /image:${driveLetter}:\ /Enable-Feature"
+        foreach($featureName in $featureNames)
+        {
+            $featuresCmdStr += " /FeatureName:$featureName"
+        }
+
+        # Prefer Dism over Enable-WindowsOptionalFeature due to better error reporting
+        Invoke-Expression $featuresCmdStr
+        if ($LASTEXITCODE) { throw "Dism failed to enable features: $featureNames" }
+    }
+}
+
+function CheckEnablePowerShellInImage($driveLetter, $image)
+{
+    # Windows 2008 R2 Server Core dows not enable powershell by default
+    $v62 = new-Object System.Version 6, 2, 0, 0
+    if($image.ImageVersion.CompareTo($v62) -lt 0 -and $image.ImageInstallationType -eq "Server Core")
+    {
+        Write-Output "Enabling PowerShell in the Windows image"
+        $psFeatures = @("NetFx2-ServerCore", "MicrosoftWindowsPowerShell", `
+                        "NetFx2-ServerCore-WOW64", "MicrosoftWindowsPowerShell-WOW64")
+        EnableFeaturesInImage $driveLetter $psFeatures
+    }
 }
 
 function AddVirtIODriversFromISO($vhdDriveLetter, $image, $isoPath)
@@ -303,6 +341,15 @@ function New-WindowsCloudImage()
             DownloadCloudbaseInit $resourcesDir [string]$image.ImageArchitecture
             ApplyImage $driveLetter $wimFilePath $image.ImageIndex
             CreateBCDBootConfig $driveLetter
+            CheckEnablePowerShellInImage $driveLetter $image
+
+            # Product key is applied by the unattend.xml
+            # Evaluate if it's the case to set the product key here as well
+            # which in case requires Dism /Set-Edition
+            #if($ProductKey)
+            #{
+            #    SetProductKeyInImage $driveLetter $ProductKey
+            #}
 
             if($VirtIOISOPath)
             {
