@@ -1,112 +1,75 @@
 windows-openstack-imaging-tools
 ===============================
 
-Tools to automate the creation of a Windows image for OpenStack, supporting KVM, Hyper-V, ESXi and more.
+Tools to automate the creation of a Windows image for OpenStack, supporting KVM, Hyper-V, ESXi, baremetal and more.
 
-Supports any version of Windows starting with Windows 2008 and Windows Vista.
+Supports any version of Windows starting with Windows 2008 R2 and Windows 7, including:
 
-Note: the provided Autounattend.xml targets x64 versions, but it can be easily adapted to x86.
+* Windows Server 2008 R2
+* Hyper-V Server 2008 R2
+* Windows 7
+* Windows Server 2012
+* Hyper-V Server 2012
+* Windows 8
+* Windows Server 2012 R2
+* Hyper-V Server 2012 R2
+* Windows 8.1
 
+Supports both x64 and x86 images.
 
+### How to create a Windows template image
 
-### How to create a Windows template image on KVM
+Requirements:
 
+* A host or VM running Windows 
+* Clone this repository
+* A Windows installation ISO or DVD, that needs to be either mounted or extracted (e.g. with 7-zip)
+* For KVM, download the VirtIO tools ISO, e.g. from: http://alt.fedoraproject.org/pub/alt/virtio-win/stable/
 
-Download the VirtIO tools ISO, e.g. from:
-http://alt.fedoraproject.org/pub/alt/virtio-win/latest/images/bin/
+Example PowerShell script:
 
-You'll need also your Windows installation ISO. In the following example we'll use a Windows Server 2012 R2 
-evaluation.
+    Import-Module .\WinImageBuilder.psm1
 
-    IMAGE=windows-server-2012-r2.qcow2
-    FLOPPY=Autounattend.vfd
-    VIRTIO_ISO=virtio-win-0.1-52.iso
-    ISO=9600.16384.WINBLUE_RTM.130821-1623_X64FRE_SERVER_EVAL_EN-US-IRM_SSS_X64FREE_EN-US_DV5.ISO
+    # The disk format can be: VHD, VHDX, QCow2, VMDK or RAW
+    $virtualDiskPath = "c:\Images\mywindowsimage.qcow2"
+    # This is the content of your Windows ISO
+    $wimFilePath = "D:\sources\install.wim"
+    # Optionally, if you target KVM
+    $virtIOISOPath = "C:\ISO\virtio-win-0.1-81.iso"
 
-    KVM=/usr/libexec/qemu-kvm
-    if [ ! -f "$KVM" ]; then
-        KVM=/usr/bin/kvm
-    fi
+    # Check what images are supported in this Windows ISO
+    $images = Get-WimFileImagesInfo -WimFilePath $wimFilePath
+    # Select the first one
+    $image = $images[0]
+    $image
 
-    qemu-img create -f qcow2 -o preallocation=metadata $IMAGE 16G
+    # The product key is optional
+    #$productKey = “xxxxx-xxxxx…"
 
-    $KVM -m 2048 -smp 2 -cdrom $ISO -drive file=$VIRTIO_ISO,index=3,media=cdrom -fda $FLOPPY $IMAGE -boot d -vga std -k en-us -vnc :1
+    # Add -InstallUpdates for the Windows updates (it takes longer and requires
+    # more space but it's highly recommended)
+    New-WindowsCloudImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
+    -VirtualDiskFormat QCow2 -VirtualDiskPath $virtualDiskPath `
+    -SizeBytes 16GB -ProductKey $productKey -VirtIOISOPath $virtIOISOPath
 
-Now you can just wait for the KVM command to exit. You can also connect to the VM via VNC on port 5901 to check 
-the status, no user interaction is required.
+No extra configurations are needed for specific Windows versions, the New-WindowsCloudImage cmdlet takes care of everything.
 
-Note: if you plan to connect remotely via VNC, make sure that the KVM host firewall allows traffic
-on this port, e.g.:
+### How to upload the image in OpenStack
 
-    iptables -I INPUT -p tcp --dport 5901 -j ACCEPT
+We're not yet done, the next steps consist in:
 
+* uploading the image to Glance
+* booting an instance on your target hypervisor compute node
+* waiting for the setup to complete (the instance will shutdown once the setup is done) 
+* take a snapshot of the instance which will contain the final sysprepped image ready for your deployments
 
-### How to create a Windows template image on Hyper-V
+TODO: Add OpenStack scripts
 
-The following Powershell snippet works on both Windows Server and Hyper-V Server 2012 and above:
+### Notes
 
-    $vmname = "OpenStack WS 2012 R2 Standard Evaluation"
-    
-    # Set the extension to VHD instead of VHDX only if you plan to deploy
-    # this image on Grizzly or on Windows / Hyper-V Server 2008 R2
-    $vhdpath = "C:\VM\windows-server-2012-r2.vhdx"
+The Windows host where you plan to create the instance needs either:
 
-    $isoPath = "C:\your\path\9600.16384.WINBLUE_RTM.130821-1623_X64FRE_SERVER_EVAL_EN-US-IRM_SSS_X64FREE_EN-US_DV5.ISO"
-    $floppyPath = "C:\your\path\Autounattend.vfd"
+* A version greater or equal to the version of the Windows image that you want to generate
+* A recent Windows ADK installed
 
-    # Set the vswitch accordingly with your configuration
-    $vmSwitch = "external"
-
-    New-VHD $vhdpath -Dynamic -SizeBytes (16 * 1024 * 1024 * 1024)
-    $vm = New-VM $vmname -MemoryStartupBytes (2048 * 1024 *1024)
-    $vm | Set-VM -ProcessorCount 2
-    $vm.NetworkAdapters | Connect-VMNetworkAdapter -SwitchName $vmSwitch
-    $vm | Add-VMHardDiskDrive -ControllerType IDE -Path $vhdpath
-    $vm | Add-VMDvdDrive -Path $isopath
-    $vm | Set-VMFloppyDiskDrive -Path $floppyPath
-
-    $vm | Start-Vm
-
-Now you can simply wait for the VM to get installed and configured. It will automatically shutdown once done.
-You can check the status with: 
-
-    get-VM $vmname
-
-If you have Cloudbase Hyper-V Nova Compute installed, you can also connect to the VM console with:
-
-    $vm | Get-VMConsole
-
-
-#### How to set the proper Windows version
-
-The Windows version and edition to be installed can be specified in the Autounattend.xml file contained 
-in the Autounattend.flp floppy image. The default is Windows Server 2012 R2 Standard edition. 
-
-This can be easily changed here:
-
-https://github.com/cloudbase/windows-openstack-imaging-tools/blob/05b03fa64dc3d8e5c2c5af97c94aecea61616365/Autounattend.xml#L58
-
-For Windows 8 and above, uncomment the following two options:
-
-    <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
-    <HideLocalAccountScreen>true</HideLocalAccountScreen>
-
-On a client OS (Windows 7, 8, etc.) you need also to uncomment the following section:
-
-    <LocalAccounts>
-        <LocalAccount wcm:action="add">
-        ...
-        </LocalAccount>
-    </LocalAccounts>
-
-For x86 builds, replace all occurrences of:
-
-    processorArchitecture="amd64"
-
-with:
-
-    processorArchitecture="x86"
-
-Once done, the floppy image can be easily generated on Linux with:
-
-    ./create-autounattend-floppy.sh
+E.g. to generate a Windows Server 2012 R2 image, you need a host running either Windows Server 2012 R2 / Hyper-V Server 2012 R2 or Windows 8.1.
