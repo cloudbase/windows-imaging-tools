@@ -343,7 +343,7 @@ function New-WindowsCloudImage()
             GenerateUnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
             CopyUnattendResources $resourcesDir $image.ImageInstallationType
             GenerateConfigFile $resourcesDir $installUpdates
-            DownloadCloudbaseInit $resourcesDir [string]$image.ImageArchitecture
+            DownloadCloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
             ApplyImage $winImagePath $wimFilePath $image.ImageIndex
             CreateBCDBootConfig $driveLetter
             CheckEnablePowerShellInImage $winImagePath $image
