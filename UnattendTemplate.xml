@@ -179,6 +179,16 @@
                     <Path>powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File %SystemDrive%\UnattendResources\Specialize.ps1</Path>
                     <Description>Run Specialize script</Description>
                 </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>2</Order>
+                    <Path>%SystemRoot%\System32\bcdedit.exe /ems on</Path>
+                    <Description>Enable Emergency Management Services</Description>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>3</Order>
+                    <Path>%SystemRoot%\System32\bcdedit.exe /emssettings EMSPORT:2 EMSBAUDRATE:115200</Path>
+                    <Description>Set Emergency Management Services Config</Description>
+                </RunSynchronousCommand>
             </RunSynchronous>
         </component>
         <component name="Microsoft-Windows-SQMApi" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="NonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
