@@ -11,6 +11,14 @@ reboot your computer. After the reboot is done, please rerun this script.
 If this is not what you want, please Ctrl-C now.
 "@
 
+$noSysprepWarning = @"
+You have chosen not to sysprep the image now. This means that the resulting
+image is not yet ready to deploy. The image is set to automatically sysprep
+on first boot.
+
+Please make sure you boot this image at least once before you use it.
+"@
+
 . "$scriptPath\Interop.ps1"
 
 Import-Module dism
@@ -351,12 +359,12 @@ function Install-Prerequisites
     }
 
     if ($needsHyperV.State -ne "Enabled"){
-        $delay = 30
+        $delay = 60
         Write-Warning $rebootWarning
         Write-Warning "Sleeping for $delay"
         Start-Sleep $delay
 
-        $installHyperV = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -NoRestart
+        $installHyperV = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart
         if ($installHyperV.RestartNeeded){
             shutdown -r -t 0
             exit 0
@@ -437,14 +445,19 @@ function New-MaaSImage()
         [parameter(Mandatory=$false)]
         [switch]$PersistDriverInstall = $false,
         [parameter(Mandatory=$true)]
-        [Uint64]$Memory
+        [Uint64]$Memory,
+        [parameter(Mandatory=$false)]
+        [switch]$RunSysprep
     )
     PROCESS
     {
         CheckIsAdmin
-        Install-Prerequisites
-
-        $vmSwitch = GetOrCreateSwitch
+        if ($RunSysprep){
+            Install-Prerequisites
+            $vmSwitch = GetOrCreateSwitch
+        }else{
+            Write-Warning $noSysprepWarning
+        }
 
         $VirtualDiskPath = $MaaSImagePath + ".vhd"
         $RawImagePath = $MaaSImagePath + ".img"
@@ -453,9 +466,10 @@ function New-MaaSImage()
         -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
         -AdministratorPassword $AdministratorPassword
 
-        $Name = "MaaS-Sysprep" + (Get-Random)
-
-        Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $vmSwitch.Name
+        if ($RunSysprep){
+            $Name = "MaaS-Sysprep" + (Get-Random)
+            Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $vmSwitch.Name
+        }
         Write-Host "Converting VHD to RAW"
         Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
         del -Force $VirtualDiskPath
