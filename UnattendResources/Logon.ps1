@@ -2,12 +2,42 @@ $ErrorActionPreference = "Stop"
 $resourcesDir = "$ENV:SystemDrive\UnattendResources"
 $configIniPath = "$resourcesDir\config.ini"
 
+function Set-PersistDrivers {
+    Param(
+    [parameter(Mandatory=$true)]
+    [string]$Path,
+    [switch]$Persist=$true
+    )
+    if (!(Test-Path $Path)){
+        return $false
+    }
+    try {
+        $xml = [xml](Get-Content $Path)
+    }catch{
+        Write-Error "Failed to load $Path"
+        return $false
+    }
+    if (!$xml.unattend.settings){
+        return $false
+    }
+    foreach ($i in $xml.unattend.settings) {
+        if ($i.pass -eq "generalize"){
+            $index = [array]::IndexOf($xml.unattend.settings, $i)
+            if ($xml.unattend.settings[$index].component -and $xml.unattend.settings[$index].component.PersistAllDeviceInstalls -ne $Persist.ToString()){
+                $xml.unattend.settings[$index].component.PersistAllDeviceInstalls = $Persist.ToString()
+            }
+        }
+    }
+    $xml.Save($Path)
+}
+
 try
 {
     $needsReboot = $false
 
     Import-Module "$resourcesDir\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Default $false -AsBoolean
+    $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PersistDriverInstall" -Default $true -AsBoolean
 
     if($installUpdates)
     {
@@ -78,6 +108,7 @@ try
 
         $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
         $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
+        Set-PersistDrivers -Path $unattendedXmlPath -Persist:$persistDrivers
         & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
     }
 }
