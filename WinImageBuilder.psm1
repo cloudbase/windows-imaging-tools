@@ -319,7 +319,7 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
 
     $7zip = Join-Path $localResourcesDir 7za.exe
     try {
-        Write-Host "Compressing $VirtualDiskPath to $name"
+        Write-Output "Compressing $VirtualDiskPath to $name"
         & $7zip a -ttar $tmpName $VirtualDiskPath
         if($LASTEXITCODE){
             Throw "Failed to create tar"
@@ -335,7 +335,7 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
     }
     Remove-Item -Force $tmpName
     Move-Item $name $ImagePath
-    Write-Host "MaaS image is ready and available at: $ImagePath"
+    Write-Output "MaaS image is ready and available at: $ImagePath"
 }
 
 function Create-VirtualSwitch
@@ -404,7 +404,7 @@ function Wait-ForVMShutdown
         [Parameter(Mandatory=$true)]
         [string]$Name
     )
-    Write-Host "Waiting for $Name to finish sysprep"
+    Write-Output "Waiting for $Name to finish sysprep"
     $isOff = (Get-VM -Name $Name).State -eq "Off"
     while($isOff -eq $false){
         Start-Sleep 1
@@ -427,10 +427,10 @@ function Run-Sysprep
         [string]$VMSwitch
     )
 
-    Write-Host "Creating VM $Name attached to $VMSwitch"
+    Write-Output "Creating VM $Name attached to $VMSwitch"
     New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch -VHDPath $VHDPath
     Set-VMProcessor -VMname $Name -count $CpuCores 
-    Write-Host "Starting $Name"
+    Write-Output "Starting $Name"
     Start-VM $Name
     Start-Sleep 5
     Wait-ForVMShutdown $Name
@@ -480,7 +480,7 @@ function New-MaaSImage()
             }
         }else{
             Write-Warning $noSysprepWarning
-            Write-Host "Sleeping for 30 seconds"
+            Write-Output "Sleeping for 30 seconds"
             Start-Sleep 30
         }
         try {
@@ -495,7 +495,7 @@ function New-MaaSImage()
                 $Name = "MaaS-Sysprep" + (Get-Random)
                 Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $vmSwitch.Name -CpuCores $CpuCores
             }
-            Write-Host "Converting VHD to RAW"
+            Write-Output "Converting VHD to RAW"
             Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
             del -Force $VirtualDiskPath
             Compress-Image $RawImagePath $MaaSImagePath
