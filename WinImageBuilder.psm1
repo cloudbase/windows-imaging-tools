@@ -2,6 +2,14 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2
 $scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
 $localResourcesDir = "$scriptPath\UnattendResources"
+$rebootWarning = @"
+In order to finish the MaaS image generation, we need to boot the image.
+This operation requires that you have the Hyper-V role installed. We will now
+install the Hyper-V role for you, create a virtual switch, and then
+reboot your computer. After the reboot is done, please rerun this script.
+
+If this is not what you want, please Ctrl-C now.
+"@
 
 . "$scriptPath\Interop.ps1"
 
@@ -96,7 +104,6 @@ function TransformXml($xsltPath, $inXmlPath, $outXmlPath, $xsltArgs)
     {
         $argList.AddParam($k, "", $xsltArgs[$k])
     }
-
     $xslt.Transform($inXmlPath, $argList, $outXmlFile)
     $outXmlFile.Close()
 }
@@ -115,7 +122,7 @@ function GenerateUnattendXml($inUnattendXmlPath, $outUnattendXmlPath, $image, $p
     if($productKey) {
         $xsltArgs["productKey"] = $productKey
     }
-
+    
     TransformXml "$scriptPath\Unattend.xslt" $inUnattendXmlPath $outUnattendXmlPath $xsltArgs
 }
 
@@ -146,7 +153,7 @@ function CheckDismVersionForImage($image)
     }
 }
 
-function ConvertVirtualDisk($vhdPath, $outPath, $format)
+function Convert-VirtualDisk($vhdPath, $outPath, $format)
 {
     Write-Output "Converting virtual disk image from $vhdPath to $outPath..."
     & $scriptPath\bin\qemu-img.exe convert -O $format.ToLower() $vhdPath $outPath
@@ -285,6 +292,177 @@ function GetPathWithoutExtension($path)
                      ([System.IO.Path]::GetFileNameWithoutExtension($path))
 }
 
+function Compress-Image($VirtualDiskPath, $ImagePath)
+{
+    if (!(Test-Path $VirtualDiskPath)){
+        Throw "$VirtualDiskPath not found"
+    }
+    $name = $ImagePath + ".tgz"
+    $tmpName = $name + "." + (Get-Random)
+
+    $7zip = Join-Path $localResourcesDir 7za.exe
+
+    Write-Host "Compressing $VirtualDiskPath to $name"
+    & $7zip a -ttar $tmpName $VirtualDiskPath
+    if($LASTEXITCODE){
+        Throw "Failed to create tar"
+    }
+    Remove-Item -Force $VirtualDiskPath
+    & $7zip a $name $tmpName
+    if($LASTEXITCODE){
+        Throw "Failed to compress image"
+    }
+    Remove-Item -Force $tmpName
+    Move-Item $name $ImagePath
+    Write-Host "MaaS image is ready and available at: $ImagePath"
+}
+
+function Create-VirtualSwitch
+{
+    Param(
+        [Parameter(Mandatory=$false)]
+        [string]$NetAdapterName,
+        [Parameter(Mandatory=$false)]
+        [string]$Name="br100"
+
+    )
+    if (!$NetAdapterName){
+        $defRoute = Get-NetRoute | Where-Object {$_.DestinationPrefix -eq "0.0.0.0/0"}
+        if (!$defRoute) {
+            Throw "Could not determine default route"
+        }
+        $details = $defRoute[0]
+        $netAdapter = Get-NetAdapter -ifIndex $details.ifIndex -Physical:$true
+        if (!$netAdapter){
+            Throw "Could not get physical interface for switch"
+        }
+        $NetAdapterName = $netAdapter.Name        
+    }
+    $sw = New-VMSwitch -Name $Name -NetAdapterName $NetAdapterName -AllowManagementOS $true
+    return $sw
+}
+
+function Install-Prerequisites
+{
+    try {
+        $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
+    }catch{
+        Write-Error "Failed to get Hyper-V role status"
+    }
+
+    if ($needsHyperV.State -ne "Enabled"){
+        $delay = 30
+        Write-Warning $rebootWarning
+        Write-Warning "Sleeping for $delay"
+        Start-Sleep $delay
+
+        $installHyperV = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -NoRestart
+        if ($installHyperV.RestartNeeded){
+            shutdown -r -t 0
+            exit 0
+        }
+    }
+}
+
+function GetOrCreateSwitch
+{
+    $vmSwitches = Get-VMSwitch -SwitchType external
+
+    if ($vmSwitches){
+        $vmswitch = $vmSwitches[0]
+    }else{
+        $vmswitch = Create-VirtualSwitch -Name "br100"
+    }
+
+    return $vmswitch
+}
+
+function Wait-ForVMShutdown
+{
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Name
+    )
+    Write-Host "Waiting for $Name to finish sysprep"
+    $isOff = (Get-VM -Name $Name).State -eq "Off"
+    while($isOff -eq $false){
+        Start-Sleep 1
+        $isOff = (Get-VM -Name $Name).State -eq "Off"
+    }
+}
+
+function Run-Sysprep
+{
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+        [Parameter(Mandatory=$true)]
+        [string]$VHDPath,
+        [Parameter(Mandatory=$true)]
+        [Uint64]$Memory,
+        [Parameter(Mandatory=$true)]
+        [string]$VMSwitch
+    )
+
+    Write-Host "Creating VM $Name attached to $VMSwitch"
+    New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch -VHDPath $VHDPath
+    Write-Host "Starting $Name"
+    Start-VM $Name
+    Start-Sleep 5
+    Wait-ForVMShutdown $Name
+    Remove-VM $Name -Confirm:$false -Force
+}
+
+function New-MaaSImage()
+{
+    [CmdletBinding()]
+    param
+    (
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$WimFilePath = "D:\Sources\install.wim",
+        [parameter(Mandatory=$true)]
+        [string]$ImageName,
+        [parameter(Mandatory=$true)]
+        [string]$MaaSImagePath,
+        [parameter(Mandatory=$true)]
+        [Uint64]$SizeBytes,
+        [parameter(Mandatory=$false)]
+        [string]$ProductKey,
+        [parameter(Mandatory=$false)]
+        [string]$VirtIOISOPath,
+        [parameter(Mandatory=$false)]
+        [switch]$InstallUpdates,
+        [parameter(Mandatory=$false)]
+        [string]$AdministratorPassword = "Pa`$`$w0rd",
+        [parameter(Mandatory=$false)]
+        [switch]$PersistDriverInstall = $false,
+        [parameter(Mandatory=$true)]
+        [Uint64]$Memory
+    )
+    PROCESS
+    {
+        CheckIsAdmin
+        Install-Prerequisites
+
+        $vmSwitch = GetOrCreateSwitch
+
+        $VirtualDiskPath = $MaaSImagePath + ".vhd"
+        $RawImagePath = $MaaSImagePath + ".img"
+        New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
+        -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
+        -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
+        -AdministratorPassword $AdministratorPassword
+
+        $Name = "MaaS-Sysprep" + (Get-Random)
+
+        Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $vmSwitch.Name
+        Write-Host "Converting VHD to RAW"
+        Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
+        del -Force $VirtualDiskPath
+        Compress-Image $RawImagePath $MaaSImagePath
+    }
+}
+
 function New-WindowsCloudImage()
 {
     [CmdletBinding()]
@@ -340,6 +518,7 @@ function New-WindowsCloudImage()
             $resourcesDir = "${winImagePath}UnattendResources"
             $unattedXmlPath = "${winImagePath}Unattend.xml"
 
+            echo "$UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword"
             GenerateUnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
             CopyUnattendResources $resourcesDir $image.ImageInstallationType
             GenerateConfigFile $resourcesDir $installUpdates
@@ -371,10 +550,10 @@ function New-WindowsCloudImage()
 
         if ($VHDPath -ne $VirtualDiskPath)
         {
-            ConvertVirtualDisk $VHDPath $VirtualDiskPath $VirtualDiskFormat
+            Convert-VirtualDisk $VHDPath $VirtualDiskPath $VirtualDiskFormat
             del -Force $VHDPath
         }
     }
 }
 
-Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo
+Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage
