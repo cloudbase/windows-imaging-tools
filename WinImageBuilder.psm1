@@ -12,9 +12,9 @@ If this is not what you want, please Ctrl-C now.
 "@
 
 $noSysprepWarning = @"
-You have chosen not to sysprep the image now. This means that the resulting
-image is not yet ready to deploy. The image is set to automatically sysprep
-on first boot.
+You have chosen not to sysprep the image now. If you want to run sysprep now,
+use the -RunSysprep flag. If you do not run sysprep now, the resulting image
+will not be ready to deploy. The image is set to automatically sysprep on first boot.
 
 Please make sure you boot this image at least once before you use it.
 "@
@@ -168,8 +168,16 @@ function Convert-VirtualDisk($vhdPath, $outPath, $format)
     if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
 }
 
-function CopyUnattendResources($resourcesDir, $imageInstallationType)
+function CopyUnattendResources
 {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$resourcesDir,
+        [Parameter(Mandatory=$true)]
+        [string]$imageInstallationType,
+        [Parameter(Mandatory=$false)]
+        [boolean]$InstallMaaSHooks
+    )
     # Workaround to recognize the $resourcesDir drive. This seems a PowerShell bug
     $drives = Get-PSDrive
 
@@ -181,6 +189,11 @@ function CopyUnattendResources($resourcesDir, $imageInstallationType)
         # Skip the wallpaper on server core
         del -Force "$resourcesDir\Wallpaper.png"
         del -Force "$resourcesDir\GPO.zip"
+    }
+    if ($InstallMaaSHooks){
+        $src = Join-Path $localResourcesDir "curtin"
+        $dst = split-path $resourcesDir
+        copy -Recurse $src $dst
     }
 }
 
@@ -489,7 +502,8 @@ function New-MaaSImage()
             New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
             -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
             -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
-            -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall
+            -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
+            -InstallMaaSHooks
 
             if ($RunSysprep){
                 $Name = "MaaS-Sysprep" + (Get-Random)
@@ -532,7 +546,9 @@ function New-WindowsCloudImage()
         [parameter(Mandatory=$false)]
         [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml",
         [parameter(Mandatory=$false)]
-        [switch]$PersistDriverInstall = $true
+        [switch]$PersistDriverInstall = $true,
+        [parameter(Mandatory=$false)]
+        [switch]$InstallMaaSHooks
     )
     PROCESS
     {
@@ -568,7 +584,7 @@ function New-WindowsCloudImage()
 
             echo "$UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword"
             GenerateUnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
-            CopyUnattendResources $resourcesDir $image.ImageInstallationType
+            CopyUnattendResources $resourcesDir $image.ImageInstallationType $InstallMaaSHooks
             GenerateConfigFile $resourcesDir $configValues
             DownloadCloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
             ApplyImage $winImagePath $wimFilePath $image.ImageIndex
