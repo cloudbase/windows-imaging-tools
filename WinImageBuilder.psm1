@@ -318,16 +318,20 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
     $tmpName = $name + "." + (Get-Random)
 
     $7zip = Join-Path $localResourcesDir 7za.exe
-
-    Write-Host "Compressing $VirtualDiskPath to $name"
-    & $7zip a -ttar $tmpName $VirtualDiskPath
-    if($LASTEXITCODE){
-        Throw "Failed to create tar"
-    }
-    Remove-Item -Force $VirtualDiskPath
-    & $7zip a $name $tmpName
-    if($LASTEXITCODE){
-        Throw "Failed to compress image"
+    try {
+        Write-Host "Compressing $VirtualDiskPath to $name"
+        & $7zip a -ttar $tmpName $VirtualDiskPath
+        if($LASTEXITCODE){
+            Throw "Failed to create tar"
+        }
+        Remove-Item -Force $VirtualDiskPath
+        & $7zip a $name $tmpName
+        if($LASTEXITCODE){
+            Throw "Failed to compress image"
+        }
+    }catch{
+        Remove-Item -Force $name -ErrorAction SilentlyContinue
+        Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
     }
     Remove-Item -Force $tmpName
     Move-Item $name $ImagePath
@@ -495,7 +499,7 @@ function New-MaaSImage()
             Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
             del -Force $VirtualDiskPath
             Compress-Image $RawImagePath $MaaSImagePath
-        }finally{
+        }catch{
             Remove-Item -Force $MaaSImagePath* -ErrorAction SilentlyContinue
         }
     }
