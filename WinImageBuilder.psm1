@@ -203,11 +203,20 @@ function DownloadCloudbaseInit($resourcesDir, $osArch)
     (new-object System.Net.WebClient).DownloadFile($CloudbaseInitMsiUrl, $CloudbaseInitMsiPath)
 }
 
-function GenerateConfigFile($resourcesDir, $installUpdates)
+function GenerateConfigFile
 {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$resourcesDir,
+        [Parameter(Mandatory=$true)]
+        [hashtable]$values
+    )
+
     $configIniPath = "$resourcesDir\config.ini"
     Import-Module "$localResourcesDir\ini.psm1"
-    Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Value $installUpdates
+    foreach ($i in $values.GetEnumerator()){
+        Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key $i.Name -Value $i.Value
+    }
 }
 
 function AddDriversToImage($winImagePath, $driversPath)
@@ -409,11 +418,14 @@ function Run-Sysprep
         [Parameter(Mandatory=$true)]
         [Uint64]$Memory,
         [Parameter(Mandatory=$true)]
+        [int]$CpuCores=1,
+        [Parameter(Mandatory=$true)]
         [string]$VMSwitch
     )
 
     Write-Host "Creating VM $Name attached to $VMSwitch"
     New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch -VHDPath $VHDPath
+    Set-VMProcessor -VMname $Name -count $CpuCores 
     Write-Host "Starting $Name"
     Start-VM $Name
     Start-Sleep 5
@@ -444,8 +456,10 @@ function New-MaaSImage()
         [string]$AdministratorPassword = "Pa`$`$w0rd",
         [parameter(Mandatory=$false)]
         [switch]$PersistDriverInstall = $false,
-        [parameter(Mandatory=$true)]
-        [Uint64]$Memory,
+        [parameter(Mandatory=$false)]
+        [Uint64]$Memory=2GB,
+        [parameter(Mandatory=$false)]
+        [int]$CpuCores=1,
         [parameter(Mandatory=$false)]
         [switch]$RunSysprep
     )
@@ -455,25 +469,35 @@ function New-MaaSImage()
         if ($RunSysprep){
             Install-Prerequisites
             $vmSwitch = GetOrCreateSwitch
+            $coreCount = (gwmi win32_processor).NumberOfLogicalProcessors
+            if ($CpuCores -gt $coreCount){
+                Write-Warning "CpuCores larger then available (logical) CPU cores. Setting CpuCores to $coreCount"
+                $CpuCores = $coreCount
+            }
         }else{
             Write-Warning $noSysprepWarning
+            Write-Host "Sleeping for 30 seconds"
+            Start-Sleep 30
         }
+        try {
+            $VirtualDiskPath = $MaaSImagePath + ".vhd"
+            $RawImagePath = $MaaSImagePath + ".img"
+            New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
+            -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
+            -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
+            -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall
 
-        $VirtualDiskPath = $MaaSImagePath + ".vhd"
-        $RawImagePath = $MaaSImagePath + ".img"
-        New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
-        -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
-        -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
-        -AdministratorPassword $AdministratorPassword
-
-        if ($RunSysprep){
-            $Name = "MaaS-Sysprep" + (Get-Random)
-            Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $vmSwitch.Name
+            if ($RunSysprep){
+                $Name = "MaaS-Sysprep" + (Get-Random)
+                Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $vmSwitch.Name -CpuCores $CpuCores
+            }
+            Write-Host "Converting VHD to RAW"
+            Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
+            del -Force $VirtualDiskPath
+            Compress-Image $RawImagePath $MaaSImagePath
+        }finally{
+            Remove-Item -Force $MaaSImagePath* -ErrorAction SilentlyContinue
         }
-        Write-Host "Converting VHD to RAW"
-        Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
-        del -Force $VirtualDiskPath
-        Compress-Image $RawImagePath $MaaSImagePath
     }
 }
 
@@ -502,7 +526,9 @@ function New-WindowsCloudImage()
         [parameter(Mandatory=$false)]
         [string]$AdministratorPassword = "Pa`$`$w0rd",
         [parameter(Mandatory=$false)]
-        [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml"
+        [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml",
+        [parameter(Mandatory=$false)]
+        [switch]$PersistDriverInstall = $true
     )
     PROCESS
     {
@@ -531,11 +557,15 @@ function New-WindowsCloudImage()
             $winImagePath = "${driveLetter}:\"
             $resourcesDir = "${winImagePath}UnattendResources"
             $unattedXmlPath = "${winImagePath}Unattend.xml"
+            $configValues = @{
+                "InstallUpdates"=$InstallUpdates;
+                "PersistDriverInstall"=$PersistDriverInstall;
+            }
 
             echo "$UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword"
             GenerateUnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
             CopyUnattendResources $resourcesDir $image.ImageInstallationType
-            GenerateConfigFile $resourcesDir $installUpdates
+            GenerateConfigFile $resourcesDir $configValues
             DownloadCloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
             ApplyImage $winImagePath $wimFilePath $image.ImageIndex
             CreateBCDBootConfig $driveLetter
