@@ -192,8 +192,10 @@ function CopyUnattendResources
     }
     if ($InstallMaaSHooks){
         $src = Join-Path $localResourcesDir "curtin"
-        $dst = split-path $resourcesDir
-        copy -Recurse $src $dst
+        if ((Test-Path $src)){
+            $dst = split-path $resourcesDir
+            copy -Recurse $src $dst
+        }
     }
 }
 
@@ -343,6 +345,7 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
             Throw "Failed to compress image"
         }
     }catch{
+        Write-Output "Error compressing image: $_"
         Remove-Item -Force $name -ErrorAction SilentlyContinue
         Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
     }
@@ -403,11 +406,24 @@ function GetOrCreateSwitch
     $vmSwitches = Get-VMSwitch -SwitchType external
 
     if ($vmSwitches){
-        $vmswitch = $vmSwitches[0]
+        foreach ($i in $vmSwitches) {
+            $name = $i.Name
+            $netadapter = Get-NetAdapter -Name "vEthernet ($name)" -ErrorAction SilentlyContinue
+            if (!$netadapter) { continue }
+            if ($netadapter.Status -eq "Up"){
+                $vmswitch = $i
+                break
+            }
+        }
+        if (!$vmswitch) {
+            $vmswitch = Create-VirtualSwitch -Name "br100"
+        }
     }else{
         $vmswitch = Create-VirtualSwitch -Name "br100"
     }
-
+    if (!$vmswitch) {
+        Throw "Count not determine VMSwitch"
+    }
     return $vmswitch
 }
 
@@ -582,7 +598,6 @@ function New-WindowsCloudImage()
                 "PersistDriverInstall"=$PersistDriverInstall;
             }
 
-            echo "$UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword"
             GenerateUnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
             CopyUnattendResources $resourcesDir $image.ImageInstallationType $InstallMaaSHooks
             GenerateConfigFile $resourcesDir $configValues

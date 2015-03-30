@@ -73,3 +73,22 @@ The Windows host where you plan to create the instance needs either:
 * A recent Windows ADK installed
 
 E.g. to generate a Windows Server 2012 R2 image, you need a host running either Windows Server 2012 R2 / Hyper-V Server 2012 R2 or Windows 8.1.
+
+
+Generate MaaS compatible image
+==============================
+
+Generating an image for MaaS follows the same rules outlined above for OpenStack images. For this purpose there is a separate commandlet:
+
+
+Example:
+
+    New-MaaSImage -WimFilePath $wimFilePath -ImageName $image.ImageName`
+    -MaaSImagePath C:\images\win2012hvr2-dd -SizeBytes 16GB -Memory 8GB `
+    -CpuCores 4 -RunSysprep
+
+This commandlet adds the ability to sysprep the image. Please take note that this will require the installation of the Hyper-V role on the local machine. This is done automatically by the commandlet if the -RunSysprep option is used. The Memory and CpuCores options allow you to specify the resources that should be allocated to the sysprep VM.
+
+The resulting image can be copied to your MaaS install and uploaded as follows:
+
+    maas root boot-resources create name=windows/win2012hvr2 architecture=amd64/generic filetype=ddtgz content@=$HOME/win2012hvr2-dd
