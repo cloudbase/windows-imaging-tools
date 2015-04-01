@@ -89,6 +89,8 @@ Example:
 
 This commandlet adds the ability to sysprep the image. Please take note that this will require the installation of the Hyper-V role on the local machine. This is done automatically by the commandlet if the -RunSysprep option is used. The Memory and CpuCores options allow you to specify the resources that should be allocated to the sysprep VM.
 
+Please make sure that when cloning this repository on Windows, you use Unix style line endings. The curtin finalize script will fail otherwise.
+
 The resulting image can be copied to your MaaS install and uploaded as follows:
 
     maas root boot-resources create name=windows/win2012hvr2 architecture=amd64/generic filetype=ddtgz content@=$HOME/win2012hvr2-dd
