@@ -83,9 +83,18 @@ Generating an image for MaaS follows the same rules outlined above for OpenStack
 
 Example:
 
+    # This is the content of your Windows ISO
+    $wimFilePath = "D:\sources\install.wim"
+
+    # Check what images are supported in this Windows ISO
+    $images = Get-WimFileImagesInfo -WimFilePath $wimFilePath
+
+    # Select the first one
+    $image = $images[0]
+
     New-MaaSImage -WimFilePath $wimFilePath -ImageName $image.ImageName`
-    -MaaSImagePath C:\images\win2012hvr2-dd -SizeBytes 16GB -Memory 8GB `
-    -CpuCores 4 -RunSysprep
+    -MaaSImagePath C:\images\win2012hvr2-dd -SizeBytes 16GB -Memory 4GB `
+    -CpuCores 2 -RunSysprep
 
 This commandlet adds the ability to sysprep the image. Please take note that this will require the installation of the Hyper-V role on the local machine. This is done automatically by the commandlet if the -RunSysprep option is used. The Memory and CpuCores options allow you to specify the resources that should be allocated to the sysprep VM.
 
