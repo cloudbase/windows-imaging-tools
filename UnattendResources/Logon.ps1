@@ -7,8 +7,8 @@ try
     $needsReboot = $false
 
     Import-Module "$resourcesDir\ini.psm1"
-    $installUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Default $false -AsBoolean
 
+    $installUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Default $false -AsBoolean
     if($installUpdates)
     {
         if (!(Test-Path "$resourcesDir\PSWindowsUpdate"))
@@ -57,7 +57,12 @@ try
         $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
         $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
 
-        $serialPortName = @(Get-WmiObject Win32_SerialPort)[0].DeviceId
+        $cloudbaseInitSerialLogPort = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "CloudbaseInitSerialLogPort" -Default $null
+        if (!$cloudbaseInitSerialLogPort) {
+            $serialPortName = @(Get-WmiObject Win32_SerialPort)[0].DeviceId
+        } else {
+            $serialPortName = "COM" + $cloudbaseInitSerialLogPort
+        }
 
         $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog LOGGINGSERIALPORTNAME=$serialPortName"
         if ($p.ExitCode -ne 0)

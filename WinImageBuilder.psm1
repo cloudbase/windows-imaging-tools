@@ -188,11 +188,14 @@ function DownloadCloudbaseInit($resourcesDir, $osArch)
     (new-object System.Net.WebClient).DownloadFile($CloudbaseInitMsiUrl, $CloudbaseInitMsiPath)
 }
 
-function GenerateConfigFile($resourcesDir, $installUpdates)
+function GenerateConfigFile($resourcesDir, $configuration)
 {
     $configIniPath = "$resourcesDir\config.ini"
     Import-Module "$localResourcesDir\ini.psm1"
-    Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Value $installUpdates
+
+    foreach ($key in $configuration.Keys) {
+        Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key $key -Value $configuration[$key]
+    }
 }
 
 function AddDriversToImage($winImagePath, $driversPath)
@@ -310,7 +313,11 @@ function New-WindowsCloudImage()
         [parameter(Mandatory=$false)]
         [string]$AdministratorPassword = "Pa`$`$w0rd",
         [parameter(Mandatory=$false)]
-        [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml"
+        [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml",
+        [parameter(Mandatory=$false)]
+        [int]$cloudbaseInitSerialLogPort,
+        [parameter(Mandatory=$false)]
+        [int]$emsSerialConsolePort=2
     )
     PROCESS
     {
@@ -342,7 +349,16 @@ function New-WindowsCloudImage()
 
             GenerateUnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
             CopyUnattendResources $resourcesDir $image.ImageInstallationType
-            GenerateConfigFile $resourcesDir $installUpdates
+            if ($emsSerialConsolePort -eq $cloudbaseInitSerialLogPort) {
+                throw "EMS console serial port should be different than " +
+                      "the Cloudbaseinit log serial port"
+            }
+            $configuration = @{
+                "InstallUpdates"=$installUpdates
+                "CloudbaseInitSerialLogPort"=$cloudbaseInitSerialLogPort
+                "EMSSerialConsolePort"=$emsSerialConsolePort
+            }
+            GenerateConfigFile $resourcesDir $configuration
             DownloadCloudbaseInit $resourcesDir [string]$image.ImageArchitecture
             ApplyImage $winImagePath $wimFilePath $image.ImageIndex
             CreateBCDBootConfig $driveLetter
