@@ -246,6 +246,7 @@ function AddVirtIODriversFromISO($vhdDriveLetter, $image, $isoPath)
         $devicePath = $v.GetVirtualDiskPhysicalPath()
         $isoDriveLetter = (Get-DiskImage -DevicePath $devicePath | Get-Volume).DriveLetter
 
+        # For VirtIO ISO with drivers version lower than 1.8.x
         if($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0)
         {
             $virtioVer = "VISTA"
@@ -262,9 +263,38 @@ function AddVirtIODriversFromISO($vhdDriveLetter, $image, $isoPath)
         {
             throw "Unsupported Windows version for VirtIO drivers: {0}" -f $image.ImageVersion
         }
-
         $virtioDir = "{0}:\{1}\{2}" -f $isoDriveLetter, $virtioVer, $image.ImageArchitecture
-        AddDriversToImage $vhdDriveLetter $virtioDir
+        if (Test-Path $virtioDir) {
+            AddDriversToImage $vhdDriveLetter $virtioDir
+            return
+        }
+
+        # For VirtIO ISO with drivers version higher than 1.8.x
+        if($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0)
+        {
+            $virtioVer = "2k12r2"
+        }
+        elseif($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1)
+        {
+            $virtioVer = "w7"
+        }
+        elseif(($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 2) -or $image.ImageVersion.Major -gt 6)
+        {
+            $virtioVer = "w8.1"
+        }
+        else
+        {
+            throw "Unsupported Windows version for VirtIO drivers: {0}" -f $image.ImageVersion
+        }
+
+        $drivers = @("Balloon", "NetKVM", "viorng", "vioscsi", "vioserial", "viostor")
+        foreach ($driver in $drivers) {
+            $virtioDir = "{0}:\{1}\{2}\{3}" -f $isoDriveLetter, $driver, $virtioVer, $image.ImageArchitecture
+            if (Test-Path $virtioDir) {
+                AddDriversToImage $vhdDriveLetter $virtioDir
+            }
+        }
+
     }
     finally
     {
