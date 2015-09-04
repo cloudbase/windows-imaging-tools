@@ -182,6 +182,7 @@ function CopyUnattendResources
     $drives = Get-PSDrive
 
     if(!(Test-Path "$resourcesDir")) { $d = mkdir "$resourcesDir" }
+	Write-Output "copying: $localResourcesDir $resourcesDir"
     copy -Recurse "$localResourcesDir\*" $resourcesDir
 
     if ($imageInstallationType -eq "Server Core")
@@ -237,9 +238,9 @@ function GenerateConfigFile
 function AddDriversToImage($winImagePath, $driversPath)
 {
     Write-Output ('Adding drivers from "{0}" to image "{1}"' -f $driversPath, $winImagePath)
-    Add-WindowsDriver -Path $winImagePath -Driver $driversPath -ForceUnsigned -Recurse
-    #& Dism.exe /image:${winImagePath} /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
-    #if ($LASTEXITCODE) { throw "Dism failed to add drivers from: $driversPath" }
+    #Add-WindowsDriver -Path $winImagePath -Driver $driversPath -ForceUnsigned -Recurse
+    & Dism.exe /image:${winImagePath} /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
+    if ($LASTEXITCODE) { throw "Dism failed to add drivers from: $driversPath" }
 }
 
 function SetProductKeyInImage($winImagePath, $productKey)
@@ -324,6 +325,54 @@ function GetPathWithoutExtension($path)
                      ([System.IO.Path]::GetFileNameWithoutExtension($path))
 }
 
+
+function Gzip-File {
+	param
+	(
+	[String]$inFile = $(throw "Gzip-File: No filename specified"),
+	[String]$outFile = $($inFile + ".gz")
+	);
+
+	trap
+	{
+		Write-Host "Received an exception: $_. Exiting."
+		break;
+	}
+
+	if (!(Test-Path $inFile))
+	{
+		Throw "Input file $inFile does not exist."
+	}
+
+	Write-Host "Copressing $inFile to $outFile."
+
+	$input = New-Object System.IO.FileStream $inFile, ([IO.FileMode]::Open), ([IO.FileAccess]::Read), ([IO.FileShare]::Read);
+	$output = New-Object System.IO.FileStream $outFile, ([IO.FileMode]::Create), ([IO.FileAccess]::Write), ([IO.FileShare]::None)
+	$gzipStream = New-Object System.IO.Compression.GzipStream $output, ([IO.Compression.CompressionMode]::Compress)
+
+	try {
+		$size = 1024
+		$buffer = New-Object byte[]($size);
+
+		while($true)
+		{
+			$read = $input.Read($buffer, 0, $size)
+
+			if ($read -le 0)
+			{
+				break
+			}
+
+			$gzipStream.Write($buffer, 0, $read)
+			$gzipStream.Flush()
+		}
+	} finally {
+		$gzipStream.Close();
+		$output.Close();
+		$input.Close();
+	}
+}
+
 function Compress-Image($VirtualDiskPath, $ImagePath)
 {
     if (!(Test-Path $VirtualDiskPath)){
@@ -340,10 +389,13 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
             Throw "Failed to create tar"
         }
         Remove-Item -Force $VirtualDiskPath
-        & $7zip a $name $tmpName
-        if($LASTEXITCODE){
-            Throw "Failed to compress image"
-        }
+		C:\winbuilds\bin\pigz.exe -p12 $tmpName
+		mv ($tmpName + ".gz") $name
+		#Gzip-File $tmpName $name
+       # & $7zip a $name $tmpName
+       # if($LASTEXITCODE){
+       #     Throw "Failed to compress image"
+       # }
     }catch{
         Write-Output "Error compressing image: $_"
         Remove-Item -Force $name -ErrorAction SilentlyContinue
@@ -384,7 +436,7 @@ function Install-Prerequisites
     try {
         $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
     }catch{
-        Write-Error "Failed to get Hyper-V role status"
+        Write-Error "Failed to get Hyper-V role status: $_"
     }
 
     if ($needsHyperV.State -ne "Enabled"){
@@ -398,6 +450,7 @@ function Install-Prerequisites
             shutdown -r -t 0
             exit 0
         }
+		Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-PowerShell -All -NoRestart
     }
 }
 
@@ -502,8 +555,15 @@ function New-MaaSImage()
         if ($RunSysprep){
             Install-Prerequisites
             $vmSwitch = GetOrCreateSwitch
-            $coreCount = (gwmi win32_processor).NumberOfLogicalProcessors
-            if ($CpuCores -gt $coreCount){
+			$total_count = 0
+			$coreCount = (gwmi win32_processor).NumberOfLogicalProcessors
+			foreach ($i in $coreCount){
+			  $total_count += $i
+			}
+            if ($total_count -eq 0){
+			    $total_count = 1
+			}
+            if ($CpuCores -gt $total_count){
                 Write-Warning "CpuCores larger then available (logical) CPU cores. Setting CpuCores to $coreCount"
                 $CpuCores = $coreCount
             }
@@ -613,11 +673,13 @@ function New-WindowsCloudImage()
             #{
             #    SetProductKeyInImage $winImagePath $ProductKey
             #}
-
+			AddDriversToImage $winImagePath C:\winbuilds\drivers\storage
             if($VirtIOISOPath)
             {
                 AddVirtIODriversFromISO $winImagePath $image $VirtIOISOPath
             }
+			& Dism.exe /image:${winImagePath} /Get-Feature
+			EnableFeaturesInImage $winImagePath @("Microsoft-Hyper-V")
         }
         finally
         {
