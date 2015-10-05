@@ -206,11 +206,11 @@ function DownloadCloudbaseInit($resourcesDir, $osArch)
 
     if($osArch -eq "AMD64")
     {
-        $CloudbaseInitMsi = "CloudbaseInitSetup_Beta_x64.msi"
+        $CloudbaseInitMsi = "CloudbaseInitSetup_Stable_x64.msi"
     }
     else
     {
-        $CloudbaseInitMsi = "CloudbaseInitSetup_Beta_x86.msi"
+        $CloudbaseInitMsi = "CloudbaseInitSetup_Stable_x86.msi"
     }
 
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
@@ -382,6 +382,7 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
     $tmpName = $name + "." + (Get-Random)
 
     $7zip = Join-Path $localResourcesDir 7za.exe
+	$pigz = Join-Path $localResourcesDir pigz.exe
     try {
         Write-Output "Compressing $VirtualDiskPath to $name"
         & $7zip a -ttar $tmpName $VirtualDiskPath
@@ -389,20 +390,24 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
             Throw "Failed to create tar"
         }
         Remove-Item -Force $VirtualDiskPath
-		C:\winbuilds\bin\pigz.exe -p12 $tmpName
-		mv ($tmpName + ".gz") $name
-		#Gzip-File $tmpName $name
+		#cmd.exe /c call C:\winbuilds\bin\pigz.exe -p12 $tmpName
+		#if($LASTEXITCODE){
+        #   Throw "Failed to compress image"
+        #}
+		#mv ($tmpName + ".gz") $name
+		& $pigz -p12 $tmpName
+	    #Gzip-File $tmpName $ImagePath
        # & $7zip a $name $tmpName
-       # if($LASTEXITCODE){
-       #     Throw "Failed to compress image"
-       # }
+        if($LASTEXITCODE){
+            Throw "Failed to compress image"
+        }
     }catch{
         Write-Output "Error compressing image: $_"
-        Remove-Item -Force $name -ErrorAction SilentlyContinue
+        #Remove-Item -Force $name -ErrorAction SilentlyContinue
         Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
     }
-    Remove-Item -Force $tmpName
-    Move-Item $name $ImagePath
+    #Remove-Item -Force $tmpName
+    Move-Item ($tmpName + ".gz") $ImagePath
     Write-Output "MaaS image is ready and available at: $ImagePath"
 }
 
@@ -674,11 +679,13 @@ function New-WindowsCloudImage()
             #    SetProductKeyInImage $winImagePath $ProductKey
             #}
 			AddDriversToImage $winImagePath C:\winbuilds\drivers\storage
+			#AddDriversToImage $winImagePath C:\winbuilds\drivers\intel_nic
+			#AddDriversToImage $winImagePath C:\winbuilds\drivers\nic
             if($VirtIOISOPath)
             {
                 AddVirtIODriversFromISO $winImagePath $image $VirtIOISOPath
             }
-			& Dism.exe /image:${winImagePath} /Get-Feature
+			#& Dism.exe /image:${winImagePath} /Get-Feature
 			EnableFeaturesInImage $winImagePath @("Microsoft-Hyper-V")
         }
         finally

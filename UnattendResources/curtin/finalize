@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import yaml
+import platform
 
 from curtin.log import LOG
 from curtin import util
@@ -51,7 +52,7 @@ def curthooks():
     context = get_oauth_data(config)
     local_scripts = os.path.join(
         target,
-        "Program Files",
+        "Program Files (x86)" if platform.processor() == 'x86_64' else "Program Files",
         "Cloudbase Solutions",
         "Cloudbase-Init",
         "LocalScripts",
@@ -69,14 +70,14 @@ def curthooks():
             sys.stderr.write("Failed to write LocalScripts: %r", err)
     cloudbase_init_cfg = os.path.join(
         target,
-        "Program Files",
+        "Program Files (x86)" if platform.processor() == 'x86_64' else "Program Files",
         "Cloudbase Solutions",
         "Cloudbase-Init",
         "conf",
         "cloudbase-init.conf")
     cloudbase_init_unattended_cfg = os.path.join(
         target,
-        "Program Files",
+        "Program Files (x86)" if platform.processor() == 'x86_64' else "Program Files",
         "Cloudbase Solutions",
         "Cloudbase-Init",
         "conf",
