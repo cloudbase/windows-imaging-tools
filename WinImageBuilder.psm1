@@ -547,6 +547,9 @@ function New-MaaSImage()
         [string]$AdministratorPassword = "Pa`$`$w0rd",
         [parameter(Mandatory=$false)]
         [switch]$PersistDriverInstall = $false,
+		[array]$ExtraFeatures = @("Microsoft-Hyper-V"),
+		[parameter(Mandatory=$false)]
+        [string]$ExtraDriversPath,
         [parameter(Mandatory=$false)]
         [Uint64]$Memory=2GB,
         [parameter(Mandatory=$false)]
@@ -584,7 +587,7 @@ function New-MaaSImage()
             -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
             -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
             -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-            -InstallMaaSHooks
+            -InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath
 
             if ($RunSysprep){
                 $Name = "MaaS-Sysprep" + (Get-Random)
@@ -620,6 +623,10 @@ function New-WindowsCloudImage()
         [string]$VirtualDiskFormat = "VHD",
         [parameter(Mandatory=$false)]
         [string]$VirtIOISOPath,
+		[parameter(Mandatory=$false)]
+        [array]$ExtraFeatures = @("Microsoft-Hyper-V"),
+		[parameter(Mandatory=$false)]
+        [string]$ExtraDriversPath,
         [parameter(Mandatory=$false)]
         [switch]$InstallUpdates,
         [parameter(Mandatory=$false)]
@@ -678,15 +685,20 @@ function New-WindowsCloudImage()
             #{
             #    SetProductKeyInImage $winImagePath $ProductKey
             #}
-			AddDriversToImage $winImagePath C:\winbuilds\drivers\storage
-			#AddDriversToImage $winImagePath C:\winbuilds\drivers\intel_nic
-			#AddDriversToImage $winImagePath C:\winbuilds\drivers\nic
+			if ($ExtraDriversPath){
+				if ((Test-Path $ExtraDriversPath)){
+					AddDriversToImage $winImagePath $ExtraDriversPath
+				}
+			}
+			
             if($VirtIOISOPath)
             {
                 AddVirtIODriversFromISO $winImagePath $image $VirtIOISOPath
             }
 			#& Dism.exe /image:${winImagePath} /Get-Feature
-			EnableFeaturesInImage $winImagePath @("Microsoft-Hyper-V")
+			if ($ExtraFeatures){
+				EnableFeaturesInImage $winImagePath $ExtraFeatures
+			}
         }
         finally
         {
