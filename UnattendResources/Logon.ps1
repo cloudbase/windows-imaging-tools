@@ -43,16 +43,7 @@ try
     if(!$needsReboot)
     {
         $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
-
-        $osArch = (Get-WmiObject  Win32_OperatingSystem).OSArchitecture
-        if($osArch -eq "64-bit")
-        {
-            $programFilesDir = ${ENV:ProgramFiles(x86)}
-        }
-        else
-        {
-            $programFilesDir = $ENV:ProgramFiles
-        }
+        $programFilesDir = $ENV:ProgramFiles
 
         $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
         $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
