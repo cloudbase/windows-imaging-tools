@@ -22,7 +22,8 @@ Supports both x64 and x86 images.
 Requirements:
 
 * A host or VM running Windows 
-* Clone this repository
+* Clone this repository and unblock its files (this is really important, otherwise the generated image won't work!):
+https://technet.microsoft.com/en-us/library/hh849924.aspx
 * A Windows installation ISO or DVD, that needs to be either mounted or extracted (e.g. with 7-zip)
 * For KVM, download the VirtIO tools ISO, e.g. from: http://alt.fedoraproject.org/pub/alt/virtio-win/stable/
 
@@ -44,7 +45,7 @@ Example PowerShell script:
     $image
 
     # The product key is optional
-    #$productKey = “xxxxx-xxxxx…"
+    #$productKey = "xxxxx-xxxxx"
 
     # Add -InstallUpdates for the Windows updates (it takes longer and requires
     # more space but it's highly recommended)
