@@ -2,13 +2,13 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2
 $scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
 $localResourcesDir = "$scriptPath\UnattendResources"
-$rebootWarning = @"
-In order to finish the MaaS image generation, we need to boot the image.
-This operation requires that you have the Hyper-V role installed. We will now
-install the Hyper-V role for you, create a virtual switch, and then
-reboot your computer. After the reboot is done, please rerun this script.
+$noHypervWarning = @"
+The Hyper-V role is missing from this machine. In order to be able to finish generating the image, you need to install the Hyper-V role. You can do so by running the following commands from an elevated powershell command prompt:
 
-If this is not what you want, please Ctrl-C now.
+Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart
+Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-PowerShell -All -NoRestart
+
+Don't forget to reboot after you install the Hyper-V role.
 "@
 
 $noSysprepWarning = @"
@@ -390,20 +390,13 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
             Throw "Failed to create tar"
         }
         Remove-Item -Force $VirtualDiskPath
-		#cmd.exe /c call C:\winbuilds\bin\pigz.exe -p12 $tmpName
-		#if($LASTEXITCODE){
-        #   Throw "Failed to compress image"
-        #}
-		#mv ($tmpName + ".gz") $name
+        Write-Output "Compressing $tmpName to gzip"
 		& $pigz -p12 $tmpName
-	    #Gzip-File $tmpName $ImagePath
-       # & $7zip a $name $tmpName
         if($LASTEXITCODE){
             Throw "Failed to compress image"
         }
     }catch{
         Write-Output "Error compressing image: $_"
-        #Remove-Item -Force $name -ErrorAction SilentlyContinue
         Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
     }
     #Remove-Item -Force $tmpName
@@ -436,7 +429,7 @@ function Create-VirtualSwitch
     return $sw
 }
 
-function Install-Prerequisites
+function Check-Prerequisites
 {
     try {
         $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
@@ -445,17 +438,8 @@ function Install-Prerequisites
     }
 
     if ($needsHyperV.State -ne "Enabled"){
-        $delay = 60
-        Write-Warning $rebootWarning
-        Write-Warning "Sleeping for $delay"
-        Start-Sleep $delay
-
-        $installHyperV = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart
-        if ($installHyperV.RestartNeeded){
-            shutdown -r -t 0
-            exit 0
-        }
-		Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-PowerShell -All -NoRestart
+        Write-Warning $noHypervWarning
+        exit 1
     }
 }
 
@@ -555,31 +539,33 @@ function New-MaaSImage()
         [parameter(Mandatory=$false)]
         [int]$CpuCores=1,
         [parameter(Mandatory=$false)]
-        [switch]$RunSysprep
+        [switch]$RunSysprep=$true
+        [parameter(Mandatory=$false)]
+        [switch]$Force=$false
     )
     PROCESS
     {
         CheckIsAdmin
-        if ($RunSysprep){
-            Install-Prerequisites
-            $vmSwitch = GetOrCreateSwitch
-			$total_count = 0
-			$coreCount = (gwmi win32_processor).NumberOfLogicalProcessors
-			foreach ($i in $coreCount){
-			  $total_count += $i
-			}
-            if ($total_count -eq 0){
-			    $total_count = 1
-			}
-            if ($CpuCores -gt $total_count){
-                Write-Warning "CpuCores larger then available (logical) CPU cores. Setting CpuCores to $coreCount"
-                $CpuCores = $coreCount
-            }
-        }else{
-            Write-Warning $noSysprepWarning
-            Write-Output "Sleeping for 30 seconds"
-            Start-Sleep 30
+        if (!$RunSysprep -and !$Force){
+            Write-Warning "You chose not to run sysprep. This will build an unusable MaaS image. If you really want to continue use the -Force:$true flag."
+            exit 1
+            
         }
+        Check-Prerequisites
+        $vmSwitch = GetOrCreateSwitch
+		$total_count = 0
+		$coreCount = (gwmi win32_processor).NumberOfLogicalProcessors
+		foreach ($i in $coreCount){
+		  $total_count += $i
+		}
+        if ($total_count -eq 0){
+            $total_count = 1
+        }
+        if ($CpuCores -gt $total_count){
+            Write-Warning "CpuCores larger then available (logical) CPU cores. Setting CpuCores to $coreCount"
+            $CpuCores = $coreCount
+        }
+
         try {
             $VirtualDiskPath = $MaaSImagePath + ".vhd"
             $RawImagePath = $MaaSImagePath + ".img"
