@@ -38,11 +38,29 @@ def get_oauth_data(state):
     oauth_dict["url"] = metadata_url
     return oauth_dict
 
+def get_cloudbaseinit_dir():
+    install_dir = os.path.join(
+        target,
+        "Program Files",
+        "Cloudbase Solutions",
+        "Cloudbase-Init",
+    )
+    if os.path.isdir(install_dir) is False:
+        install_dir = os.path.join(
+            target,
+            "Program Files (x86)",
+            "Cloudbase Solutions",
+            "Cloudbase-Init",
+        )
+        if os.path.isdir(install_dir) is False:
+            raise ValueError("Failed to find cloudbase-init install destination")
+    return install_dir
 
 def curthooks():
     state = util.load_command_environment()
     config = util.load_command_config({}, state)
     target = state['target']
+    cloudbaseinit = get_cloudbaseinit_dir()
 
     if target is None:
         sys.stderr.write("Unable to find target.  "
@@ -51,10 +69,7 @@ def curthooks():
 
     context = get_oauth_data(config)
     local_scripts = os.path.join(
-        target,
-        "Program Files (x86)" if platform.processor() == 'x86_64' else "Program Files",
-        "Cloudbase Solutions",
-        "Cloudbase-Init",
+        cloudbaseinit,
         "LocalScripts",
     )
 
@@ -69,17 +84,11 @@ def curthooks():
         except Exception as err:
             sys.stderr.write("Failed to write LocalScripts: %r", err)
     cloudbase_init_cfg = os.path.join(
-        target,
-        "Program Files (x86)" if platform.processor() == 'x86_64' else "Program Files",
-        "Cloudbase Solutions",
-        "Cloudbase-Init",
+        cloudbaseinit,
         "conf",
         "cloudbase-init.conf")
     cloudbase_init_unattended_cfg = os.path.join(
-        target,
-        "Program Files (x86)" if platform.processor() == 'x86_64' else "Program Files",
-        "Cloudbase Solutions",
-        "Cloudbase-Init",
+        cloudbaseinit,
         "conf",
         "cloudbase-init-unattend.conf")
 
