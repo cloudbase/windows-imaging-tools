@@ -74,10 +74,7 @@ try
     {
         $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
         
-        $cloudbaseinit = "$ENV:ProgramFiles\Cloudbase Solutions\Cloudbase-Init"
-        if(!(Test-Path $cloudbaseinit)){
-            $cloudbaseinit = "${ENV:ProgramFiles(x86)}\Cloudbase Solutions\Cloudbase-Init"
-        }
+        $programFilesDir = $ENV:ProgramFiles
 
         $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
         $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
@@ -99,10 +96,10 @@ try
         Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
 
         $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
-        & "$cloudbaseinit\bin\SetSetupComplete.cmd"
+        & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
 
         $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
-        $unattendedXmlPath = "$cloudbaseinit\conf\Unattend.xml"
+        $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
         Set-PersistDrivers -Path $unattendedXmlPath -Persist:$persistDrivers
         & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
     }
