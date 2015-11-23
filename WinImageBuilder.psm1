@@ -539,7 +539,7 @@ function New-MaaSImage()
         [parameter(Mandatory=$false)]
         [int]$CpuCores=1,
         [parameter(Mandatory=$false)]
-        [switch]$RunSysprep=$true
+        [switch]$RunSysprep=$true,
         [parameter(Mandatory=$false)]
         [switch]$Force=$false
     )
