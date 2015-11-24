@@ -38,7 +38,7 @@ def get_oauth_data(state):
     oauth_dict["url"] = metadata_url
     return oauth_dict
 
-def get_cloudbaseinit_dir():
+def get_cloudbaseinit_dir(target):
     install_dir = os.path.join(
         target,
         "Program Files",
@@ -60,7 +60,7 @@ def curthooks():
     state = util.load_command_environment()
     config = util.load_command_config({}, state)
     target = state['target']
-    cloudbaseinit = get_cloudbaseinit_dir()
+    cloudbaseinit = get_cloudbaseinit_dir(target)
 
     if target is None:
         sys.stderr.write("Unable to find target.  "
