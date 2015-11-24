@@ -1237,8 +1237,20 @@ namespace WIMInterop {
             parameters.Version1.UniqueId = Guid.Empty;
 
             var storageType = new NativeMethods.VIRTUAL_STORAGE_TYPE();
-            storageType.DeviceId = NativeMethods.VIRTUAL_STORAGE_TYPE_DEVICE_VHD;
             storageType.VendorId = NativeMethods.VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT;
+
+            var ext = Path.GetExtension(diskPath).Substring(1).ToUpper();
+            switch(ext)
+            {
+                case "VHD":
+                    storageType.DeviceId = NativeMethods.VIRTUAL_STORAGE_TYPE_DEVICE_VHD;
+                    break;
+                case "VHDX":
+                    storageType.DeviceId = NativeMethods.VIRTUAL_STORAGE_TYPE_DEVICE_VHDX;
+                    break;
+                default:
+                    throw new Exception("Unrecognized file format: " + ext);
+            }
 
             var flags = expandable ? NativeMethods.CREATE_VIRTUAL_DISK_FLAG.CREATE_VIRTUAL_DISK_FLAG_NONE : NativeMethods.CREATE_VIRTUAL_DISK_FLAG.CREATE_VIRTUAL_DISK_FLAG_FULL_PHYSICAL_ALLOCATION;
             int res = NativeMethods.CreateVirtualDisk(ref storageType, diskPath, NativeMethods.VIRTUAL_DISK_ACCESS_MASK.VIRTUAL_DISK_ACCESS_ALL, IntPtr.Zero, flags, 0, ref parameters, IntPtr.Zero, ref handle);
