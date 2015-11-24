@@ -93,11 +93,26 @@ function CreateBCDBootConfig($driveLetter)
         $bcdbootPath = "bcdboot.exe"
     }
 
-    & $bcdbootPath ${driveLetter}:\windows /s ${driveLetter}: /v
+    $bcdeditPath = "${driveLetter}:\windows\system32\bcdedit.exe"
+    if (!(Test-Path $bcdeditPath))
+    {
+        Write-Warning ('"{0}" not found, using online version' -f $bcdeditPath)
+        $bcdeditPath = "bcdedit.exe"
+    }
+
+    # TODO: add support for UEFI boot
+    # Note: older versions of bcdboot.exe don't have a /f argument
+    & $bcdbootPath ${driveLetter}:\windows /s ${driveLetter}: /v /f BIOS
     if($LASTEXITCODE) { throw "BCDBoot failed" }
 
-    #& ${driveLetter}:\Windows\System32\bcdedit.exe /store ${driveLetter}:\boot\BCD
-    #if($LASTEXITCODE) { throw "BCDEdit failed" }
+    & $bcdeditPath /store ${driveLetter}:\boot\BCD /set `{bootmgr`} device locate
+    if($LASTEXITCODE) { throw "BCDEdit failed" }
+
+    & $bcdeditPath /store ${driveLetter}:\boot\BCD /set `{default`} device locate
+    if($LASTEXITCODE) { throw "BCDEdit failed" }
+
+    & $bcdeditPath /store ${driveLetter}:\boot\BCD /set `{default`} osdevice locate
+    if($LASTEXITCODE) { throw "BCDEdit failed" }
 }
 
 function TransformXml($xsltPath, $inXmlPath, $outXmlPath, $xsltArgs)
