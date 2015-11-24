@@ -39,22 +39,28 @@ def get_oauth_data(state):
     return oauth_dict
 
 def get_cloudbaseinit_dir(target):
-    install_dir = os.path.join(
-        target,
-        "Program Files",
-        "Cloudbase Solutions",
-        "Cloudbase-Init",
-    )
-    if os.path.isdir(install_dir) is False:
-        install_dir = os.path.join(
+    dirs = [
+        os.path.join(
+            target,
+            "Cloudbase-Init",
+        ),
+        os.path.join(
+            target,
+            "Program Files",
+            "Cloudbase Solutions",
+            "Cloudbase-Init",
+        ),
+        os.path.join(
             target,
             "Program Files (x86)",
             "Cloudbase Solutions",
             "Cloudbase-Init",
-        )
-        if os.path.isdir(install_dir) is False:
-            raise ValueError("Failed to find cloudbase-init install destination")
-    return install_dir
+        ),
+    ]
+    for i in dirs:
+        if os.path.isdir(i):
+            return i
+    raise ValueError("Failed to find cloudbase-init install destination")
 
 def curthooks():
     state = util.load_command_environment()
