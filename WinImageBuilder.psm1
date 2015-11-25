@@ -34,7 +34,7 @@ function Get-WimFileImagesInfo
     }
 }
 
-function CreateImageVirtualDisk($vhdPath, $size)
+function CreateImageVirtualDisk($vhdPath, $size, $diskLayout)
 {
     $v = [WIMInterop.VirtualDisk]::CreateVirtualDisk($vhdPath, $size)
     try
@@ -46,11 +46,27 @@ function CreateImageVirtualDisk($vhdPath, $size)
         $diskNum = $matches["num"]
         $volumeLabel = "OS"
 
-        Initialize-Disk -Number $diskNum -PartitionStyle MBR
-        $part = New-Partition -DiskNumber $diskNum -UseMaximumSize -AssignDriveLetter -IsActive
-        $driveLetter = $part.DriveLetter
-        $format = Format-Volume -DriveLetter $driveLetter -FileSystem NTFS -NewFileSystemLabel $volumeLabel -Force -Confirm:$false
-        return $driveLetter
+        if($diskLayout -eq "UEFI")
+        {
+            Initialize-Disk -Number $diskNum -PartitionStyle GPT
+            # EFI partition
+            $systemPart = New-Partition -DiskNumber $diskNum -Size 200MB -GptType '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' -AssignDriveLetter
+            & format.com "$($systemPart.DriveLetter):" /FS:FAT32 /Q /Y | Out-Null
+            if($LASTEXITCODE) { throw "format failed" }
+            # MSR partition
+            $reservedPart = New-Partition -DiskNumber $diskNum -Size 128MB -GptType '{e3c9e316-0b5c-4db8-817d-f92df00215ae}'
+            # Windows partition
+            $windowsPart = New-Partition -DiskNumber $diskNum -UseMaximumSize -GptType "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}" -AssignDriveLetter
+        }
+        else # BIOS
+        {
+            Initialize-Disk -Number $diskNum -PartitionStyle MBR
+            $windowsPart = New-Partition -DiskNumber $diskNum -UseMaximumSize -AssignDriveLetter -IsActive
+            $systemPart = $windowsPart
+        }
+
+        $format = Format-Volume -DriveLetter $windowsPart.DriveLetter -FileSystem NTFS -NewFileSystemLabel $volumeLabel -Force -Confirm:$false
+        return @("$($systemPart.DriveLetter):", "$($windowsPart.DriveLetter):")
     }
     finally
     {
@@ -68,35 +84,38 @@ function ApplyImage($winImagePath, $wimFilePath, $imageIndex)
     if($LASTEXITCODE) { throw "Dism apply-image failed" }
 }
 
-function CreateBCDBootConfig($driveLetter)
+function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout)
 {
-    $bcdbootPath = "${driveLetter}:\windows\system32\bcdboot.exe"
+    $bcdbootPath = "${windowsDrive}\windows\system32\bcdboot.exe"
     if (!(Test-Path $bcdbootPath))
     {
         Write-Warning ('"{0}" not found, using online version' -f $bcdbootPath)
         $bcdbootPath = "bcdboot.exe"
     }
 
-    $bcdeditPath = "${driveLetter}:\windows\system32\bcdedit.exe"
-    if (!(Test-Path $bcdeditPath))
-    {
-        Write-Warning ('"{0}" not found, using online version' -f $bcdeditPath)
-        $bcdeditPath = "bcdedit.exe"
-    }
-
     # TODO: add support for UEFI boot
     # Note: older versions of bcdboot.exe don't have a /f argument
-    & $bcdbootPath ${driveLetter}:\windows /s ${driveLetter}: /v /f BIOS
+    & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
     if($LASTEXITCODE) { throw "BCDBoot failed" }
 
-    & $bcdeditPath /store ${driveLetter}:\boot\BCD /set `{bootmgr`} device locate
-    if($LASTEXITCODE) { throw "BCDEdit failed" }
+    if($diskLayout -eq "BIOS")
+    {
+        $bcdeditPath = "${windowsDrive}\windows\system32\bcdedit.exe"
+        if (!(Test-Path $bcdeditPath))
+        {
+            Write-Warning ('"{0}" not found, using online version' -f $bcdeditPath)
+            $bcdeditPath = "bcdedit.exe"
+        }
 
-    & $bcdeditPath /store ${driveLetter}:\boot\BCD /set `{default`} device locate
-    if($LASTEXITCODE) { throw "BCDEdit failed" }
+        & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{bootmgr`} device locate
+        if($LASTEXITCODE) { throw "BCDEdit failed" }
 
-    & $bcdeditPath /store ${driveLetter}:\boot\BCD /set `{default`} osdevice locate
-    if($LASTEXITCODE) { throw "BCDEdit failed" }
+        & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} device locate
+        if($LASTEXITCODE) { throw "BCDEdit failed" }
+
+        & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} osdevice locate
+        if($LASTEXITCODE) { throw "BCDEdit failed" }
+    }
 }
 
 function TransformXml($xsltPath, $inXmlPath, $outXmlPath, $xsltArgs)
@@ -143,7 +162,7 @@ function DetachVirtualDisk($vhdPath)
     }
     finally
     {
-        $v.Close()
+        if($v) { $v.Close() }
     }
 }
 
@@ -346,8 +365,10 @@ function New-WindowsCloudImage()
         [parameter(Mandatory=$false)]
         [string]$ProductKey,
         [parameter(Mandatory=$false)]
-        [ValidateSet("VHD", "QCow2", "VMDK", "RAW", ignorecase=$false)]
-        [string]$VirtualDiskFormat = "VHD",
+        [ValidateSet("VHD", "VHDX", "QCow2", "VMDK", "RAW", ignorecase=$false)]
+        [string]$VirtualDiskFormat = "VHDX",
+        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
+        [string]$DiskLayout = "BIOS",
         [parameter(Mandatory=$false)]
         [string]$VirtIOISOPath,
         [parameter(Mandatory=$false)]
@@ -380,8 +401,8 @@ function New-WindowsCloudImage()
 
         try
         {
-            $driveLetter = CreateImageVirtualDisk $VHDPath $SizeBytes
-            $winImagePath = "${driveLetter}:\"
+            $drives = CreateImageVirtualDisk $VHDPath $SizeBytes $DiskLayout
+            $winImagePath = "$($drives[1])\"
             $resourcesDir = "${winImagePath}UnattendResources"
             $unattedXmlPath = "${winImagePath}Unattend.xml"
 
@@ -390,7 +411,7 @@ function New-WindowsCloudImage()
             GenerateConfigFile $resourcesDir $installUpdates
             DownloadCloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
             ApplyImage $winImagePath $wimFilePath $image.ImageIndex
-            CreateBCDBootConfig $driveLetter
+            CreateBCDBootConfig $drives[0] $drives[1] $DiskLayout
             CheckEnablePowerShellInImage $winImagePath $image
 
             # Product key is applied by the unattend.xml
