@@ -412,13 +412,12 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
     if (!(Test-Path $VirtualDiskPath)){
         Throw "$VirtualDiskPath not found"
     }
-    $name = $ImagePath + ".tgz"
-    $tmpName = $name + "." + (Get-Random)
+    $tmpName = $ImagePath + "." + (Get-Random)
 
     $7zip = Join-Path $localResourcesDir 7za.exe
 	$pigz = Join-Path $localResourcesDir pigz.exe
     try {
-        Write-Output "Compressing $VirtualDiskPath to $name"
+        Write-Output "Archiving $VirtualDiskPath to tarfile $tmpName"
         & $7zip a -ttar $tmpName $VirtualDiskPath
         if($LASTEXITCODE){
             Throw "Failed to create tar"
@@ -619,8 +618,9 @@ function New-MaaSImage()
         }
 
         try {
-            $VirtualDiskPath = $MaaSImagePath + ".vhdx"
-            $RawImagePath = $MaaSImagePath + ".img"
+            $barePath = GetPathWithoutExtension($MaaSImagePath)
+            $VirtualDiskPath = $barePath + ".vhdx"
+            $RawImagePath = $barePath + ".img"
             New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
             -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
             -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
