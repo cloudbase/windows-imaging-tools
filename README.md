@@ -83,22 +83,32 @@ Generating an image for MaaS follows the same rules outlined above for OpenStack
 
 Example:
 
+    Import-Module .\WinImageBuilder.psm1
     # This is the content of your Windows ISO
     $wimFilePath = "D:\sources\install.wim"
 
     # Check what images are supported in this Windows ISO
     $images = Get-WimFileImagesInfo -WimFilePath $wimFilePath
 
-    # Select the first one
+    # Select the first one. Note, the first image in the index is usually a Server Core
+    # image. If you would like to select something else, print the $images variable to see
+    # alternatives
     $image = $images[0]
+
+    # If you select to sysprep the image, the Hyper-V role needs to be enabled.
+    # You will also need a VMSwitch on your system that allows internet access
+    # If the -SwitchName parameter is not used, the commandlet will automatically
+    # create an external vmswitch using a net adapter with a default route set
+    # Also, if you are targeting an UEFI enabled system, you can use the -DiskLayout UEFI
+    # option to create the proper partition layout.
 
     New-MaaSImage -WimFilePath $wimFilePath -ImageName $image.ImageName`
     -MaaSImagePath C:\images\win2012hvr2-dd -SizeBytes 16GB -Memory 4GB `
-    -CpuCores 2 -RunSysprep
+    -CpuCores 2 -DiskLayout BIOS -RunSysprep
 
-This commandlet adds the ability to sysprep the image. Please take note that this will require the installation of the Hyper-V role on the local machine. This is done automatically by the commandlet if the -RunSysprep option is used. The Memory and CpuCores options allow you to specify the resources that should be allocated to the sysprep VM.
+This commandlet adds the ability to sysprep the image. Please take note that this will require the installation of the Hyper-V role on the local machine. The Memory and CpuCores options allow you to specify the resources that should be allocated to the sysprep VM.
 
-Please make sure that when cloning this repository on Windows, you use Unix style line endings. The curtin finalize script will fail otherwise.
+Please make sure that when cloning this repository on Windows, you preserve original line endings. The curtin finalize script will fail otherwise.
 
 The resulting image can be copied to your MaaS install and uploaded as follows:
 
