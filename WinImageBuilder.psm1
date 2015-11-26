@@ -359,54 +359,6 @@ function GetPathWithoutExtension($path)
                      ([System.IO.Path]::GetFileNameWithoutExtension($path))
 }
 
-
-function Gzip-File {
-	param
-	(
-	[String]$inFile = $(throw "Gzip-File: No filename specified"),
-	[String]$outFile = $($inFile + ".gz")
-	);
-
-	trap
-	{
-		Write-Host "Received an exception: $_. Exiting."
-		break;
-	}
-
-	if (!(Test-Path $inFile))
-	{
-		Throw "Input file $inFile does not exist."
-	}
-
-	Write-Host "Copressing $inFile to $outFile."
-
-	$input = New-Object System.IO.FileStream $inFile, ([IO.FileMode]::Open), ([IO.FileAccess]::Read), ([IO.FileShare]::Read);
-	$output = New-Object System.IO.FileStream $outFile, ([IO.FileMode]::Create), ([IO.FileAccess]::Write), ([IO.FileShare]::None)
-	$gzipStream = New-Object System.IO.Compression.GzipStream $output, ([IO.Compression.CompressionMode]::Compress)
-
-	try {
-		$size = 1024
-		$buffer = New-Object byte[]($size);
-
-		while($true)
-		{
-			$read = $input.Read($buffer, 0, $size)
-
-			if ($read -le 0)
-			{
-				break
-			}
-
-			$gzipStream.Write($buffer, 0, $read)
-			$gzipStream.Flush()
-		}
-	} finally {
-		$gzipStream.Close();
-		$output.Close();
-		$input.Close();
-	}
-}
-
 function Compress-Image($VirtualDiskPath, $ImagePath)
 {
     if (!(Test-Path $VirtualDiskPath)){
@@ -418,16 +370,44 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
     $pigz = Join-Path $localResourcesDir pigz.exe
     try {
         Write-Output "Archiving $VirtualDiskPath to tarfile $tmpName"
-        & $7zip a -ttar $tmpName $VirtualDiskPath
-        if($LASTEXITCODE){
-            Throw "Failed to create tar"
+        pushd ([System.IO.Path]::GetDirectoryName((Resolve-path $VirtualDiskPath).Path))
+        try
+        {
+            # Avoid storing the full path in the archive
+            $imageFileName = (Get-Item $VirtualDiskPath).Name
+            echo "Creating tar archive..."
+            & $7zip a -ttar $tmpName $imageFileName
+            if($lastexitcode) {
+                if((Test-Path $imageFileName)){
+                    Remove-Item -Force $imageFileName
+                }
+                throw "7za.exe failed while creating tar file for image: $tmpName"
+            }
         }
+        finally
+        {
+            popd
+        }
+
         Remove-Item -Force $VirtualDiskPath
         Write-Output "Compressing $tmpName to gzip"
-        & $pigz -p12 $tmpName
-        if($LASTEXITCODE){
-            Remove-Item -Force ($tmpName + ".gz") -ErrorAction SilentlyContinue
-            Throw "Failed to compress image"
+        pushd ([System.IO.Path]::GetDirectoryName((Resolve-path $tmpName).Path))
+        try
+        {
+            $tmpPathName = (Get-Item $tmpName).Name
+            echo "Creating gzip..."
+            & $pigz -p12 $tmpPathName
+            if($lastexitcode) {
+                $gzipped = ($tmpPathName + ".gz")
+                if((Test-Path $gzipped)){
+                    Remove-Item -Force $gzipped
+                }
+                throw "pigz.exe failed while creating gzip file for : $tmpName"
+            }
+        }
+        finally
+        {
+            popd
         }
     }catch{
         Remove-Item -Force $tmpName -ErrorAction SilentlyContinue        
