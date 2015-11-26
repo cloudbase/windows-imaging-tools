@@ -579,6 +579,8 @@ function New-MaaSImage()
         [parameter(Mandatory=$false)]
         [switch]$RunSysprep=$true,
         [parameter(Mandatory=$false)]
+        [string]$SwitchName,
+        [parameter(Mandatory=$false)]
         [switch]$Force=$false
     )
     PROCESS
@@ -590,12 +592,24 @@ function New-MaaSImage()
 
         }
         Check-Prerequisites
-        $vmSwitch = GetOrCreateSwitch
-		$total_count = 0
-		$coreCount = (gwmi win32_processor).NumberOfLogicalProcessors
-		foreach ($i in $coreCount){
-		  $total_count += $i
-		}
+        if($SwitchName){
+            $switch = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
+            if(!$switch){
+                Write-Error "Selected vmswitch ($SwitchName) does not exist"
+                exit 1
+            }
+            if($switch.SwitchType -ne "External" -and !$Force){
+                Write-Warning "Selected switch ($SwitchName) is not an external switch. If you really want to continue use the -Force:$true flag."
+                exit 1
+            }
+        }else{
+            $switch = GetOrCreateSwitch
+        }
+        $total_count = 0
+        $coreCount = (gwmi win32_processor).NumberOfLogicalProcessors
+        foreach ($i in $coreCount){
+            $total_count += $i
+        }
         if ($total_count -eq 0){
             $total_count = 1
         }
@@ -625,7 +639,7 @@ function New-MaaSImage()
                 }
 
                 $Name = "MaaS-Sysprep" + (Get-Random)
-                Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $vmSwitch.Name -CpuCores $CpuCores -Generation $generation
+                Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $switch.Name -CpuCores $CpuCores -Generation $generation
             }
             Write-Output "Converting VHD to RAW"
             Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
