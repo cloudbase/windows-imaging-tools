@@ -164,7 +164,7 @@ function GenerateUnattendXml($inUnattendXmlPath, $outUnattendXmlPath, $image, $p
     if($productKey) {
         $xsltArgs["productKey"] = $productKey
     }
-    
+
     TransformXml "$scriptPath\Unattend.xslt" $inUnattendXmlPath $outUnattendXmlPath $xsltArgs
 }
 
@@ -457,7 +457,7 @@ function Create-VirtualSwitch
         if (!$netAdapter){
             Throw "Could not get physical interface for switch"
         }
-        $NetAdapterName = $netAdapter.Name        
+        $NetAdapterName = $netAdapter.Name
     }
     $sw = New-VMSwitch -Name $Name -NetAdapterName $NetAdapterName -AllowManagementOS $true
     return $sw
@@ -529,12 +529,14 @@ function Run-Sysprep
         [Parameter(Mandatory=$true)]
         [int]$CpuCores=1,
         [Parameter(Mandatory=$true)]
-        [string]$VMSwitch
+        [string]$VMSwitch,
+        [ValidateSet("1", "2")]
+        [string]$Generation = "1"
     )
 
     Write-Output "Creating VM $Name attached to $VMSwitch"
-    New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch -VHDPath $VHDPath
-    Set-VMProcessor -VMname $Name -count $CpuCores 
+    New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch -VHDPath $VHDPath -Generation $Generation
+    Set-VMProcessor -VMname $Name -count $CpuCores
     Write-Output "Starting $Name"
     Start-VM $Name
     Start-Sleep 5
@@ -555,6 +557,8 @@ function New-MaaSImage()
         [string]$MaaSImagePath,
         [parameter(Mandatory=$true)]
         [Uint64]$SizeBytes,
+        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
+        [string]$DiskLayout = "BIOS",
         [parameter(Mandatory=$false)]
         [string]$ProductKey,
         [parameter(Mandatory=$false)]
@@ -583,7 +587,7 @@ function New-MaaSImage()
         if (!$RunSysprep -and !$Force){
             Write-Warning "You chose not to run sysprep. This will build an unusable MaaS image. If you really want to continue use the -Force:$true flag."
             exit 1
-            
+
         }
         Check-Prerequisites
         $vmSwitch = GetOrCreateSwitch
@@ -601,17 +605,27 @@ function New-MaaSImage()
         }
 
         try {
-            $VirtualDiskPath = $MaaSImagePath + ".vhd"
+            $VirtualDiskPath = $MaaSImagePath + ".vhdx"
             $RawImagePath = $MaaSImagePath + ".img"
             New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
             -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
             -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
             -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-            -InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath
+            -InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
+            -DiskLayout $DiskLayout
 
             if ($RunSysprep){
+                if($DiskLayout -eq "UEFI")
+                {
+                    $generation = "2"
+                }
+                else
+                {
+                    $generation = "1"
+                }
+
                 $Name = "MaaS-Sysprep" + (Get-Random)
-                Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $vmSwitch.Name -CpuCores $CpuCores
+                Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $vmSwitch.Name -CpuCores $CpuCores -Generation $generation
             }
             Write-Output "Converting VHD to RAW"
             Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
@@ -712,7 +726,7 @@ function New-WindowsCloudImage()
 					AddDriversToImage $winImagePath $ExtraDriversPath
 				}
 			}
-			
+
             if($VirtIOISOPath)
             {
                 AddVirtIODriversFromISO $winImagePath $image $VirtIOISOPath
