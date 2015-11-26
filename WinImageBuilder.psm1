@@ -415,7 +415,7 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
     $tmpName = $ImagePath + "." + (Get-Random)
 
     $7zip = Join-Path $localResourcesDir 7za.exe
-	$pigz = Join-Path $localResourcesDir pigz.exe
+    $pigz = Join-Path $localResourcesDir pigz.exe
     try {
         Write-Output "Archiving $VirtualDiskPath to tarfile $tmpName"
         & $7zip a -ttar $tmpName $VirtualDiskPath
@@ -424,15 +424,16 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
         }
         Remove-Item -Force $VirtualDiskPath
         Write-Output "Compressing $tmpName to gzip"
-		& $pigz -p12 $tmpName
+        & $pigz -p12 $tmpName
         if($LASTEXITCODE){
+            Remove-Item -Force ($tmpName + ".gz") -ErrorAction SilentlyContinue
             Throw "Failed to compress image"
         }
     }catch{
-        Write-Output "Error compressing image: $_"
-        Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
+        Remove-Item -Force $tmpName -ErrorAction SilentlyContinue        
+        Remove-Item -Force $VirtualDiskPath -ErrorAction SilentlyContinue
+        throw
     }
-    #Remove-Item -Force $tmpName
     Move-Item ($tmpName + ".gz") $ImagePath
     Write-Output "MaaS image is ready and available at: $ImagePath"
 }
@@ -464,12 +465,7 @@ function Create-VirtualSwitch
 
 function Check-Prerequisites
 {
-    try {
-        $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
-    }catch{
-        Write-Error "Failed to get Hyper-V role status: $_"
-    }
-
+    $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
     if ($needsHyperV.State -ne "Enabled"){
         Write-Warning $noHypervWarning
         exit 1
@@ -647,6 +643,7 @@ function New-MaaSImage()
             Compress-Image $RawImagePath $MaaSImagePath
         }catch{
             Remove-Item -Force $MaaSImagePath* -ErrorAction SilentlyContinue
+            Throw
         }
     }
 }
