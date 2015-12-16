@@ -305,7 +305,7 @@ function AddVirtIODriversFromISO($vhdDriveLetter, $image, $isoPath)
         }
 
         # For VirtIO ISO with drivers version higher than 1.8.x
-        if($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0)
+        if($image.ImageVersion.Major -eq 6 -and ($image.ImageVersion.Minor -eq 0 -or $image.ImageVersion.Minor -eq 3))
         {
             $virtioVer = "2k12r2"
         }
