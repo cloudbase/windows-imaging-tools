@@ -40,6 +40,7 @@ function CreateImageVirtualDisk($vhdPath, $size, $diskLayout)
     try
     {
         $v.AttachVirtualDisk()
+        Start-Sleep -s 10  # wait until the drive has been mounted. Bad solution with sleep, but it works for me.
         $path = $v.GetVirtualDiskPhysicalPath()
 
         $m = $path -match "\\\\.\\PHYSICALDRIVE(?<num>\d+)"
@@ -304,7 +305,7 @@ function AddVirtIODriversFromISO($vhdDriveLetter, $image, $isoPath)
         }
 
         # For VirtIO ISO with drivers version higher than 1.8.x
-        if($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0)
+        if($image.ImageVersion.Major -eq 6 -and ($image.ImageVersion.Minor -eq 0 -or $image.ImageVersion.Minor -eq 3))
         {
             $virtioVer = "2k12r2"
         }
