@@ -63,6 +63,7 @@ We're not yet done, the next steps consist in:
 
 * uploading the image to Glance
     In case of Openstack with KVM Hypervisor:
+
     glance image-create --file mywindowsimage.qcow2 --property hypervisor_type=qemu --name "My Win installer with cutsomizations" --container-format bare --disk-format qcow2 --is-public True
 * booting an instance on your target hypervisor compute node
 * waiting for the setup to complete (the instance will shutdown once the setup is done) 
