@@ -30,6 +30,7 @@ https://technet.microsoft.com/en-us/library/hh849924.aspx
 
 Example PowerShell script:
 
+```PowerShell
     if (Get-Module -Name WinImageBuilder) { Remove-Module WinImageBuilder } # just in case an old version was already loaded
     Import-Module .\WinImageBuilder.psm1
 
@@ -54,7 +55,7 @@ Example PowerShell script:
     New-WindowsCloudImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
     -VirtualDiskFormat QCow2 -VirtualDiskPath $virtualDiskPath `
     -SizeBytes 16GB -ProductKey $productKey -VirtIOISOPath $virtIOISOPath
-
+```
 No extra configurations are needed for specific Windows versions, the New-WindowsCloudImage cmdlet takes care of everything.
 
 ### How to upload the image in OpenStack
@@ -63,9 +64,9 @@ We're not yet done, the next steps consist in:
 
 * uploading the image to Glance
     In case of Openstack with KVM Hypervisor:
-
+```
     glance image-create --file mywindowsimage.qcow2 --property hypervisor_type=qemu --name "My Win installer with cutsomizations" --container-format bare --disk-format qcow2 --is-public True
-
+```
 * booting an instance on your target hypervisor compute node
 * waiting for the setup to complete (the instance will shutdown once the setup is done) 
 * take a snapshot of the instance which will contain the final sysprepped image ready for your deployments
