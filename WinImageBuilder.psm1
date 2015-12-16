@@ -40,6 +40,7 @@ function CreateImageVirtualDisk($vhdPath, $size, $diskLayout)
     try
     {
         $v.AttachVirtualDisk()
+        Start-Sleep -s 10  # wait until the drive has been mounted. Bad solution with sleep, but it works for me.
         $path = $v.GetVirtualDiskPhysicalPath()
 
         $m = $path -match "\\\\.\\PHYSICALDRIVE(?<num>\d+)"
