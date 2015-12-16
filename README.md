@@ -29,6 +29,7 @@ https://technet.microsoft.com/en-us/library/hh849924.aspx
 
 Example PowerShell script:
 
+    if (Get-Module -Name WinImageBuilder) { Remove-Module WinImageBuilder } # just in case an old version was already loaded
     Import-Module .\WinImageBuilder.psm1
 
     # The disk format can be: VHD, VHDX, QCow2, VMDK or RAW
