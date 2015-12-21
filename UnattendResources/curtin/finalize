@@ -9,6 +9,11 @@ import platform
 from curtin.log import LOG
 from curtin import util
 
+#newer curtin builds have a separate file for load_command_config
+#using hasattr because then no parameters need to be given to load_command_config to check its existence
+if not hasattr(util, "load_command_config"):
+  from curtin import config as c
+
 CLOUDBASE_INIT_TEMPLATE = """
 metadata_services=cloudbaseinit.metadata.services.maasservice.MaaSHttpService
 maas_metadata_url={url}
@@ -64,7 +69,12 @@ def get_cloudbaseinit_dir(target):
 
 def curthooks():
     state = util.load_command_environment()
-    config = util.load_command_config({}, state)
+    #newer curtin builds have a separate file for load_command_config
+    try:
+       config = util.load_command_config({}, state)
+    except AttributeError:
+       config = c.load_command_config({}, state)
+
     target = state['target']
     cloudbaseinit = get_cloudbaseinit_dir(target)
 
