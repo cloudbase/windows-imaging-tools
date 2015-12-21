@@ -7,6 +7,7 @@ import yaml
 import platform
 
 from curtin.log import LOG
+from curtin import util
 try:
     from curtin.util import load_command_config
 except ImportError:
