@@ -8,6 +8,10 @@ import platform
 
 from curtin.log import LOG
 from curtin import util
+try:
+    from curtin.util import load_command_config
+except ImportError:
+    from curtin.config import load_command_config
 
 CLOUDBASE_INIT_TEMPLATE = """
 metadata_services=cloudbaseinit.metadata.services.maasservice.MaaSHttpService
@@ -64,7 +68,7 @@ def get_cloudbaseinit_dir(target):
 
 def curthooks():
     state = util.load_command_environment()
-    config = util.load_command_config({}, state)
+    config = load_command_config({}, state)
     target = state['target']
     cloudbaseinit = get_cloudbaseinit_dir(target)
 
