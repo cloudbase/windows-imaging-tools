@@ -34,6 +34,38 @@ function Get-WimFileImagesInfo
     }
 }
 
+function ExecRetry($command, $maxRetryCount = 10, $retryInterval=2)
+{
+    $currErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+
+    $retryCount = 0
+    while ($true)
+    {
+        try 
+        {
+            & $command
+            break
+        }
+        catch [System.Exception]
+        {
+            $retryCount++
+            if ($retryCount -ge $maxRetryCount)
+            {
+                $ErrorActionPreference = $currErrorActionPreference
+                throw
+            }
+            else
+            {
+                Write-Error $_.Exception
+                Start-Sleep $retryInterval
+            }
+        }
+    }
+
+    $ErrorActionPreference = $currErrorActionPreference
+}
+
 function CreateImageVirtualDisk($vhdPath, $size, $diskLayout)
 {
     $v = [WIMInterop.VirtualDisk]::CreateVirtualDisk($vhdPath, $size)
@@ -219,7 +251,10 @@ function DownloadCloudbaseInit($resourcesDir, $osArch)
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
     $CloudbaseInitMsiUrl = "https://www.cloudbase.it/downloads/$CloudbaseInitMsi"
 
-    (new-object System.Net.WebClient).DownloadFile($CloudbaseInitMsiUrl, $CloudbaseInitMsiPath)
+    ExecRetry{
+        (new-object System.Net.WebClient).DownloadFile($CloudbaseInitMsiUrl, $CloudbaseInitMsiPath)
+        if ($LastExitCode) { Throw "Failed to download CloubaseInit installer" }
+    }
 }
 
 function GenerateConfigFile($resourcesDir, $installUpdates)
