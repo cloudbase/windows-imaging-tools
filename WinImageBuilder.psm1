@@ -311,39 +311,91 @@ function CheckEnablePowerShellInImage($winImagePath, $image)
     }
 }
 
-function AddVirtIODriversFromISO($vhdDriveLetter, $image, $isoPath)
+function Is-IsoFile {
+    param(
+        [parameter(Mandatory=$true)] 
+        [string]$FilePath
+    )
+    return ([System.IO.Path]::GetExtension($FilePath) -eq ".iso")
+}
+
+
+function Add-VirtIODrivers($vhdDriveLetter, $image, $driversBasePath)
 {
-    $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($isoPath)
-    try
-    {
-        $v.AttachVirtualDisk()
-        $devicePath = $v.GetVirtualDiskPhysicalPath()
-        $isoDriveLetter = (Get-DiskImage -DevicePath $devicePath | Get-Volume).DriveLetter
-
-        if($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0)
-        {
-            $virtioVer = "VISTA"
-        }
-        elseif($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1)
-        {
-            $virtioVer = "WIN7"
-        }
-        elseif(($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 2) -or $image.ImageVersion.Major -gt 6)
-        {
-            $virtioVer = "WIN8"
-        }
-        else
-        {
-            throw "Unsupported Windows version for VirtIO drivers: {0}" -f $image.ImageVersion
-        }
-
-        $virtioDir = "{0}:\{1}\{2}" -f $isoDriveLetter, $virtioVer, $image.ImageArchitecture
-        AddDriversToImage $vhdDriveLetter $virtioDir
+    # For VirtIO ISO with drivers version lower than 1.8.x
+    if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0) {
+        $virtioVer = "VISTA"
+    } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1) {
+        $virtioVer = "WIN7"
+    } elseif (($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 2) `
+        -or $image.ImageVersion.Major -gt 6) {
+        $virtioVer = "WIN8"
+    } else {
+        throw "Unsupported Windows version for VirtIO drivers: {0}" `
+            -f $image.ImageVersion
     }
-    finally
-    {
-        $v.DetachVirtualDisk()
-        $v.Close()
+    $virtioDir = "{0}\{1}\{2}" -f $driversBasePath, $virtioVer, $image.ImageArchitecture
+    if (Test-Path $virtioDir) {
+        AddDriversToImage $vhdDriveLetter $virtioDir
+        return
+    }
+
+    # For VirtIO ISO with drivers version higher than 1.8.x
+    if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0) {
+        $virtioVer = "2k8"
+    } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1) {
+        if ($image.ImageInstallationType -eq "Server") {
+            $virtioVer = "2k8r2"
+        } else {
+            $virtioVer = "w7"
+        }
+    } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 2) {
+        if ($image.ImageInstallationType -eq "Server") {
+            $virtioVer = "2k12"
+        } else {
+            $virtioVer = "w8"
+        }
+    } elseif (($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 3) `
+        -or $image.ImageVersion.Major -gt 6) {
+        if ($image.ImageInstallationType -eq "Server") {
+            $virtioVer = "2k12R2"
+        } else {
+            $virtioVer = "w8.1"
+        }
+    } else {
+        throw "Unsupported Windows version for VirtIO drivers: {0}" `
+            -f $image.ImageVersion
+    }
+
+    $drivers = @("Balloon", "NetKVM", "viorng", "vioscsi", "vioserial", "viostor")
+    foreach ($driver in $drivers) {
+        $virtioDir = "{0}\{1}\{2}\{3}" -f $driversBasePath, $driver, $virtioVer, $image.ImageArchitecture
+        if (Test-Path $virtioDir) {
+            AddDriversToImage $vhdDriveLetter $virtioDir
+        }
+    }
+}
+
+function Add-VirtIODriversFromISO($vhdDriveLetter, $image, $isoPath) {
+    $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($isoPath)
+    try {
+        if (Is-IsoFile $isoPath) {
+            $v.AttachVirtualDisk()
+            $devicePath = $v.GetVirtualDiskPhysicalPath()
+            $driversBasePath = ((Get-DiskImage -DevicePath $devicePath `
+                | Get-Volume).DriveLetter) + ":"
+            Write-Host "Adding drivers from $driversBasePath"
+            Add-VirtIODrivers $vhdDriveLetter $image $driversBasePath
+        } else {
+            throw "The $isoPath is not a valid iso path."
+        }
+    } catch{
+        Write-Host $_
+    } finally {
+        if ($v) {
+            $v.DetachVirtualDisk()
+            $v.Close()
+        }
     }
 }
 
@@ -663,7 +715,10 @@ function New-WindowsCloudImage()
         [parameter(Mandatory=$false)]
         [switch]$PersistDriverInstall = $true,
         [parameter(Mandatory=$false)]
-        [switch]$InstallMaaSHooks
+        [switch]$InstallMaaSHooks,
+        [parameter(Mandatory=$false)]
+        [string]$VirtIOBasePath
+
     )
     PROCESS
     {
@@ -720,7 +775,11 @@ function New-WindowsCloudImage()
 
             if($VirtIOISOPath)
             {
-                AddVirtIODriversFromISO $winImagePath $image $VirtIOISOPath
+                Add-VirtIODriversFromISO $winImagePath $image $VirtIOISOPath
+            }
+            if($VirtIOBasePath)
+            {
+                Add-VirtIODrivers $winImagePath $image $VirtIOBasePath
             }
 			#& Dism.exe /image:${winImagePath} /Get-Feature
 			if ($ExtraFeatures){
