@@ -385,6 +385,10 @@ function Add-VirtIODriversFromISO($vhdDriveLetter, $image, $isoPath) {
             $driversBasePath = ((Get-DiskImage -DevicePath $devicePath `
                 | Get-Volume).DriveLetter) + ":"
             Write-Host "Adding drivers from $driversBasePath"
+            # We call Get-PSDrive to refresh the list of active drives.
+            # Otherwise, "Test-Path $driversBasePath" will return $False
+            # http://www.vistax64.com/powershell/2653-powershell-does-not-update-subst-mapped-drives.html
+            Get-PSDrive | Out-Null
             Add-VirtIODrivers $vhdDriveLetter $image $driversBasePath
         } else {
             throw "The $isoPath is not a valid iso path."
