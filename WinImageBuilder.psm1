@@ -7,6 +7,39 @@ $localResourcesDir = "$scriptPath\UnattendResources"
 
 Import-Module dism
 
+function ExecRetry($command, $maxRetryCount=4, $retryInterval=4)
+{
+    $currErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+  
+    $retryCount = 0
+    while ($true)
+    {
+        try 
+        {
+            $res = Invoke-Command -ScriptBlock $command
+            $ErrorActionPreference = $currErrorActionPreference
+            return $res
+        }
+          catch [System.Exception]
+        {
+            $retryCount++
+            if ($retryCount -ge $maxRetryCount)
+            {
+                $ErrorActionPreference = $currErrorActionPreference
+                throw
+            }
+            else
+            {
+                if($_) {
+                Write-Warning $_ 
+                }
+                Start-Sleep $retryInterval
+            }
+        }
+    } 
+}
+
 function CheckIsAdmin()
 {
     $wid = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -189,8 +222,10 @@ function CheckDismVersionForImage($image)
 function ConvertVirtualDisk($vhdPath, $outPath, $format)
 {
     Write-Output "Converting virtual disk image from $vhdPath to $outPath..."
-    & $scriptPath\bin\qemu-img.exe convert -O $format.ToLower() $vhdPath $outPath
-    if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
+    ExecRetry {
+        & $scriptPath\bin\qemu-img.exe convert -O $format.ToLower() $vhdPath $outPath
+        if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
+    }
 }
 
 function CopyUnattendResources($resourcesDir, $imageInstallationType)
@@ -225,7 +260,10 @@ function DownloadCloudbaseInit($resourcesDir, $osArch)
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
     $CloudbaseInitMsiUrl = "https://www.cloudbase.it/downloads/$CloudbaseInitMsi"
 
-    (new-object System.Net.WebClient).DownloadFile($CloudbaseInitMsiUrl, $CloudbaseInitMsiPath)
+    ExecRetry {
+        (New-Object System.Net.WebClient).DownloadFile($CloudbaseInitMsiUrl, $CloudbaseInitMsiPath)
+    }
+
 }
 
 function GenerateConfigFile($resourcesDir, $installUpdates)
@@ -259,8 +297,10 @@ function EnableFeaturesInImage($winImagePath, $featureNames)
         }
 
         # Prefer Dism over Enable-WindowsOptionalFeature due to better error reporting
-        Invoke-Expression $featuresCmdStr
-        if ($LASTEXITCODE) { throw "Dism failed to enable features: $featureNames" }
+        ExecRetry {
+            Invoke-Expression $featuresCmdStr
+            if ($LASTEXITCODE) { throw "Dism failed to enable features: $featureNames" }
+        }
     }
 }
 
