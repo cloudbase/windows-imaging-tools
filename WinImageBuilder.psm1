@@ -100,7 +100,7 @@ function ApplyImage($winImagePath, $wimFilePath, $imageIndex)
     if($LASTEXITCODE) { throw "Dism apply-image failed" }
 }
 
-function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout)
+function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout, $image)
 {
     $bcdbootPath = "${windowsDrive}\windows\system32\bcdboot.exe"
     if (!(Test-Path $bcdbootPath))
@@ -111,7 +111,13 @@ function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout)
 
     # TODO: add support for UEFI boot
     # Note: older versions of bcdboot.exe don't have a /f argument
-    & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+    if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -lt 2) 
+    {
+        & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v
+    } else
+    {
+        & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+    }
     if($LASTEXITCODE) { throw "BCDBoot failed" }
 
     if($diskLayout -eq "BIOS")
@@ -124,13 +130,13 @@ function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout)
         }
 
         & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{bootmgr`} device locate
-        if($LASTEXITCODE) { throw "BCDEdit failed" }
+        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: bootmgr device locate" }
 
         & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} device locate
-        if($LASTEXITCODE) { throw "BCDEdit failed" }
+        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default device locate" }
 
         & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} osdevice locate
-        if($LASTEXITCODE) { throw "BCDEdit failed" }
+        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default osdevice locate" }
     }
 }
 
@@ -761,7 +767,7 @@ function New-WindowsCloudImage()
             GenerateConfigFile $resourcesDir $configValues
             DownloadCloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
             ApplyImage $winImagePath $wimFilePath $image.ImageIndex
-            CreateBCDBootConfig $drives[0] $drives[1] $DiskLayout
+            CreateBCDBootConfig $drives[0] $drives[1] $DiskLayout $image
             CheckEnablePowerShellInImage $winImagePath $image
 
             # Product key is applied by the unattend.xml
