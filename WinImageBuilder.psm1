@@ -23,6 +23,39 @@ Please make sure you boot this image at least once before you use it.
 
 Import-Module dism
 
+function ExecRetry($command, $maxRetryCount=4, $retryInterval=4)
+{
+    $currErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+  
+    $retryCount = 0
+    while ($true)
+    {
+        try 
+        {
+            $res = Invoke-Command -ScriptBlock $command
+            $ErrorActionPreference = $currErrorActionPreference
+            return $res
+        }
+          catch [System.Exception]
+        {
+            $retryCount++
+            if ($retryCount -ge $maxRetryCount)
+            {
+                $ErrorActionPreference = $currErrorActionPreference
+                throw
+            }
+            else
+            {
+                if($_) {
+                Write-Warning $_ 
+                }
+                Start-Sleep $retryInterval
+            }
+        }
+    }
+} 
+
 function CheckIsAdmin()
 {
     $wid = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -100,7 +133,7 @@ function ApplyImage($winImagePath, $wimFilePath, $imageIndex)
     if($LASTEXITCODE) { throw "Dism apply-image failed" }
 }
 
-function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout)
+function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout, $image)
 {
     $bcdbootPath = "${windowsDrive}\windows\system32\bcdboot.exe"
     if (!(Test-Path $bcdbootPath))
@@ -111,7 +144,13 @@ function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout)
 
     # TODO: add support for UEFI boot
     # Note: older versions of bcdboot.exe don't have a /f argument
-    & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+    if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -lt 2) 
+    {
+        & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v
+    } else
+    {
+        & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+    }
     if($LASTEXITCODE) { throw "BCDBoot failed" }
 
     if($diskLayout -eq "BIOS")
@@ -124,13 +163,13 @@ function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout)
         }
 
         & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{bootmgr`} device locate
-        if($LASTEXITCODE) { throw "BCDEdit failed" }
+        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: bootmgr device locate" }
 
         & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} device locate
-        if($LASTEXITCODE) { throw "BCDEdit failed" }
+        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default device locate" }
 
         & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} osdevice locate
-        if($LASTEXITCODE) { throw "BCDEdit failed" }
+        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default osdevice locate" }
     }
 }
 
@@ -198,8 +237,10 @@ function CheckDismVersionForImage($image)
 function Convert-VirtualDisk($vhdPath, $outPath, $format)
 {
     Write-Output "Converting virtual disk image from $vhdPath to $outPath..."
-    & $scriptPath\bin\qemu-img.exe convert -O $format.ToLower() $vhdPath $outPath
-    if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
+    ExecRetry {
+        & $scriptPath\bin\qemu-img.exe convert -O $format.ToLower() $vhdPath $outPath
+        if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
+    }
 }
 
 function CopyUnattendResources
@@ -250,7 +291,9 @@ function DownloadCloudbaseInit($resourcesDir, $osArch)
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
     $CloudbaseInitMsiUrl = "https://www.cloudbase.it/downloads/$CloudbaseInitMsi"
 
-    (new-object System.Net.WebClient).DownloadFile($CloudbaseInitMsiUrl, $CloudbaseInitMsiPath)
+    ExecRetry {
+        (New-Object System.Net.WebClient).DownloadFile($CloudbaseInitMsiUrl, $CloudbaseInitMsiPath)
+    }
 }
 
 function GenerateConfigFile
@@ -293,8 +336,10 @@ function EnableFeaturesInImage($winImagePath, $featureNames)
         }
 
         # Prefer Dism over Enable-WindowsOptionalFeature due to better error reporting
-        Invoke-Expression $featuresCmdStr
-        if ($LASTEXITCODE) { throw "Dism failed to enable features: $featureNames" }
+        ExecRetry {
+            Invoke-Expression $featuresCmdStr
+            if ($LASTEXITCODE) { throw "Dism failed to enable features: $featureNames" }
+        }
     }
 }
 
@@ -761,7 +806,7 @@ function New-WindowsCloudImage()
             GenerateConfigFile $resourcesDir $configValues
             DownloadCloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
             ApplyImage $winImagePath $wimFilePath $image.ImageIndex
-            CreateBCDBootConfig $drives[0] $drives[1] $DiskLayout
+            CreateBCDBootConfig $drives[0] $drives[1] $DiskLayout $image
             CheckEnablePowerShellInImage $winImagePath $image
 
             # Product key is applied by the unattend.xml
