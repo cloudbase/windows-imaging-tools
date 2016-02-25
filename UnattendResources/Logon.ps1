@@ -23,7 +23,7 @@ try
                 $psWindowsUpdatePath = "$resourcesDir\PSWindowsUpdate.zip"
             }
 
-            & "$resourcesDir\7za.exe" x $psWindowsUpdatePath -o"$resourcesDir"
+            & "$resourcesDir\7za.exe" x $psWindowsUpdatePath $("-o" + $resourcesDir)
             if($LASTEXITCODE) { throw "7za.exe failed to extract PSWindowsUpdate" }
         }
 
