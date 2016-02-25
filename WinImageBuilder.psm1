@@ -519,6 +519,43 @@ function Compress-Image($VirtualDiskPath, $ImagePath)
     Write-Output "MaaS image is ready and available at: $ImagePath"
 }
 
+function Shrink-VHDImage {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$VirtualDiskPath
+    )
+    Write-Output "Shrinking VHD to minimum size"
+
+    $vhdSize = (Get-VHD -Path $VirtualDiskPath).Size
+    Write-Output "Initial VHD size is: $vhdSize"
+    $OriginalDiskSize = ($vhdSize/1GB)
+    Write-Host "Original disk size: $OriginalDiskSize GB"
+
+    $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | Get-Partition | Get-Volume).DriveLetter
+    Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim
+
+    Write-Host "Current partition information:"
+    $partitionInfo = Get-Partition -DriveLetter $Drive
+    $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
+    $CurrSize = ((Get-Partition -DriveLetter $Drive).Size/1GB)
+    Write-Host "Current partition size: $CurrSize GB"
+    # Leave at least 500MB for making sure Sysprep finishes successfuly
+    $NewSize = ([int](($MinSize + 500MB)/1GB) + 1)*1GB
+    Write-Host "New partition size: $NewSize GB"
+
+    if ($NewSize -gt $MinSize) {
+        Resize-Partition -DriveLetter $Drive -Size ($NewSize)
+    }
+    Dismount-VHD -Path $VirtualDiskPath
+
+    $vhdMinSize = (Get-VHD -Path $VirtualDiskPath).MinimumSize
+    if ($vhdSize -gt $vhdMinSize) {
+        Resize-VHD $VirtualDiskPath -ToMinimumSize
+    }
+    $FinalDiskSize = ((Get-VHD -Path $VirtualDiskPath).Size/1GB)
+    Write-Host "Final disk size: $FinalDiskSize GB"
+}
+
 function Create-VirtualSwitch
 {
     Param(
@@ -718,6 +755,9 @@ function New-MaaSImage()
                 $Name = "MaaS-Sysprep" + (Get-Random)
                 Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $switch.Name -CpuCores $CpuCores -Generation $generation
             }
+
+            Shrink-VHDImage $VirtualDiskPath
+
             Write-Output "Converting VHD to RAW"
             Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
             del -Force $VirtualDiskPath
