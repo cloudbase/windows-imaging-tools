@@ -7,6 +7,39 @@ $localResourcesDir = "$scriptPath\UnattendResources"
 
 Import-Module dism
 
+function Shrink-VHDImage {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$VirtualDiskPath
+    )
+    Write-Output "Shrinking VHD to minimum size"
+
+    $vhdSize = (Get-VHD -Path $VirtualDiskPath).Size
+    Write-Output "Initial VHD size is: $vhdSize"
+    $OriginalDiskSize = ($vhdSize/1GB)
+    Write-Host "Original disk size: $OriginalDiskSize GB"
+
+    $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | Get-Partition | Get-Volume).DriveLetter
+    Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim
+
+    Write-Host "Current partition information:"
+    $partitionInfo = Get-Partition -DriveLetter $Drive
+    $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
+    $CurrSize = ((Get-Partition -DriveLetter $Drive).Size/1GB)
+    Write-Host "Current partition size: $CurrSize GB"
+    # Leave at least 500MB for making sure Sysprep finishes successfuly
+    $NewSize = ([int](($MinSize + 500MB)/1GB) + 1)
+    Write-Host "New partition size: $NewSize GB"
+    Resize-Partition -DriveLetter $Drive -Size ($NewSize*1GB)
+
+    Dismount-VHD -Path $VirtualDiskPath
+
+    Resize-VHD $VirtualDiskPath -ToMinimumSize
+
+    $FinalDiskSize = ((Get-VHD -Path $VirtualDiskPath).Size/1GB)
+    Write-Host "Final disk size: $FinalDiskSize GB"
+}
+
 function ExecRetry($command, $maxRetryCount=4, $retryInterval=4)
 {
     $currErrorActionPreference = $ErrorActionPreference
@@ -515,6 +548,7 @@ function New-WindowsCloudImage()
 
         if ($VHDPath -ne $VirtualDiskPath)
         {
+            Shrink-VHDImage $VirtualDiskPath
             ConvertVirtualDisk $VHDPath $VirtualDiskPath $VirtualDiskFormat
             del -Force $VHDPath
         }
