@@ -113,3 +113,7 @@ Please make sure that when cloning this repository on Windows, you preserve orig
 The resulting image can be copied to your MaaS install and uploaded as follows:
 
     maas root boot-resources create name=windows/win2012hvr2 architecture=amd64/generic filetype=ddtgz content@=$HOME/win2012hvr2-dd
+
+### Notes:
+    
+In order to generate MAAS compatible images, you need to ` git submodule update --init ` in order to get the latest files of windows-curtin-hooks
