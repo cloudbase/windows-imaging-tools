@@ -699,49 +699,110 @@ function New-MaaSImage()
     )
     PROCESS
     {
-        CheckIsAdmin
-        if (!$RunSysprep -and !$Force){
-            Write-Warning "You chose not to run sysprep. This will build an unusable MaaS image. If you really want to continue use the -Force:$true flag."
-            exit 1
+        New-WindowsOnlineImage -Type "MAAS" -WimFilePath $WimFilePath -ImageName $ImageName `
+        -WindowsImagePath $MaaSImagePath -SizeBytes $SizeBytes -DiskLayout $DiskLayout `
+        -ProductKey $ProductKey -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
+        -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
+        -ExtraDriversPath $ExtraDriversPath -Memory $Memory -CpuCores $CpuCores `
+        -RunSysprep:$RunSysprep -SwitchName $SwitchName -Force:$Force
+    }
+}
 
+function New-WindowsOnlineImage() {
+    [CmdletBinding()]
+    param
+    (
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$WimFilePath = "D:\Sources\install.wim",
+        [parameter(Mandatory=$true)]
+        [string]$ImageName,
+        [parameter(Mandatory=$true)]
+        [string]$WindowsImagePath,
+        [parameter(Mandatory=$true)]
+        [Uint64]$SizeBytes,
+        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
+        [string]$DiskLayout = "BIOS",
+        [parameter(Mandatory=$false)]
+        [string]$ProductKey,
+        [parameter(Mandatory=$false)]
+        [string]$VirtIOISOPath,
+        [parameter(Mandatory=$false)]
+        [switch]$InstallUpdates,
+        [parameter(Mandatory=$false)]
+        [string]$AdministratorPassword = "Pa`$`$w0rd",
+        [array]$ExtraFeatures = @("Microsoft-Hyper-V"),
+        [parameter(Mandatory=$false)]
+        [string]$ExtraDriversPath,
+        [parameter(Mandatory=$false)]
+        [switch]$PersistDriverInstall = $true,
+        [parameter(Mandatory=$false)]
+        [Uint64]$Memory=2GB,
+        [parameter(Mandatory=$false)]
+        [int]$CpuCores=1,
+        [parameter(Mandatory=$false)]
+        [switch]$RunSysprep=$true,
+        [parameter(Mandatory=$false)]
+        [string]$SwitchName,
+        [parameter(Mandatory=$false)]
+        [switch]$Force=$false,
+        [ValidateSet("MAAS", "KVM", "HYPER-V", ignorecase=$false)]
+        [string]$Type = "MAAS"
+    )
+    PROCESS
+    {
+        CheckIsAdmin
+        if (!$RunSysprep -and !$Force) {
+            Write-Warning "You chose not to run sysprep.
+                This will build an unusable MaaS image.
+                If you really want to continue use the -Force:$true flag."
+            exit 1
         }
+
         Check-Prerequisites
-        if($SwitchName){
+        if ($SwitchName) {
             $switch = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
-            if(!$switch){
+            if (!$switch) {
                 Write-Error "Selected vmswitch ($SwitchName) does not exist"
                 exit 1
             }
             if($switch.SwitchType -ne "External" -and !$Force){
-                Write-Warning "Selected switch ($SwitchName) is not an external switch. If you really want to continue use the -Force:$true flag."
+                Write-Warning "Selected switch ($SwitchName) is not an external switch.
+                If you really want to continue use the -Force:$true flag."
                 exit 1
             }
-        }else{
+        } else {
             $switch = GetOrCreateSwitch
         }
         $total_count = 0
-        $coreCount = (gwmi win32_processor).NumberOfLogicalProcessors
-        foreach ($i in $coreCount){
+        $coreCount = (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors
+        foreach ($i in $coreCount) {
             $total_count += $i
         }
-        if ($total_count -eq 0){
+        if ($total_count -eq 0) {
             $total_count = 1
         }
-        if ($CpuCores -gt $total_count){
-            Write-Warning "CpuCores larger then available (logical) CPU cores. Setting CpuCores to $coreCount"
+        if ($CpuCores -gt $total_count) {
+            Write-Warning "CpuCores larger then available (logical) CPU cores.
+                Setting CpuCores to $coreCount"
             $CpuCores = $coreCount
         }
 
         try {
-            $barePath = GetPathWithoutExtension($MaaSImagePath)
+            $barePath = GetPathWithoutExtension($WindowsImagePath)
             $VirtualDiskPath = $barePath + ".vhdx"
-            $RawImagePath = $barePath + ".img"
+            $InstallMaaSHooks = $false
+            if ($Type -eq "MAAS") {
+                $InstallMaaSHooks = $true
+            }
+            if ($Type -eq "KVM") {
+                $PersistDriverInstall = $false
+            }
             New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
-            -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
-            -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
-            -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-            -InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
-            -DiskLayout $DiskLayout
+                -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
+                -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
+                -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
+                -InstallMaaSHooks:$InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
+                -DiskLayout $DiskLayout
 
             if ($RunSysprep){
                 if($DiskLayout -eq "UEFI")
@@ -753,18 +814,29 @@ function New-MaaSImage()
                     $generation = "1"
                 }
 
-                $Name = "MaaS-Sysprep" + (Get-Random)
-                Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $switch.Name -CpuCores $CpuCores -Generation $generation
+                $Name = "WindowsImageOnline-Sysprep" + (Get-Random)
+                Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath `
+                    -VMSwitch $switch.Name -CpuCores $CpuCores `
+                    -Generation $generation
             }
 
             Shrink-VHDImage $VirtualDiskPath
 
-            Write-Output "Converting VHD to RAW"
-            Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
-            del -Force $VirtualDiskPath
-            Compress-Image $RawImagePath $MaaSImagePath
-        }catch{
-            Remove-Item -Force $MaaSImagePath* -ErrorAction SilentlyContinue
+            if ($Type -eq "MAAS") {
+                $RawImagePath = $barePath + ".img"
+                Write-Output "Converting VHD to RAW"
+                Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
+                Remove-Item -Force $VirtualDiskPath
+                Compress-Image $RawImagePath $WindowsImagePath
+            }
+            if ($Type -eq "KVM") {
+                $Qcow2ImagePath = $barePath + ".qcow2"
+                Write-Output "Converting VHD to QCow2"
+                Convert-VirtualDisk $VirtualDiskPath $Qcow2ImagePath "qcow2"
+                Remove-Item -Force $VirtualDiskPath
+            }
+        } catch {
+            Remove-Item -Force $WindowsImagePath* -ErrorAction SilentlyContinue
             Throw
         }
     }
