@@ -545,7 +545,7 @@ function Shrink-VHDImage {
     Write-Host "New partition size: $NewSize GB"
 
     if ($NewSize -gt $MinSize) {
-        Resize-Partition -DriveLetter $Drive -Size ($NewSize)
+        Resize-Partition -DriveLetter $Drive -Size ($NewSize) -ErrorAction "Stop"
     }
     Dismount-VHD -Path $VirtualDiskPath
 
@@ -757,7 +757,9 @@ function New-MaaSImage()
                 Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath -VMSwitch $switch.Name -CpuCores $CpuCores -Generation $generation
             }
 
-            Shrink-VHDImage $VirtualDiskPath
+            ExecRetry {
+                Shrink-VHDImage $VirtualDiskPath
+            }
 
             Write-Output "Converting VHD to RAW"
             Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
