@@ -482,10 +482,10 @@ function New-WindowsCloudImage()
 
             GenerateUnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
             CopyUnattendResources $resourcesDir $image.ImageInstallationType
-            CreateBCDBootConfig $drives[0] $drives[1] $DiskLayout $image
+            GenerateConfigFile $resourcesDir $installUpdates
             DownloadCloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
             ApplyImage $winImagePath $wimFilePath $image.ImageIndex
-            CreateBCDBootConfig $drives[0] $drives[1] $DiskLayout
+            CreateBCDBootConfig $drives[0] $drives[1] $DiskLayout $image
             CheckEnablePowerShellInImage $winImagePath $image
 
             # Product key is applied by the unattend.xml
