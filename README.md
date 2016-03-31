@@ -47,7 +47,8 @@ Example PowerShell script:
     #$productKey = “xxxxx-xxxxx…"
 
     # Add -InstallUpdates for the Windows updates (it takes longer and requires
-    # more space but it's highly recommended)
+    # more space but it's highly recommended). If you want to specify a maximum
+    # number of updates before a reboot, you can use the -maximumUpdates
     New-WindowsCloudImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
     -VirtualDiskFormat QCow2 -VirtualDiskPath $virtualDiskPath `
     -SizeBytes 16GB -ProductKey $productKey -VirtIOISOPath $virtIOISOPath
@@ -117,3 +118,5 @@ The resulting image can be copied to your MaaS install and uploaded as follows:
 ### Notes:
     
 In order to generate MAAS compatible images, you need to ` git submodule update --init ` in order to get the latest files of windows-curtin-hooks
+
+If you want to exclude certain updates, use the $KBIdsBlacklist parameter. Ex for Windows2012R2: $KBIdsBlacklist = @{ "6.3" = @("KB3013538", "KB3042058") }

@@ -274,6 +274,15 @@ function CopyUnattendResources
         } else {
         throw "The Windows curtin hooks module is not present. Please run git submodule update --init " }
     }
+    
+    if ($InstallUpdates){
+        $srcUpdates = Join-Path $localResourcesDir "WindowsUpdateCLI\WindowsUpdates"
+        if ((Test-Path $srcUpdates)){
+            $dstUpdates = Split-Path $resourcesDir
+            Copy-Item -Recurse $srcUpdates $dstUpdates
+        } else {
+        throw "The WindowsUpdateCLI module is not present. Please run git submodule update --init " }
+    }
 }
 
 function DownloadCloudbaseInit($resourcesDir, $osArch)
@@ -799,9 +808,17 @@ function New-WindowsCloudImage()
         [parameter(Mandatory=$false)]
         [switch]$InstallUpdates,
         [parameter(Mandatory=$false)]
+        [string]$maximumUpdates="20",
+        [parameter(Mandatory=$false)]
         [string]$AdministratorPassword = "Pa`$`$w0rd",
         [parameter(Mandatory=$false)]
         [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml",
+        [parameter(Mandatory=$false)]
+        [string]$KBIdsBlacklist = @{
+            "6.1" = @("KB2808679", "KB2894844", "KB3019978");
+            "6.2" = @("KB3013538", "KB3042058");
+            "6.3" = @("KB3013538", "KB3042058")
+        },
         [parameter(Mandatory=$false)]
         [switch]$PersistDriverInstall = $true,
         [parameter(Mandatory=$false)]

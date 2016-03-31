@@ -44,10 +44,18 @@ function Clean-UpdateResources {
 }
 
 function Clean-WindowsUpdates {
+    Param(
+        $PurgeUpdates
+    )
+    
     $HOST.UI.RawUI.WindowTitle = "Running Dism cleanup..."
     if (([System.Environment]::OSVersion.Version.Major -gt 6) -or ([System.Environment]::OSVersion.Version.Minor -ge 2))
     {
-        Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+        if (!$PurgeUpdates) {
+            Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+        } else {
+            Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase
+        }
         if ($LASTEXITCODE)
         {
             throw "Dism.exe clean failed"
@@ -74,44 +82,38 @@ function Release-IP {
         }
 }
 
+function Install-WindowsUpdates
+{
+    Import-Module "$resourcesDir\WindowsUpdateCLI\WindowsUpdates"
+    $BaseOSKernelVersion = [System.Environment]::OSVersion.Version
+    $OSKernelVersion = ($BaseOSKernelVersion.Major.ToString() + "." + $BaseOSKernelVersion.Minor.ToString())
+    $excludedUpdates = $KBIdsBlacklist[$OSKernelVersion]
+    
+    $updates = Get-WindowsUpdate -Verbose -ExcludeKBId $KBIdsBlacklist
+    $maximumUpdates = 20
+    if (!$updates.Count) {
+        $updates = [array]$updates
+    }
+    if ($updates) {
+        $availableUpdatesNumber = $updates.Count
+        Write-Host "Found $availableUpdatesNumber updates. Installing..."
+        Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
+        Restart-Computer -Force
+    }
+}
 try
 {
     Import-Module "$resourcesDir\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PersistDriverInstall" -Default $true -AsBoolean
+    $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PurgeUpdates" -Default $false -AsBoolean
 
-    if($installUpdates)
+    if($InstallUpdates)
     {
-        if (!(Test-Path "$resourcesDir\PSWindowsUpdate"))
-        {
-            #Fixes Windows Server 2008 R2 inexistent Unblock-File command Bug
-            if ($(Get-Host).version.major -eq 2)
-            {
-                $psWindowsUpdatePath = "$resourcesDir\PSWindowsUpdate_1.4.5.zip"
-            }
-            else
-            {
-                $psWindowsUpdatePath = "$resourcesDir\PSWindowsUpdate.zip"
-            }
-
-            & "$resourcesDir\7za.exe" x $psWindowsUpdatePath $("-o" + $resourcesDir)
-            if($LASTEXITCODE) { throw "7za.exe failed to extract PSWindowsUpdate" }
-        }
-
-        $Host.UI.RawUI.WindowTitle = "Installing updates..."
-
-        Import-Module "$resourcesDir\PSWindowsUpdate"
-
-        Get-WUInstall -AcceptAll -IgnoreReboot -IgnoreUserInput -NotCategory "Language packs"
-        if (Get-WURebootStatus -Silent)
-        {
-            $Host.UI.RawUI.WindowTitle = "Updates installation finished. Rebooting."
-            shutdown /r /t 0
-            exit 0
-        }
+        Install-WindowsUpdates
     }
     
-    Clean-WindowsUpdates
+    Clean-WindowsUpdates -PurgeUpdates $PurgeUpdates
 
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
     
