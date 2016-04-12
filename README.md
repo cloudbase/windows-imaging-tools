@@ -25,6 +25,7 @@ Requirements:
 * Clone this repository
 * A Windows installation ISO or DVD, that needs to be either mounted or extracted (e.g. with 7-zip)
 * For KVM, download the VirtIO tools ISO, e.g. from: http://alt.fedoraproject.org/pub/alt/virtio-win/stable/
+* For generating MAAS images, you need to have the Microsoft-Hyper-V role installed and enabled on the machine.
 
 Example PowerShell script:
 

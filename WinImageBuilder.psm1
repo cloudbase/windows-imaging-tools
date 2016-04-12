@@ -2,14 +2,6 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2
 $scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
 $localResourcesDir = "$scriptPath\UnattendResources"
-$noHypervWarning = @"
-The Hyper-V role is missing from this machine. In order to be able to finish generating the image, you need to install the Hyper-V role. You can do so by running the following commands from an elevated powershell command prompt:
-
-Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart
-Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-PowerShell -All -NoRestart
-
-Don't forget to reboot after you install the Hyper-V role.
-"@
 
 $noSysprepWarning = @"
 You have chosen not to sysprep the image now. If you want to run sysprep now,
@@ -580,15 +572,6 @@ function Create-VirtualSwitch
     }
     $sw = New-VMSwitch -Name $Name -NetAdapterName $NetAdapterName -AllowManagementOS $true
     return $sw
-}
-
-function Check-Prerequisites
-{
-    $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
-    if ($needsHyperV.State -ne "Enabled"){
-        Write-Warning $noHypervWarning
-        exit 1
-    }
 }
 
 function GetOrCreateSwitch
