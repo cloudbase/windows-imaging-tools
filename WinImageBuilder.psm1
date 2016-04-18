@@ -93,9 +93,9 @@ function Create-ImageVirtualDisk {
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
         [string]$VhdPath,
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [int]$Size,
+        [long]$Size,
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [int]$DiskLayout
+        [string]$DiskLayout
     )
 
     $v = [WIMInterop.VirtualDisk]::CreateVirtualDisk($VhdPath, $Size)
