@@ -84,3 +84,70 @@ Describe "Test Get-WimFileImagesInfo" {
             } | Should Be $true
     }
 }
+
+Describe "Test New-WindowsCloudImage" {
+    Mock Set-DotNetCWD -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Is-Administrator -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Get-WimFileImagesInfo -Verifiable -ModuleName $moduleName `
+        {
+            return @{
+                "ImageName"="fakeImageName"
+                "ImageInstallationType"="ImageInstallationType"
+                "ImageArchitecture"="ImageArchitecture"
+                "ImageIndex"=1
+            }
+        }
+    Mock Check-DismVersionForImage -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Test-Path -Verifiable -ModuleName $moduleName { return $false }
+    Mock Create-ImageVirtualDisk -Verifiable -ModuleName $moduleName `
+        {
+            return @("drive1")
+        }
+    Mock Generate-UnattendXml -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Copy-UnattendResources -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Generate-ConfigFile -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Download-CloudbaseInit -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Apply-Image -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Create-BCDBootConfig -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Check-EnablePowerShellInImage -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Enable-FeaturesInImage -Verifiable -ModuleName $moduleName { return 0 }
+
+    It "Should create a windows image" {
+        New-WindowsCloudImage -Wimfilepath "fakeWimFilepath" `
+                    -ImageName "fakeImageName" `
+                    -SizeBytes 1 -VirtualDiskPath "fakeVirtualDiskPath" | Should Be 0
+    }
+
+    It "should run all mocked commands" {
+        Assert-VerifiableMocks
+    }
+}
+
+Describe "Test New-MaaSImage" {
+    Mock Is-Administrator -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Check-Prerequisites -Verifiable -ModuleName $moduleName { return 0 }
+    Mock GetOrCreate-Switch -Verifiable -ModuleName $moduleName `
+        {
+            return @{
+                "Name" = "fakeswitch"
+            }
+        }
+    Mock Get-PathWithoutExtension -Verifiable -ModuleName $moduleName { return "fakePath" }
+    Mock New-WindowsCloudImage -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Run-Sysprep -Verifiable -ModuleName $moduleName  { return 0 }
+    Mock Shrink-VHDImage -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Convert-VirtualDisk -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Get-Random -Verifiable -ModuleName $moduleName { return 1 }
+    Mock Remove-Item -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
+
+    It "Should create a maas image" {
+        New-MaaSImage -Wimfilepath "fakeWimFilepath" `
+                    -ImageName "fakeImageName" `
+                    -SizeBytes 1 -MaaSImagePath "fakeMAASPath" | Should Be 0
+    }
+
+    It "should run all mocked commands" {
+        Assert-VerifiableMocks
+    }
+}

@@ -26,7 +26,8 @@ Please make sure you boot this image at least once before you use it.
 . "$scriptPath\Interop.ps1"
 
 function Execute-Retry {
-    param(
+    Param(
+        [parameter(Mandatory=$true)]
         $command,
         [int]$maxRetryCount=4,
         [int]$retryInterval=4
@@ -54,7 +55,7 @@ function Execute-Retry {
             }
         }
     }
-} 
+}
 
 function Is-Administrator {
     $wid = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -67,8 +68,8 @@ function Is-Administrator {
 }
 
 function Get-WimInteropObject {
-    param(
-        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+    Param(
+        [parameter(Mandatory=$true)]
         [string]$WimFilePath
     )
     return (New-Object WIMInterop.WimFile -ArgumentList $WimFilePath)
@@ -76,8 +77,8 @@ function Get-WimInteropObject {
 
 function Get-WimFileImagesInfo {
     [CmdletBinding()]
-    param(
-        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+    Param(
+        [parameter(Mandatory=$true)]
         [string]$WimFilePath = "D:\Sources\install.wim"
     )
     PROCESS
@@ -89,12 +90,12 @@ function Get-WimFileImagesInfo {
 
 function Create-ImageVirtualDisk {
     [CmdletBinding()]
-    param(
-        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+    Param(
+        [parameter(Mandatory=$true)]
         [string]$VhdPath,
-        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [parameter(Mandatory=$true)]
         [long]$Size,
-        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [parameter(Mandatory=$true)]
         [string]$DiskLayout
     )
 
@@ -107,7 +108,7 @@ function Create-ImageVirtualDisk {
         $diskNum = $matches["num"]
         $volumeLabel = "OS"
 
-        if($DiskLayout -eq "UEFI") {
+        if ($DiskLayout -eq "UEFI") {
             Initialize-Disk -Number $diskNum -PartitionStyle GPT
             # EFI partition
             $systemPart = New-Partition -DiskNumber $diskNum -Size 200MB `
@@ -141,41 +142,52 @@ function Create-ImageVirtualDisk {
     }
 }
 
-function ApplyImage($winImagePath, $wimFilePath, $imageIndex)
-{
+function Apply-Image {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$winImagePath,
+        [parameter(Mandatory=$true)]
+        [string]$wimFilePath,
+        [parameter(Mandatory=$true)]
+        [int]$imageIndex
+    )
     Write-Output ('Applying Windows image "{0}" in "{1}"' -f $wimFilePath, $winImagePath)
     #Expand-WindowsImage -ImagePath $wimFilePath -Index $imageIndex -ApplyPath $winImagePath
     # Use Dism in place of the PowerShell equivalent for better progress update
     # and for ease of interruption with CTRL+C
     & Dism.exe /apply-image /imagefile:${wimFilePath} /index:${imageIndex} /ApplyDir:${winImagePath}
-    if($LASTEXITCODE) { throw "Dism apply-image failed" }
+    if ($LASTEXITCODE) { throw "Dism apply-image failed" }
 }
 
-function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout, $image)
-{
+function Create-BCDBootConfig {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$systemDrive,
+        [parameter(Mandatory=$true)]
+        [string]$windowsDrive,
+        [parameter(Mandatory=$true)]
+        [string]$diskLayout,
+        [parameter(Mandatory=$true)]
+        [object]$image
+    )
+
     $bcdbootPath = "${windowsDrive}\windows\system32\bcdboot.exe"
-    if (!(Test-Path $bcdbootPath))
-    {
+    if (!(Test-Path $bcdbootPath)) {
         Write-Warning ('"{0}" not found, using online version' -f $bcdbootPath)
         $bcdbootPath = "bcdboot.exe"
     }
 
-    # TODO: add support for UEFI boot
     # Note: older versions of bcdboot.exe don't have a /f argument
-    if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -lt 2) 
-    {
+    if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -lt 2) {
         & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v
-    } else
-    {
+    } else {
         & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
     }
-    if($LASTEXITCODE) { throw "BCDBoot failed" }
+    if ($LASTEXITCODE) { throw "BCDBoot failed" }
 
-    if($diskLayout -eq "BIOS")
-    {
+    if ($diskLayout -eq "BIOS") {
         $bcdeditPath = "${windowsDrive}\windows\system32\bcdedit.exe"
-        if (!(Test-Path $bcdeditPath))
-        {
+        if (!(Test-Path $bcdeditPath)) {
             Write-Warning ('"{0}" not found, using online version' -f $bcdeditPath)
             $bcdeditPath = "bcdedit.exe"
         }
@@ -191,26 +203,45 @@ function CreateBCDBootConfig($systemDrive, $windowsDrive, $diskLayout, $image)
     }
 }
 
-function TransformXml($xsltPath, $inXmlPath, $outXmlPath, $xsltArgs)
-{
+function Transform-Xml {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$xsltPath,
+        [parameter(Mandatory=$true)]
+        [string]$inXmlPath,
+        [parameter(Mandatory=$true)]
+        [string]$outXmlPath,
+        [parameter(Mandatory=$true)]
+        $xsltArgs
+    )
     $xslt = New-Object System.Xml.Xsl.XslCompiledTransform($false)
     $xsltSettings = New-Object System.Xml.Xsl.XsltSettings($false, $true)
     $xslt.Load($xsltPath, $xsltSettings, (New-Object System.Xml.XmlUrlResolver))
-    $outXmlFile = New-Object System.IO.FileStream($outXmlPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
-    $argList = new-object System.Xml.Xsl.XsltArgumentList
+    $outXmlFile = New-Object System.IO.FileStream($outXmlPath, `
+        [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+    $argList = New-Object System.Xml.Xsl.XsltArgumentList
 
-    foreach($k in $xsltArgs.Keys)
-    {
+    foreach ($k in $xsltArgs.Keys) {
         $argList.AddParam($k, "", $xsltArgs[$k])
     }
     $xslt.Transform($inXmlPath, $argList, $outXmlFile)
     $outXmlFile.Close()
 }
 
-function GenerateUnattendXml($inUnattendXmlPath, $outUnattendXmlPath, $image, $productKey, $administratorPassword)
-{
+function Generate-UnattendXml {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$inUnattendXmlPath,
+        [parameter(Mandatory=$true)]
+        [string]$outUnattendXmlPath,
+        [parameter(Mandatory=$true)]
+        [object]$image,
+        [parameter(Mandatory=$false)]
+        [string]$productKey,
+        [parameter(Mandatory=$false)]
+        $administratorPassword
+    )
     $xsltArgs = @{}
-
     $xsltArgs["processorArchitecture"] = ([string]$image.ImageArchitecture).ToLower()
     $xsltArgs["imageName"] = $image.ImageName
     $xsltArgs["versionMajor"] = $image.ImageVersion.Major
@@ -222,38 +253,51 @@ function GenerateUnattendXml($inUnattendXmlPath, $outUnattendXmlPath, $image, $p
         $xsltArgs["productKey"] = $productKey
     }
 
-    TransformXml "$scriptPath\Unattend.xslt" $inUnattendXmlPath $outUnattendXmlPath $xsltArgs
+    Transform-Xml "$scriptPath\Unattend.xslt" $inUnattendXmlPath $outUnattendXmlPath $xsltArgs
 }
 
-function DetachVirtualDisk($vhdPath) {
+function Detach-VirtualDisk {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$VhdPath
+    )
     try {
-        $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($vhdPath)
+        $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($VhdPath)
         $v.DetachVirtualDisk()
     } finally {
         if ($v) { $v.Close() }
     }
 }
 
-function GetDismVersion {
-    return new-Object System.Version (gcm dism.exe).FileVersionInfo.ProductVersion
-}
-
-function Check-DismVersionForImage($image) {
-    $dismVersion = GetDismVersion
+function Check-DismVersionForImage {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [object]$image
+    )
+    $dismVersion = New-Object System.Version `
+        (Get-Command dism.exe).FileVersionInfo.ProductVersion
     if ($image.ImageVersion.CompareTo($dismVersion) -gt 0) {
         Write-Warning "The installed version of DISM is older than the Windows image"
     }
 }
 
-function Convert-VirtualDisk($vhdPath, $outPath, $format) {
-    Write-Output "Converting virtual disk image from $vhdPath to $outPath..."
+function Convert-VirtualDisk {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$vhdPath,
+        [Parameter(Mandatory=$true)]
+        [string]$outPath,
+        [Parameter(Mandatory=$true)]
+        [string]$format
+    )
+    Write-Host "Converting virtual disk image from $vhdPath to $outPath..."
     Execute-Retry {
-        & $scriptPath\bin\qemu-img.exe convert -O $format.ToLower() $vhdPath $outPath
+        & "$scriptPath\bin\qemu-img.exe" convert -O $format.ToLower() $vhdPath $outPath
         if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
     }
 }
 
-function CopyUnattendResources {
+function Copy-UnattendResources {
     Param(
         [Parameter(Mandatory=$true)]
         [string]$resourcesDir,
@@ -263,16 +307,18 @@ function CopyUnattendResources {
         [boolean]$InstallMaaSHooks
     )
     # Workaround to recognize the $resourcesDir drive. This seems a PowerShell bug
-    $drives = Get-PSDrive
+    Get-PSDrive | Out-Null
 
-    if(!(Test-Path "$resourcesDir")) { $d = mkdir "$resourcesDir" }
-    Write-Output "copying: $localResourcesDir $resourcesDir"
+    if (!(Test-Path "$resourcesDir")) {
+        $d = New-Item -Type Directory $resourcesDir
+    }
+    Write-Host "Copying: $localResourcesDir $resourcesDir"
     Copy-Item -Recurse "$localResourcesDir\*" $resourcesDir
 
     if ($imageInstallationType -eq "Server Core") {
         # Skip the wallpaper on server core
-        del -Force "$resourcesDir\Wallpaper.png"
-        del -Force "$resourcesDir\GPO.zip"
+        Remove-Item -Force "$resourcesDir\Wallpaper.png"
+        Remove-Item -Force "$resourcesDir\GPO.zip"
     }
     if ($InstallMaaSHooks) {
         $src = Join-Path $localResourcesDir "windows-curtin-hooks\curtin"
@@ -280,14 +326,21 @@ function CopyUnattendResources {
             $dst = Split-Path $resourcesDir
             Copy-Item -Recurse $src $dst
         } else {
-        throw "The Windows curtin hooks module is not present. Please run git submodule update --init " }
+            throw "The Windows curtin hooks module is not present.
+                Please run git submodule update --init " }
     }
 }
 
-function DownloadCloudbaseInit($resourcesDir, $osArch) {
-    Write-Output "Downloading Cloudbase-Init..."
+function Download-CloudbaseInit {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$resourcesDir,
+        [Parameter(Mandatory=$true)]
+        [string]$osArch
+    )
+    Write-Host "Downloading Cloudbase-Init..."
 
-    if($osArch -eq "AMD64") {
+    if ($osArch -eq "AMD64") {
         $CloudbaseInitMsi = "CloudbaseInitSetup_Stable_x64.msi"
     } else {
         $CloudbaseInitMsi = "CloudbaseInitSetup_Stable_x86.msi"
@@ -301,7 +354,7 @@ function DownloadCloudbaseInit($resourcesDir, $osArch) {
     }
 }
 
-function GenerateConfigFile {
+function Generate-ConfigFile {
     Param(
         [Parameter(Mandatory=$true)]
         [string]$resourcesDir,
@@ -311,13 +364,18 @@ function GenerateConfigFile {
 
     $configIniPath = "$resourcesDir\config.ini"
     Import-Module "$localResourcesDir\ini.psm1"
-    foreach ($i in $values.GetEnumerator()){
+    foreach ($i in $values.GetEnumerator()) {
         Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key $i.Key -Value $i.Value
     }
 }
 
-function AddDriversToImage($winImagePath, $driversPath)
-{
+function Add-DriversToImage {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$winImagePath,
+        [Parameter(Mandatory=$true)]
+        [string]$driversPath
+    )
     Write-Output ('Adding drivers from "{0}" to image "{1}"' -f $driversPath, $winImagePath)
     & Dism.exe /image:${winImagePath} /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
     if ($LASTEXITCODE) {
@@ -325,11 +383,13 @@ function AddDriversToImage($winImagePath, $driversPath)
     }
 }
 
-function SetProductKeyInImage($winImagePath, $productKey) {
-    Set-WindowsProductKey -Path $winImagePath -ProductKey $productKey
-}
-
-function EnableFeaturesInImage($winImagePath, $featureNames) {
+function Enable-FeaturesInImage {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$winImagePath,
+        [Parameter(Mandatory=$true)]
+        [array]$featureNames
+    )
     if ($featureNames) {
         $featuresCmdStr = "& Dism.exe /image:${winImagePath} /Enable-Feature"
         foreach ($featureName in $featureNames) {
@@ -344,26 +404,44 @@ function EnableFeaturesInImage($winImagePath, $featureNames) {
     }
 }
 
-function CheckEnablePowerShellInImage($winImagePath, $image) {
-    # Windows 2008 R2 Server Core dows not enable powershell by default
-    $v62 = new-Object System.Version 6, 2, 0, 0
-    if($image.ImageVersion.CompareTo($v62) -lt 0 -and $image.ImageInstallationType -eq "Server Core") {
+function Check-EnablePowerShellInImage {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$winImagePath,
+        [Parameter(Mandatory=$true)]
+        [object]$image
+    )
+    # Windows 2008 R2 Server Core does not have powershell enabled by default
+    $v62 = New-Object System.Version 6, 2, 0, 0
+    if ($image.ImageVersion.CompareTo($v62) -lt 0 `
+            -and $image.ImageInstallationType -eq "Server Core") {
         Write-Output "Enabling PowerShell in the Windows image"
-        $psFeatures = @("NetFx2-ServerCore", "MicrosoftWindowsPowerShell", `
-                        "NetFx2-ServerCore-WOW64", "MicrosoftWindowsPowerShell-WOW64")
-        EnableFeaturesInImage $winImagePath $psFeatures
+        $psFeatures = @("NetFx2-ServerCore",
+                        "MicrosoftWindowsPowerShell",
+                        "NetFx2-ServerCore-WOW64",
+                        "MicrosoftWindowsPowerShell-WOW64"
+                        )
+        Enable-FeaturesInImage $winImagePath $psFeatures
     }
 }
 
 function Is-IsoFile {
-    param(
+    Param(
         [parameter(Mandatory=$true)]
         [string]$FilePath
     )
     return ([System.IO.Path]::GetExtension($FilePath) -eq ".iso")
 }
 
-function Add-VirtIODrivers($vhdDriveLetter, $image, $driversBasePath) {
+function Add-VirtIODrivers {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$vhdDriveLetter,
+        [parameter(Mandatory=$true)]
+        [object]$image,
+        [parameter(Mandatory=$true)]
+        [string]$driversBasePath
+    )
     # For VirtIO ISO with drivers version lower than 1.8.x
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0) {
         $virtioVer = "VISTA"
@@ -378,7 +456,7 @@ function Add-VirtIODrivers($vhdDriveLetter, $image, $driversBasePath) {
     }
     $virtioDir = "{0}\{1}\{2}" -f $driversBasePath, $virtioVer, $image.ImageArchitecture
     if (Test-Path $virtioDir) {
-        AddDriversToImage $vhdDriveLetter $virtioDir
+        Add-DriversToImage $vhdDriveLetter $virtioDir
         return
     }
 
@@ -413,12 +491,20 @@ function Add-VirtIODrivers($vhdDriveLetter, $image, $driversBasePath) {
     foreach ($driver in $drivers) {
         $virtioDir = "{0}\{1}\{2}\{3}" -f $driversBasePath, $driver, $virtioVer, $image.ImageArchitecture
         if (Test-Path $virtioDir) {
-            AddDriversToImage $vhdDriveLetter $virtioDir
+            Add-DriversToImage $vhdDriveLetter $virtioDir
         }
     }
 }
 
-function Add-VirtIODriversFromISO($vhdDriveLetter, $image, $isoPath) {
+function Add-VirtIODriversFromISO {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$vhdDriveLetter,
+        [parameter(Mandatory=$true)]
+        [object]$image,
+        [parameter(Mandatory=$true)]
+        [string]$isoPath
+    )
     $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($isoPath)
     try {
         if (Is-IsoFile $isoPath) {
@@ -450,14 +536,23 @@ function Set-DotNetCWD {
     [Environment]::CurrentDirectory = (Get-Location -PSProvider FileSystem).ProviderPath
 }
 
-function GetPathWithoutExtension {
-    param($Path)
+function Get-PathWithoutExtension {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Path
+    )
     return Join-Path ([System.IO.Path]::GetDirectoryName($Path)) `
                      ([System.IO.Path]::GetFileNameWithoutExtension($Path))
 }
 
-function Compress-Image($VirtualDiskPath, $ImagePath) {
-    if (!(Test-Path $VirtualDiskPath)){
+function Compress-Image {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$VirtualDiskPath,
+        [Parameter(Mandatory=$true)]
+        [string]$ImagePath
+    )
+    if (!(Test-Path $VirtualDiskPath)) {
         Throw "$VirtualDiskPath not found"
     }
     $tmpName = $ImagePath + "." + (Get-Random)
@@ -465,7 +560,7 @@ function Compress-Image($VirtualDiskPath, $ImagePath) {
     $7zip = Join-Path $localResourcesDir 7za.exe
     $pigz = Join-Path $localResourcesDir pigz.exe
     try {
-        Write-Output "Archiving $VirtualDiskPath to tarfile $tmpName"
+        Write-Host "Archiving $VirtualDiskPath to tarfile $tmpName"
         pushd ([System.IO.Path]::GetDirectoryName((Resolve-path $VirtualDiskPath).Path))
         try {
             # Avoid storing the full path in the archive
@@ -483,7 +578,7 @@ function Compress-Image($VirtualDiskPath, $ImagePath) {
         }
 
         Remove-Item -Force $VirtualDiskPath
-        Write-Output "Compressing $tmpName to gzip"
+        Write-Host "Compressing $tmpName to gzip"
         pushd ([System.IO.Path]::GetDirectoryName((Resolve-path $tmpName).Path))
         try {
             $tmpPathName = (Get-Item $tmpName).Name
@@ -520,7 +615,8 @@ function Shrink-VHDImage {
     $OriginalDiskSize = ($vhdSize/1GB)
     Write-Host "Original disk size: $OriginalDiskSize GB"
 
-    $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | Get-Partition | Get-Volume).DriveLetter
+    $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | `
+        Get-Partition | Get-Volume).DriveLetter
     Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim
 
     Write-Host "Current partition information:"
@@ -545,48 +641,46 @@ function Shrink-VHDImage {
     Write-Host "Final disk size: $FinalDiskSize GB"
 }
 
-function Create-VirtualSwitch
-{
+function Create-VirtualSwitch {
     Param(
         [Parameter(Mandatory=$false)]
         [string]$NetAdapterName,
         [Parameter(Mandatory=$false)]
         [string]$Name="br100"
-
     )
+
     if (!$NetAdapterName) {
-        $defRoute = Get-NetRoute | Where-Object {$_.DestinationPrefix -eq "0.0.0.0/0"}
+        $defRoute = Get-NetRoute | Where-Object { $_.DestinationPrefix -eq "0.0.0.0/0" }
         if (!$defRoute) {
             Throw "Could not determine default route"
         }
         $details = $defRoute[0]
         $netAdapter = Get-NetAdapter -ifIndex $details.ifIndex -Physical:$true
-        if (!$netAdapter){
+        if (!$netAdapter) {
             Throw "Could not get physical interface for switch"
         }
         $NetAdapterName = $netAdapter.Name
     }
-    $sw = New-VMSwitch -Name $Name -NetAdapterName $NetAdapterName -AllowManagementOS $true
-    return $sw
+    $vSwitch = New-VMSwitch -Name $Name -NetAdapterName $NetAdapterName `
+        -AllowManagementOS $true
+    return $vSwitch
 }
 
 function Check-Prerequisites {
     $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
     if ($needsHyperV.State -ne "Enabled") {
-        Write-Warning $noHypervWarning
-        exit 1
+        throw $noHypervWarning
     }
 }
 
-function GetOrCreateSwitch {
+function GetOrCreate-Switch {
     $vmSwitches = Get-VMSwitch -SwitchType external
-
     if ($vmSwitches) {
         foreach ($i in $vmSwitches) {
             $name = $i.Name
             $netadapter = Get-NetAdapter -Name "vEthernet ($name)" -ErrorAction SilentlyContinue
             if (!$netadapter) { continue }
-            if ($netadapter.Status -eq "Up"){
+            if ($netadapter.Status -eq "Up") {
                 $vmswitch = $i
                 break
             }
@@ -598,7 +692,7 @@ function GetOrCreateSwitch {
         $vmswitch = Create-VirtualSwitch -Name "br100"
     }
     if (!$vmswitch) {
-        Throw "Count not determine VMSwitch"
+        Throw "Count not retrieve VMSwitch"
     }
     return $vmswitch
 }
@@ -633,7 +727,8 @@ function Run-Sysprep {
     )
 
     Write-Output "Creating VM $Name attached to $VMSwitch"
-    New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch -VHDPath $VHDPath -Generation $Generation
+    New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch `
+        -VHDPath $VHDPath -Generation $Generation
     Set-VMProcessor -VMname $Name -count $CpuCores
     Write-Output "Starting $Name"
     Start-VM $Name
@@ -684,26 +779,23 @@ function New-MaaSImage {
     {
         Is-Administrator
         if (!$RunSysprep -and !$Force) {
-            Write-Warning "You chose not to run sysprep.
+            throw "You chose not to run sysprep.
                 This will build an unusable MaaS image.
                 If you really want to continue use the -Force:$true flag."
-            exit 1
         }
 
         Check-Prerequisites
         if ($SwitchName) {
             $switch = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
             if (!$switch) {
-                Write-Error "Selected vmswitch ($SwitchName) does not exist"
-                exit 1
+                throw "Selected vmswitch ($SwitchName) does not exist"
             }
             if ($switch.SwitchType -ne "External" -and !$Force) {
-                Write-Warning "Selected switch ($SwitchName) is not an external
+                throw "Selected switch ($SwitchName) is not an external
                     switch. If you really want to continue use the -Force:$true flag."
-                exit 1
             }
         } else {
-            $switch = GetOrCreateSwitch
+            $switch = GetOrCreate-Switch
         }
         $cpuCount = 0
         $coreCount = (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors
@@ -720,7 +812,7 @@ function New-MaaSImage {
         }
 
         try {
-            $barePath = GetPathWithoutExtension($MaaSImagePath)
+            $barePath = Get-PathWithoutExtension $MaaSImagePath
             $VirtualDiskPath = $barePath + ".vhdx"
             $RawImagePath = $barePath + ".img"
             New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
@@ -744,7 +836,7 @@ function New-MaaSImage {
 
             Shrink-VHDImage $VirtualDiskPath
 
-            Write-Output "Converting VHD to RAW"
+            Write-Host "Converting VHD to RAW"
             Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
             Remove-Item -Force $VirtualDiskPath
             Compress-Image $RawImagePath $MaaSImagePath
@@ -757,7 +849,7 @@ function New-MaaSImage {
 
 function New-WindowsCloudImage {
     [CmdletBinding()]
-    param(
+    Param(
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
         [string]$WimFilePath = "D:\Sources\install.wim",
         [parameter(Mandatory=$true)]
@@ -798,8 +890,11 @@ function New-WindowsCloudImage {
         Set-DotNetCWD
         Is-Administrator
 
-        $image = Get-WimFileImagesInfo -WimFilePath $wimFilePath | Where {$_.ImageName -eq $ImageName }
-        if (!$image) { throw 'Image "$ImageName" not found in WIM file "$WimFilePath"'}
+        $image = Get-WimFileImagesInfo -WimFilePath $wimFilePath | `
+            Where { $_.ImageName -eq $ImageName }
+        if (!$image) {
+            throw 'Image "$ImageName" not found in WIM file "$WimFilePath"'
+        }
         Check-DismVersionForImage $image
 
         if (Test-Path $VirtualDiskPath) {
@@ -809,7 +904,7 @@ function New-WindowsCloudImage {
         if ($VirtualDiskFormat -in @("VHD", "VHDX")) {
             $VHDPath = $VirtualDiskPath
         } else {
-            $VHDPath = "{0}.vhd" -f (GetPathWithoutExtension $VirtualDiskPath)
+            $VHDPath = "{0}.vhd" -f (Get-PathWithoutExtension $VirtualDiskPath)
             if (Test-Path $VHDPath) { Remove-Item -Force $VHDPath }
         }
 
@@ -823,33 +918,29 @@ function New-WindowsCloudImage {
                 "PersistDriverInstall"=$PersistDriverInstall;
             }
 
-            GenerateUnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
-            CopyUnattendResources $resourcesDir $image.ImageInstallationType $InstallMaaSHooks
-            GenerateConfigFile $resourcesDir $configValues
-            DownloadCloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
-            ApplyImage $winImagePath $wimFilePath $image.ImageIndex
-            CreateBCDBootConfig $drives[0] $drives[1] $DiskLayout $image
-            CheckEnablePowerShellInImage $winImagePath $image
+            Generate-UnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
+            Copy-UnattendResources $resourcesDir $image.ImageInstallationType $InstallMaaSHooks
+            Generate-ConfigFile $resourcesDir $configValues
+            Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
+            Apply-Image $winImagePath $wimFilePath $image.ImageIndex
+            Create-BCDBootConfig $drives[0] $drives[1] $DiskLayout $image
+            Check-EnablePowerShellInImage $winImagePath $image
 
-            if ($ExtraDriversPath) {
-                if ((Test-Path $ExtraDriversPath)) {
-                    AddDriversToImage $winImagePath $ExtraDriversPath
-                }
+            if ($ExtraDriversPath -and (Test-Path $ExtraDriversPath)) {
+                Add-DriversToImage $winImagePath $ExtraDriversPath
             }
-
-            if($VirtIOISOPath) {
+            if ($VirtIOISOPath) {
                 Add-VirtIODriversFromISO $winImagePath $image $VirtIOISOPath
             }
-            if($VirtIOBasePath) {
+            if ($VirtIOBasePath) {
                 Add-VirtIODrivers $winImagePath $image $VirtIOBasePath
             }
-
             if ($ExtraFeatures) {
-                EnableFeaturesInImage $winImagePath $ExtraFeatures
+                Enable-FeaturesInImage $winImagePath $ExtraFeatures
             }
         } finally {
             if (Test-Path $VHDPath) {
-                DetachVirtualDisk $VHDPath
+                Detach-VirtualDisk $VHDPath
             }
         }
 
