@@ -608,28 +608,28 @@ function Shrink-VHDImage {
         [Parameter(Mandatory=$true)]
         [string]$VirtualDiskPath
     )
-    Write-Output "Shrinking VHD to minimum size"
+    Write-Host "Shrinking VHD to minimum size"
 
     $vhdSize = (Get-VHD -Path $VirtualDiskPath).Size
-    Write-Output "Initial VHD size is: $vhdSize"
-    $OriginalDiskSize = ($vhdSize/1GB)
-    Write-Host "Original disk size: $OriginalDiskSize GB"
+    $vhdSizeGB = $vhdSize/1GB
+    Write-Host "Initial VHD size is: $vhdSizeGB GB"
 
-    $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | `
-        Get-Partition | Get-Volume).DriveLetter
+    $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | Get-Partition | Get-Volume).DriveLetter
     Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim
 
-    Write-Host "Current partition information:"
     $partitionInfo = Get-Partition -DriveLetter $Drive
     $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
     $CurrSize = ((Get-Partition -DriveLetter $Drive).Size/1GB)
     Write-Host "Current partition size: $CurrSize GB"
     # Leave at least 500MB for making sure Sysprep finishes successfuly
-    $NewSize = ([int](($MinSize + 500MB)/1GB) + 1)*1GB
-    Write-Host "New partition size: $NewSize GB"
+    $newSizeGB = [int](($MinSize + 500MB)/1GB) + 1
+    $NewSize = $newSizeGB*1GB
+    Write-Host "New partition size: $newSizeGB GB"
 
     if ($NewSize -gt $MinSize) {
-        Resize-Partition -DriveLetter $Drive -Size ($NewSize)
+        Execute-Retry {
+            Resize-Partition -DriveLetter $Drive -Size ($NewSize) -ErrorAction "Stop"
+        }
     }
     Dismount-VHD -Path $VirtualDiskPath
 
