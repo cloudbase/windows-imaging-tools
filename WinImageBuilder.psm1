@@ -391,14 +391,17 @@ function Enable-FeaturesInImage {
         [array]$featureNames
     )
     if ($featureNames) {
-        $featuresCmdStr = "& Dism.exe /image:${winImagePath} /Enable-Feature"
+        $cmd = @(
+        "Dism.exe",
+        ("/image:{0}" -f ${winImagePath}),
+        "/Enable-Feature"
+        )
         foreach ($featureName in $featureNames) {
-            $featuresCmdStr += " /FeatureName:$featureName"
+            $cmd += ("/FeatureName:{0}" -f $featureName)
         }
 
-        # Prefer Dism over Enable-WindowsOptionalFeature due to better error reporting
         Execute-Retry {
-            Invoke-Expression $featuresCmdStr
+            & $cmd[0] $cmd[1..$cmd.Length]
             if ($LASTEXITCODE) { throw "Dism failed to enable features: $featureNames" }
         }
     }
@@ -615,7 +618,7 @@ function Shrink-VHDImage {
     Write-Host "Initial VHD size is: $vhdSizeGB GB"
 
     $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | Get-Partition | Get-Volume).DriveLetter
-    Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim
+    Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim -SlabConsolidate
 
     $partitionInfo = Get-Partition -DriveLetter $Drive
     $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
