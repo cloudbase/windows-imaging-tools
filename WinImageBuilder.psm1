@@ -774,7 +774,7 @@ function New-MaaSImage {
         [string]$AdministratorPassword = "Pa`$`$w0rd",
         [parameter(Mandatory=$false)]
         [switch]$PersistDriverInstall = $false,
-        [array]$ExtraFeatures = @("Microsoft-Hyper-V"),
+        [array]$ExtraFeatures = @(),
         [parameter(Mandatory=$false)]
         [string]$ExtraDriversPath,
         [parameter(Mandatory=$false)]
@@ -882,7 +882,7 @@ function New-WindowsCloudImage {
         [parameter(Mandatory=$false)]
         [string]$VirtIOISOPath,
         [parameter(Mandatory=$false)]
-        [array]$ExtraFeatures = @("Microsoft-Hyper-V"),
+        [array]$ExtraFeatures = @(),
         [parameter(Mandatory=$false)]
         [string]$ExtraDriversPath,
         [parameter(Mandatory=$false)]
