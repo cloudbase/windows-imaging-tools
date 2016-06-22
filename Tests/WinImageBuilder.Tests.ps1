@@ -115,6 +115,7 @@ Describe "Test New-WindowsCloudImage" {
     It "Should create a windows image" {
         New-WindowsCloudImage -Wimfilepath "fakeWimFilepath" `
                     -ImageName "fakeImageName" `
+                    -ExtraFeatures @("Windows-Hyper-V") `
                     -SizeBytes 1 -VirtualDiskPath "fakeVirtualDiskPath" | Should Be 0
     }
 
