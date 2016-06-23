@@ -678,6 +678,7 @@ function Check-Prerequisites {
 
 function GetOrCreate-Switch {
     $vmSwitches = Get-VMSwitch -SwitchType external
+    $vmswitch = $null
     if ($vmSwitches) {
         foreach ($i in $vmSwitches) {
             $name = $i.Name
@@ -776,7 +777,9 @@ function New-MaaSImage {
         [parameter(Mandatory=$false)]
         [string]$SwitchName,
         [parameter(Mandatory=$false)]
-        [switch]$Force=$false
+        [switch]$Force=$false,
+        [parameter(Mandatory=$false)]
+        [switch]$PurgeUpdates
     )
     PROCESS
     {
@@ -823,7 +826,7 @@ function New-MaaSImage {
                 -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
                 -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
                 -InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
-                -DiskLayout $DiskLayout
+                -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates
 
             if ($RunSysprep) {
                 if($DiskLayout -eq "UEFI") {
@@ -885,7 +888,9 @@ function New-WindowsCloudImage {
         [parameter(Mandatory=$false)]
         [switch]$InstallMaaSHooks,
         [parameter(Mandatory=$false)]
-        [string]$VirtIOBasePath
+        [string]$VirtIOBasePath,
+        [parameter(Mandatory=$false)]
+        [switch]$PurgeUpdates
     )
 
     PROCESS
@@ -919,6 +924,7 @@ function New-WindowsCloudImage {
             $configValues = @{
                 "InstallUpdates"=$InstallUpdates;
                 "PersistDriverInstall"=$PersistDriverInstall;
+                "PurgeUpdates"=$PurgeUpdates;
             }
 
             Generate-UnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
