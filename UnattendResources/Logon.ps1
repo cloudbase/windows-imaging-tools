@@ -74,43 +74,41 @@ function Release-IP {
         }
 }
 
+function Install-WindowsUpdates {
+    Import-Module "$resourcesDir\WindowsUpdates\WindowsUpdates"
+    $BaseOSKernelVersion = [System.Environment]::OSVersion.Version
+    $OSKernelVersion = ($BaseOSKernelVersion.Major.ToString() + "." + $BaseOSKernelVersion.Minor.ToString())
+    $KBIdsBlacklist = @{
+        "6.1" = @("KB2808679", "KB2894844", "KB3019978");
+        "6.2" = @("KB3013538", "KB3042058")
+        "6.3" = @("KB3013538", "KB3042058")
+    }
+    $excludedUpdates = $KBIdsBlacklist[$OSKernelVersion]
+
+    $updates = Get-WindowsUpdate -Verbose -ExcludeKBId $KBIdsBlacklist
+    $maximumUpdates = 20
+    if (!$updates.Count) {
+        $updates = [array]$updates
+    }
+    if ($updates) {
+        $availableUpdatesNumber = $updates.Count
+        Write-Host "Found $availableUpdatesNumber updates. Installing..."
+        Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
+        Restart-Computer -Force
+    }
+}
+
 try
 {
     Import-Module "$resourcesDir\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PersistDriverInstall" -Default $true -AsBoolean
 
-    if($installUpdates)
-    {
-        if (!(Test-Path "$resourcesDir\PSWindowsUpdate"))
-        {
-            #Fixes Windows Server 2008 R2 inexistent Unblock-File command Bug
-            if ($(Get-Host).version.major -eq 2)
-            {
-                $psWindowsUpdatePath = "$resourcesDir\PSWindowsUpdate_1.4.5.zip"
-            }
-            else
-            {
-                $psWindowsUpdatePath = "$resourcesDir\PSWindowsUpdate.zip"
-            }
-
-            & "$resourcesDir\7za.exe" x $psWindowsUpdatePath $("-o" + $resourcesDir)
-            if($LASTEXITCODE) { throw "7za.exe failed to extract PSWindowsUpdate" }
-        }
-
-        $Host.UI.RawUI.WindowTitle = "Installing updates..."
-
-        Import-Module "$resourcesDir\PSWindowsUpdate"
-
-        Get-WUInstall -AcceptAll -IgnoreReboot -IgnoreUserInput -NotCategory "Language packs"
-        if (Get-WURebootStatus -Silent)
-        {
-            $Host.UI.RawUI.WindowTitle = "Updates installation finished. Rebooting."
-            shutdown /r /t 0
-            exit 0
-        }
-    }
     
+    if ($installUpdates) {
+        Install-WindowsUpdates
+    }
+
     Clean-WindowsUpdates
 
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
