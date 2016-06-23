@@ -779,7 +779,9 @@ function New-MaaSImage {
         [parameter(Mandatory=$false)]
         [switch]$Force=$false,
         [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates
+        [switch]$PurgeUpdates,
+        [parameter(Mandatory=$false)]
+        [switch]$DisableSwap
     )
     PROCESS
     {
@@ -826,7 +828,7 @@ function New-MaaSImage {
                 -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
                 -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
                 -InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
-                -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates
+                -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap
 
             if ($RunSysprep) {
                 if($DiskLayout -eq "UEFI") {
@@ -890,7 +892,9 @@ function New-WindowsCloudImage {
         [parameter(Mandatory=$false)]
         [string]$VirtIOBasePath,
         [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates
+        [switch]$PurgeUpdates,
+        [parameter(Mandatory=$false)]
+        [switch]$DisableSwap
     )
 
     PROCESS
@@ -925,6 +929,7 @@ function New-WindowsCloudImage {
                 "InstallUpdates"=$InstallUpdates;
                 "PersistDriverInstall"=$PersistDriverInstall;
                 "PurgeUpdates"=$PurgeUpdates;
+                "DisableSwap"=$DisableSwap;
             }
 
             Generate-UnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
