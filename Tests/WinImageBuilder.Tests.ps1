@@ -119,6 +119,20 @@ Describe "Test New-WindowsCloudImage" {
                     -SizeBytes 1 -VirtualDiskPath "fakeVirtualDiskPath" | Should Be 0
     }
 
+    It "Should accept valid product key" {
+        New-WindowsCloudImage -Wimfilepath "fakeWimFilepath" `
+                    -ImageName "fakeImageName" `
+                    -ProductKey "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" `
+                    -SizeBytes 1 -VirtualDiskPath "fakeVirtualDiskPath" | Should Be 0
+    }
+
+    It "Should throw on invalid product key" {
+        { New-WindowsCloudImage -Wimfilepath "fakeWimFilepath" `
+                    -ImageName "fakeImageName" `
+                    -ProductKey "foo" `
+                    -SizeBytes 1 -VirtualDiskPath "fakeVirtualDiskPath" } | Should Throw
+    }
+
     It "should run all mocked commands" {
         Assert-VerifiableMocks
     }
@@ -146,6 +160,22 @@ Describe "Test New-MaaSImage" {
         New-MaaSImage -Wimfilepath "fakeWimFilepath" `
                     -ImageName "fakeImageName" `
                     -SizeBytes 1 -MaaSImagePath "fakeMAASPath" | Should Be 0
+
+
+                    }
+
+    It "Should accept valid product key" {
+        New-MaaSImage -Wimfilepath "fakeWimFilepath" `
+                    -ImageName "fakeImageName" `
+                    -ProductKey "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" `
+                    -SizeBytes 1 -MaaSImagePath "fakeMAASPath" | Should Be 0
+    }
+
+    It "Should throw on invalid product key" {
+        { New-MaaSImage -Wimfilepath "fakeWimFilepath" `
+                    -ImageName "fakeImageName" `
+                    -ProductKey "foo" `
+                    -SizeBytes 1 -MaaSImagePath "fakeMAASPath" } | Should Throw
     }
 
     It "should run all mocked commands" {
