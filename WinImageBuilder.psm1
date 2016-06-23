@@ -607,7 +607,7 @@ function Compress-Image {
     Write-Output "MaaS image is ready and available at: $ImagePath"
 }
 
-function Shrink-VHDImage {
+function Resize-VHDImage {
     Param(
         [Parameter(Mandatory=$true)]
         [string]$VirtualDiskPath,
@@ -621,23 +621,29 @@ function Shrink-VHDImage {
     Write-Host "Initial VHD size is: $vhdSizeGB GB"
 
     $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | Get-Partition | Get-Volume).DriveLetter
-    Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim -SlabConsolidate
+    try
+    {
+        Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim -SlabConsolidate
 
-    $partitionInfo = Get-Partition -DriveLetter $Drive
-    $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
-    $CurrSize = ((Get-Partition -DriveLetter $Drive).Size/1GB)
-    Write-Host "Current partition size: $CurrSize GB"
-    # Leave free space for making sure Sysprep finishes successfuly
-    $newSizeGB = [int](($MinSize + $FreeSpace)/1GB) + 1
-    $NewSize = $newSizeGB*1GB
-    Write-Host "New partition size: $newSizeGB GB"
+        $partitionInfo = Get-Partition -DriveLetter $Drive
+        $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
+        $CurrSize = ((Get-Partition -DriveLetter $Drive).Size/1GB)
+        Write-Host "Current partition size: $CurrSize GB"
+        # Leave free space for making sure Sysprep finishes successfuly
+        $newSizeGB = [int](($MinSize + $FreeSpace)/1GB) + 1
+        $NewSize = $newSizeGB*1GB
+        Write-Host "New partition size: $newSizeGB GB"
 
-    if ($NewSize -gt $MinSize) {
-        Execute-Retry {
-            Resize-Partition -DriveLetter $Drive -Size ($NewSize) -ErrorAction "Stop"
+        if ($NewSize -gt $MinSize) {
+            Execute-Retry {
+                Resize-Partition -DriveLetter $Drive -Size ($NewSize) -ErrorAction "Stop"
+            }
         }
     }
-    Dismount-VHD -Path $VirtualDiskPath
+    finally
+    {
+        Dismount-VHD -Path $VirtualDiskPath
+    }
 
     $vhdMinSize = (Get-VHD -Path $VirtualDiskPath).MinimumSize
     if ($vhdSize -gt $vhdMinSize) {
@@ -841,7 +847,7 @@ function New-MaaSImage {
                     -VMSwitch $switch.Name -CpuCores $CpuCores -Generation $generation
             }
 
-            Shrink-VHDImage $VirtualDiskPath
+            Resize-VHDImage $VirtualDiskPath
 
             Write-Host "Converting VHD to RAW"
             Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
@@ -959,4 +965,4 @@ function New-WindowsCloudImage {
     }
 }
 
-Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage
+Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage
