@@ -86,7 +86,7 @@ function Install-WindowsUpdates {
     $BaseOSKernelVersion = [System.Environment]::OSVersion.Version
     $OSKernelVersion = ($BaseOSKernelVersion.Major.ToString() + "." + $BaseOSKernelVersion.Minor.ToString())
     $KBIdsBlacklist = @{
-        "6.1" = @("KB2808679", "KB2894844", "KB3019978");
+        "6.1" = @("KB3013538", "KB2808679", "KB2894844", "KB3019978");
         "6.2" = @("KB3013538", "KB3042058")
         "6.3" = @("KB3013538", "KB3042058")
     }
