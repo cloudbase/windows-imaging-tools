@@ -35,7 +35,7 @@ function Execute-Retry {
 
     $currErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-  
+
     $retryCount = 0
     while ($true) {
         try {
@@ -236,6 +236,7 @@ function Generate-UnattendXml {
         [string]$outUnattendXmlPath,
         [parameter(Mandatory=$true)]
         [object]$image,
+        [ValidatePattern("^\S{5}-\S{5}-\S{5}-\S{5}-\S{5}")]
         [parameter(Mandatory=$false)]
         [string]$productKey,
         [parameter(Mandatory=$false)]
@@ -754,6 +755,7 @@ function New-MaaSImage {
         [Uint64]$SizeBytes,
         [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
         [string]$DiskLayout = "BIOS",
+        [ValidatePattern("^\S{5}-\S{5}-\S{5}-\S{5}-\S{5}")]
         [parameter(Mandatory=$false)]
         [string]$ProductKey,
         [parameter(Mandatory=$false)]
@@ -861,6 +863,7 @@ function New-WindowsCloudImage {
         [string]$VirtualDiskPath,
         [parameter(Mandatory=$true)]
         [Uint64]$SizeBytes,
+        [ValidatePattern("^\S{5}-\S{5}-\S{5}-\S{5}-\S{5}")]
         [parameter(Mandatory=$false)]
         [string]$ProductKey,
         [parameter(Mandatory=$false)]
