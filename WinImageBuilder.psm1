@@ -798,7 +798,63 @@ function New-MaaSImage {
     )
     PROCESS
     {
-        Write-Host ("MAAS image generation started at: {0}" -f @(Get-Date))
+        New-WindowsOnlineImage -Type "MAAS" -WimFilePath $WimFilePath -ImageName $ImageName `
+            -WindowsImagePath $MaaSImagePath -SizeBytes $SizeBytes -DiskLayout $DiskLayout `
+            -ProductKey $ProductKey -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
+            -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
+            -ExtraDriversPath $ExtraDriversPath -Memory $Memory -CpuCores $CpuCores `
+            -RunSysprep:$RunSysprep -SwitchName $SwitchName -Force:$Force -PurgeUpdates:$PurgeUpdates `
+            -DisableSwap:$DisableSwap
+    }
+}
+
+function New-WindowsOnlineImage {
+    [CmdletBinding()]
+    param
+    (
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$WimFilePath = "D:\Sources\install.wim",
+        [parameter(Mandatory=$true)]
+        [string]$ImageName,
+        [parameter(Mandatory=$true)]
+        [string]$WindowsImagePath,
+        [parameter(Mandatory=$true)]
+        [Uint64]$SizeBytes,
+        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
+        [string]$DiskLayout = "BIOS",
+        [parameter(Mandatory=$false)]
+        [string]$ProductKey,
+        [parameter(Mandatory=$false)]
+        [string]$VirtIOISOPath,
+        [parameter(Mandatory=$false)]
+        [switch]$InstallUpdates,
+        [parameter(Mandatory=$false)]
+        [string]$AdministratorPassword = "Pa`$`$w0rd",
+        [array]$ExtraFeatures = @(),
+        [parameter(Mandatory=$false)]
+        [string]$ExtraDriversPath,
+        [parameter(Mandatory=$false)]
+        [switch]$PersistDriverInstall = $true,
+        [parameter(Mandatory=$false)]
+        [Uint64]$Memory=2GB,
+        [parameter(Mandatory=$false)]
+        [int]$CpuCores=1,
+        [parameter(Mandatory=$false)]
+        [switch]$RunSysprep=$true,
+        [parameter(Mandatory=$false)]
+        [string]$SwitchName,
+        [parameter(Mandatory=$false)]
+        [switch]$Force=$false,
+        [ValidateSet("MAAS", "KVM", "HYPER-V", ignorecase=$false)]
+        [string]$Type = "MAAS",
+        [parameter(Mandatory=$false)]
+        [switch]$PurgeUpdates,
+        [parameter(Mandatory=$false)]
+        [switch]$DisableSwap
+    )
+    PROCESS
+    {
+        Write-Host ("Windows online image generation started at: {0}" -f @(Get-Date))
         Is-Administrator
         if (!$RunSysprep -and !$Force) {
             throw "You chose not to run sysprep.
@@ -814,7 +870,7 @@ function New-MaaSImage {
             }
             if ($switch.SwitchType -ne "External" -and !$Force) {
                 throw "Selected switch ($SwitchName) is not an external
-                    switch. If you really want to continue use the -Force:$true flag."
+-                   switch. If you really want to continue use the -Force:$true flag."
             }
         } else {
             $switch = GetOrCreate-Switch
@@ -834,14 +890,20 @@ function New-MaaSImage {
         }
 
         try {
-            $barePath = Get-PathWithoutExtension $MaaSImagePath
+            $barePath = Get-PathWithoutExtension $WindowsImagePath
             $VirtualDiskPath = $barePath + ".vhdx"
-            $RawImagePath = $barePath + ".img"
+            $InstallMaaSHooks = $false
+            if ($Type -eq "MAAS") {
+                $InstallMaaSHooks = $true
+            }
+            if ($Type -eq "KVM") {
+                $PersistDriverInstall = $false
+            }
             New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
                 -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
                 -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
                 -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-                -InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
+                -InstallMaaSHooks:$InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
                 -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap
 
             if ($RunSysprep) {
@@ -851,24 +913,34 @@ function New-MaaSImage {
                     $generation = "1"
                 }
 
-                $Name = "MaaS-Sysprep" + (Get-Random)
+                $Name = "WindowsImageOnline-Sysprep" + (Get-Random)
                 Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath `
-                    -VMSwitch $switch.Name -CpuCores $CpuCores -Generation $generation
+                    -VMSwitch $switch.Name -CpuCores $CpuCores `
+                    -Generation $generation
             }
 
             Shrink-VHDImage $VirtualDiskPath
 
-            Write-Host "Converting VHD to RAW"
-            Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
-            Remove-Item -Force $VirtualDiskPath
-            Compress-Image $RawImagePath $MaaSImagePath
+            if ($Type -eq "MAAS") {
+                $RawImagePath = $barePath + ".img"
+                Write-Host "Converting VHD to RAW"
+                Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
+                Remove-Item -Force $VirtualDiskPath
+                Compress-Image $RawImagePath $WindowsImagePath
+            }
+
+            if ($Type -eq "KVM") {
+                $Qcow2ImagePath = $barePath + ".qcow2"
+                Write-Host "Converting VHD to QCow2"
+                Convert-VirtualDisk $VirtualDiskPath $Qcow2ImagePath "qcow2"
+                Remove-Item -Force $VirtualDiskPath
+            }
         } catch {
-            Remove-Item -Force $MaaSImagePath* -ErrorAction SilentlyContinue
+            Remove-Item -Force $WindowsImagePath* -ErrorAction SilentlyContinue
             Throw
         }
-        Write-Host ("MAAS image generation finished at: {0}" -f @((Get-Date)))
+        Write-Host ("Windows online image generation finished at: {0}" -f @((Get-Date)))
     }
-
 }
 
 function New-WindowsCloudImage {
@@ -983,4 +1055,5 @@ function New-WindowsCloudImage {
     }
 }
 
-Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage
+Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage,
+    New-WindowsOnlineImage
