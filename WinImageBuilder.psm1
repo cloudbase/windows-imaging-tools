@@ -436,6 +436,14 @@ function Is-IsoFile {
     return ([System.IO.Path]::GetExtension($FilePath) -eq ".iso")
 }
 
+function Is-ServerInstalationType {
+    Param(
+        [parameter(Mandatory=$true)]
+        [object]$image
+    )
+    return ($image.ImageInstallationType -in @("Server", "Server Core"))
+}
+
 function Add-VirtIODrivers {
     Param(
         [parameter(Mandatory=$true)]
@@ -467,20 +475,20 @@ function Add-VirtIODrivers {
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0) {
         $virtioVer = "2k8"
     } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1) {
-        if ($image.ImageInstallationType -eq "Server") {
+        if (Is-ServerInstalationType $image) {
             $virtioVer = "2k8r2"
         } else {
             $virtioVer = "w7"
         }
     } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 2) {
-        if ($image.ImageInstallationType -eq "Server") {
+        if (Is-ServerInstalationType $image) {
             $virtioVer = "2k12"
         } else {
             $virtioVer = "w8"
         }
     } elseif (($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 3) `
         -or $image.ImageVersion.Major -gt 6) {
-        if ($image.ImageInstallationType -eq "Server") {
+        if (Is-ServerInstalationType $image) {
             $virtioVer = "2k12R2"
         } else {
             $virtioVer = "w8.1"
