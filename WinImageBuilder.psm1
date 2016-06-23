@@ -236,7 +236,6 @@ function Generate-UnattendXml {
         [string]$outUnattendXmlPath,
         [parameter(Mandatory=$true)]
         [object]$image,
-        [ValidatePattern("^\S{5}-\S{5}-\S{5}-\S{5}-\S{5}")]
         [parameter(Mandatory=$false)]
         [string]$productKey,
         [parameter(Mandatory=$false)]
