@@ -136,7 +136,7 @@ Describe "Test New-MaaSImage" {
     Mock Get-PathWithoutExtension -Verifiable -ModuleName $moduleName { return "fakePath" }
     Mock New-WindowsCloudImage -Verifiable -ModuleName $moduleName { return 0 }
     Mock Run-Sysprep -Verifiable -ModuleName $moduleName  { return 0 }
-    Mock Shrink-VHDImage -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Resize-VHDImage -Verifiable -ModuleName $moduleName { return 0 }
     Mock Convert-VirtualDisk -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-Random -Verifiable -ModuleName $moduleName { return 1 }
     Mock Remove-Item -Verifiable -ModuleName $moduleName { return 0 }
