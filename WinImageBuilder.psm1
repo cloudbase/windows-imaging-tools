@@ -610,7 +610,9 @@ function Compress-Image {
 function Shrink-VHDImage {
     Param(
         [Parameter(Mandatory=$true)]
-        [string]$VirtualDiskPath
+        [string]$VirtualDiskPath,
+        [parameter(Mandatory=$false)]
+        [Uint64]$FreeSpace=500MB
     )
     Write-Host "Shrinking VHD to minimum size"
 
@@ -625,8 +627,8 @@ function Shrink-VHDImage {
     $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
     $CurrSize = ((Get-Partition -DriveLetter $Drive).Size/1GB)
     Write-Host "Current partition size: $CurrSize GB"
-    # Leave at least 500MB for making sure Sysprep finishes successfuly
-    $newSizeGB = [int](($MinSize + 500MB)/1GB) + 1
+    # Leave free space for making sure Sysprep finishes successfuly
+    $newSizeGB = [int](($MinSize + $FreeSpace)/1GB) + 1
     $NewSize = $newSizeGB*1GB
     Write-Host "New partition size: $newSizeGB GB"
 
