@@ -44,10 +44,17 @@ function Clean-UpdateResources {
 }
 
 function Clean-WindowsUpdates {
+    Param(
+        $PurgeUpdates
+    )
     $HOST.UI.RawUI.WindowTitle = "Running Dism cleanup..."
     if (([System.Environment]::OSVersion.Version.Major -gt 6) -or ([System.Environment]::OSVersion.Version.Minor -ge 2))
     {
-        Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+        if (!$PurgeUpdates) {
+            Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+        } else {
+            Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase
+        }
         if ($LASTEXITCODE)
         {
             throw "Dism.exe clean failed"
@@ -103,13 +110,14 @@ try
     Import-Module "$resourcesDir\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PersistDriverInstall" -Default $true -AsBoolean
+    $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PurgeUpdates" -Default $false -AsBoolean
 
     if($installUpdates)
     {
         Install-WindowsUpdates
     }
     
-    Clean-WindowsUpdates
+    Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
 
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
     
