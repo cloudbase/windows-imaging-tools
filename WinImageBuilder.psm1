@@ -903,7 +903,7 @@ function New-WindowsOnlineImage {
         try {
             $barePath = Get-PathWithoutExtension $WindowsImagePath
             $VirtualDiskPath = $barePath + ".vhdx"
-            InstallMaaSHooks = $false
+            $InstallMaaSHooks = $false
             if ($Type -eq "MAAS") {
                 $InstallMaaSHooks = $true
             }
@@ -915,7 +915,7 @@ function New-WindowsOnlineImage {
                 -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
                 -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
                 -InstallMaaSHooks:$InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
-                -DiskLayout $DiskLayout -PurgeUpdates $PurgeUpdates
+                -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap
 
             if ($RunSysprep) {
                 if($DiskLayout -eq "UEFI") {
