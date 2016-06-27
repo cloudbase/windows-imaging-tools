@@ -105,12 +105,58 @@ function Install-WindowsUpdates {
     }
 }
 
+function ExecRetry($command, $maxRetryCount=4, $retryInterval=4)
+{
+    $currErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+
+    $retryCount = 0
+    while ($true)
+    {
+        try
+        {
+            $res = Invoke-Command -ScriptBlock $command
+            $ErrorActionPreference = $currErrorActionPreference
+            return $res
+        }
+          catch [System.Exception]
+        {
+            $retryCount++
+            if ($retryCount -ge $maxRetryCount)
+            {
+                $ErrorActionPreference = $currErrorActionPreference
+                throw
+            }
+            else
+            {
+                if($_) {
+                Write-Warning $_
+                }
+                Start-Sleep $retryInterval
+            }
+        }
+    }
+}
+
+function Disable-Swap {
+    $computerSystem = Get-WmiObject Win32_ComputerSystem
+    if ($computerSystem.AutomaticManagedPagefile) {
+        $computerSystem.AutomaticManagedPagefile = $False
+        $computerSystem.Put()
+    }
+    $pageFileSetting = Get-WmiObject Win32_PageFileSetting
+    if ($pageFileSetting) {
+        $pageFileSetting.Delete()
+    }
+}
+
 try
 {
     Import-Module "$resourcesDir\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PersistDriverInstall" -Default $true -AsBoolean
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PurgeUpdates" -Default $false -AsBoolean
+    $disableSwap = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "DisableSwap" -Default $false -AsBoolean
 
     if($installUpdates)
     {
@@ -118,6 +164,12 @@ try
     }
     
     Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
+
+    if ($disableSwap) {
+        ExecRetry {
+            Disable-Swap
+        }
+    }
 
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
     
