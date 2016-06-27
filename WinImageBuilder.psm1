@@ -635,8 +635,13 @@ function Resize-VHDImage {
         Write-Host "New partition size: $newSizeGB GB"
 
         if ($NewSize -gt $MinSize) {
+            $global:i = 0
+            $step = 100MB
             Execute-Retry {
-                Resize-Partition -DriveLetter $Drive -Size ($NewSize) -ErrorAction "Stop"
+                $sizeIncreased = ($NewSize + ($step * $global:i))
+                Write-Host "Size increased: $sizeIncreased"
+                $global:i = $global:i + 1
+                Resize-Partition -DriveLetter $Drive -Size $sizeIncreased -ErrorAction "Stop"
             }
         }
     }
@@ -795,6 +800,7 @@ function New-MaaSImage {
     )
     PROCESS
     {
+        Write-Host ("MAAS Image generation started at: {0}" -f @(Get-Date))
         Is-Administrator
         if (!$RunSysprep -and !$Force) {
             throw "You chose not to run sysprep.
@@ -862,7 +868,9 @@ function New-MaaSImage {
             Remove-Item -Force $MaaSImagePath* -ErrorAction SilentlyContinue
             Throw
         }
+        Write-Host ("MAAS image generation finished at: {0}" -f @((Get-Date)))
     }
+
 }
 
 function New-WindowsCloudImage {
@@ -910,6 +918,7 @@ function New-WindowsCloudImage {
 
     PROCESS
     {
+        Write-Host ("Image generation started at: {0}" -f @(Get-Date))
         Set-DotNetCWD
         Is-Administrator
 
@@ -973,6 +982,7 @@ function New-WindowsCloudImage {
             Convert-VirtualDisk $VHDPath $VirtualDiskPath $VirtualDiskFormat
             Remove-Item -Force $VHDPath
         }
+        Write-Host ("Image generation finished at: {0}" -f @(Get-Date))
     }
 }
 
