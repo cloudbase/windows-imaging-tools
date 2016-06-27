@@ -789,7 +789,9 @@ function New-MaaSImage {
         [parameter(Mandatory=$false)]
         [switch]$Force=$false,
         [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates
+        [switch]$PurgeUpdates,
+        [parameter(Mandatory=$false)]
+        [switch]$DisableSwap
     )
     PROCESS
     {
@@ -901,7 +903,9 @@ function New-WindowsCloudImage {
         [parameter(Mandatory=$false)]
         [string]$VirtIOBasePath,
         [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates
+        [switch]$PurgeUpdates,
+        [parameter(Mandatory=$false)]
+        [switch]$DisableSwap
     )
 
     PROCESS
@@ -936,6 +940,7 @@ function New-WindowsCloudImage {
                 "InstallUpdates"=$InstallUpdates;
                 "PersistDriverInstall"=$PersistDriverInstall;
                 "PurgeUpdates"=$PurgeUpdates;
+                "DisableSwap"=$DisableSwap;
             }
 
             Generate-UnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
