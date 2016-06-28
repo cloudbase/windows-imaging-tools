@@ -102,6 +102,7 @@ function Install-WindowsUpdates {
         Write-Host "Found $availableUpdatesNumber updates. Installing..."
         Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
         Restart-Computer -Force
+        exit 0
     }
 }
 
