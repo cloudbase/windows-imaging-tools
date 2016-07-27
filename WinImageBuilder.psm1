@@ -1077,6 +1077,125 @@ function New-WindowsCloudImage {
     }
 }
 
+function New-WindowsFromGoldenImage {
+    [CmdletBinding()]
+    param
+    (
+        [parameter(Mandatory=$true)]
+        [string]$WindowsImageVHDXPath,
+        [parameter(Mandatory=$true)]
+        [Uint64]$SizeBytes,
+        [parameter(Mandatory=$false)]
+        [string]$ProductKey,
+        [parameter(Mandatory=$false)]
+        [string]$VirtIOISOPath,
+        [parameter(Mandatory=$false)]
+        [switch]$InstallUpdates,
+        [array]$ExtraFeatures = @("Microsoft-Hyper-V"),
+        [parameter(Mandatory=$false)]
+        [string]$ExtraDriversPath,
+        [parameter(Mandatory=$false)]
+        [switch]$PersistDriverInstall = $true,
+        [parameter(Mandatory=$false)]
+        [Uint64]$Memory=2GB,
+        [parameter(Mandatory=$false)]
+        [int]$CpuCores=1,
+        [parameter(Mandatory=$false)]
+        [switch]$RunSysprep=$true,
+        [parameter(Mandatory=$false)]
+        [string]$SwitchName,
+        [parameter(Mandatory=$false)]
+        [switch]$Force=$false,
+        [ValidateSet("MAAS", "KVM", "HYPER-V", ignorecase=$false)]
+        [string]$Type = "MAAS",
+        [parameter(Mandatory=$false)]
+        [switch]$PurgeUpdates,
+        [parameter(Mandatory=$false)]
+        [switch]$DisableSwap
+    )
+    PROCESS
+    {
+        try {
+            Execute-Retry {
+                Resize-VHD -Path $WindowsImageVHDXPath -SizeBytes $SizeBytes
+            }
+
+            Mount-VHD -Path $WindowsImageVHDXPath | Out-Null
+            $driveLetterGold = ((Get-DiskImage -ImagePath $WindowsImageVHDXPath | Get-Disk | Get-Partition | Get-Volume).DriveLetter + ":")
+            if ($ExtraDriversPath) {
+                Dism /Image:$driveLetterGold /Add-Driver /Driver:$ExtraDriversPath /ForceUnsigned /Recurse
+            }
+
+            if ($ExtraFeatures) {
+                foreach ($Feature in $ExtraFeatures) {
+                    Execute-Retry {
+                        Dism /Image:$driveLetterGold /Enable-Feature /FeatureName:$Feature /ALL
+                    }
+                }
+            }
+            $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
+            Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType "Server Standard"
+
+            Download-CloudbaseInit $resourcesDir "AMD64"
+            $configValues = @{
+                "InstallUpdates"=$InstallUpdates;
+                "PersistDriverInstall"=$PersistDriverInstall;
+                "PurgeUpdates"=$PurgeUpdates;
+                "DisableSwap"=$DisableSwap;
+                "GoldImage"=$false;
+            }
+
+            Generate-ConfigFile $resourcesDir $configValues
+            Dismount-VHD -Path $WindowsImageVHDXPath
+
+            $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
+            if ($SwitchName) {
+                $switch = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
+                if (!$switch) {
+                    throw "Selected vmswitch ($SwitchName) does not exist"
+                }
+                if ($switch.SwitchType -ne "External" -and !$Force) {
+                    throw "Selected switch ($SwitchName) is not an external
+                        switch. If you really want to continue use the -Force:$true flag."
+                }
+            } else {
+                $switch = GetOrCreate-Switch
+            }
+            New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $switch.Name -VHDPath $WindowsImageVHDXPath
+            Set-VMProcessor -VMname $Name -count $CpuCores
+
+            Start-VM $Name
+            Start-Sleep 10
+            Wait-ForVMShutdown $Name
+            Remove-VM $Name -Confirm:$False -Force
+
+           Resize-VHDImage $WindowsImageVHDXPath
+
+           $barePath = Get-PathWithoutExtension $WindowsImageVHDXPath
+
+           if ($Type -eq "MAAS") {
+                $RawImagePath = $barePath + ".img"
+                Write-Output "Converting VHD to RAW"
+                Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
+                Remove-Item -Force $WindowsImageVHDXPath
+                Compress-Image $RawImagePath $WindowsImagePath
+            }
+            if ($Type -eq "KVM") {
+                $Qcow2ImagePath = $barePath + ".qcow2"
+                Write-Output "Converting VHD to QCow2"
+                Convert-VirtualDisk $VirtualDiskPath $Qcow2ImagePath "qcow2"
+                Remove-Item -Force $WindowsImageVHDXPath
+            }
+        } catch {
+            Write-Host $_
+            try {
+                Get-VHD $WindowsImageVHDXPath | Dismount-VHD
+            }
+            catch {}
+        }
+    }
+}
+
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
-    New-WindowsOnlineImage
+    New-WindowsOnlineImage, New-WindowsFromGoldenImage
 
