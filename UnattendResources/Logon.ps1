@@ -92,7 +92,9 @@ function Install-WindowsUpdates {
     }
     $excludedUpdates = $KBIdsBlacklist[$OSKernelVersion]
 
-    $updates = Get-WindowsUpdate -Verbose -ExcludeKBId $excludedUpdates
+    $updates = ExecRetry {
+        Get-WindowsUpdate -Verbose -ExcludeKBId $excludedUpdates
+    } -maxRetryCount 30 -retryInterval 1
     $maximumUpdates = 20
     if (!$updates.Count) {
         $updates = [array]$updates
