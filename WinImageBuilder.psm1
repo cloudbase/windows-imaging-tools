@@ -1041,6 +1041,7 @@ function New-WindowsCloudImage {
                 "PurgeUpdates"=$PurgeUpdates;
                 "DisableSwap"=$DisableSwap;
                 "GoldImage"=$GoldImage;
+                "ProductKey"=$ProductKey;
             }
 
             Generate-UnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword

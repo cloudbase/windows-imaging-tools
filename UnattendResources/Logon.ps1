@@ -153,6 +153,19 @@ function Disable-Swap {
     }
 }
 
+function Skip-Rearm {
+    #Note: On 2008R2 we need to make sure that the sysprep process will not reset the activation status.
+    # We can set the registry key SkipRearm to 1 in order to stop this.
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform\' -Name SkipRearm -Value '1'
+}
+
+function Activate-Windows {
+    #Note: On 2008R2 the initial product key activation fails
+    # so we need to manually activate it using slmgr
+    slmgr /ipk $productKey
+    slmgr /ato
+}
+
 try
 {
     Import-Module "$resourcesDir\ini.psm1"
@@ -163,6 +176,12 @@ try
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "GoldImage" -Default $false -AsBoolean
 
     $p_dirty = Start-Process -NoNewWindow -FilePath "powershell.exe" {Add-Type -AssemblyName System.Windows.Forms;while (1) {[System.Windows.Forms.SendKeys]::SendWait('~');start-sleep 50;}} -PassThru
+    $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "ProductKey" -Default $null
+
+    if ($productKey) {
+        Activate-Windows
+        Skip-Rearm
+    }
 
     if($installUpdates)
     {
@@ -200,14 +219,15 @@ try
     {
         throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
     }
+
+    $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
+    & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
+
     Run-Defragment
 
     Clean-UpdateResources
 
     Release-IP
-
-    $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
-    & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
 
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
     $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
