@@ -314,7 +314,7 @@ function Copy-UnattendResources {
         $d = New-Item -Type Directory $resourcesDir
     }
     Write-Host "Copying: $localResourcesDir $resourcesDir"
-    Copy-Item -Recurse "$localResourcesDir\*" $resourcesDir
+    Copy-Item -Recurse "$localResourcesDir\*" $resourcesDir -Force
 
     if ($imageInstallationType -eq "Server Core") {
         # Skip the wallpaper on server core
@@ -1084,6 +1084,8 @@ function New-WindowsFromGoldenImage {
         [parameter(Mandatory=$true)]
         [string]$WindowsImageVHDXPath,
         [parameter(Mandatory=$true)]
+        [string]$WindowsImageTargetPath,
+        [parameter(Mandatory=$true)]
         [Uint64]$SizeBytes,
         [parameter(Mandatory=$false)]
         [string]$ProductKey,
@@ -1166,7 +1168,7 @@ function New-WindowsFromGoldenImage {
 
            Resize-VHDImage $WindowsImageVHDXPath
 
-           $barePath = Get-PathWithoutExtension $WindowsImageVHDXPath
+           $barePath = Get-PathWithoutExtension $WindowsImageTargetPath
 
            if ($Type -eq "MAAS") {
                 $RawImagePath = $barePath + ".img"
