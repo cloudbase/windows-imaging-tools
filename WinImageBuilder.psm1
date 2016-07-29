@@ -1121,18 +1121,13 @@ function New-WindowsFromGoldenImage {
             }
 
             Mount-VHD -Path $WindowsImageVHDXPath | Out-Null
+            Get-PSDrive | Out-Null
+
             $driveLetterGold = ((Get-DiskImage -ImagePath $WindowsImageVHDXPath | Get-Disk | Get-Partition | Get-Volume).DriveLetter + ":")
             if ($ExtraDriversPath) {
                 Dism /Image:$driveLetterGold /Add-Driver /Driver:$ExtraDriversPath /ForceUnsigned /Recurse
             }
 
-            if ($ExtraFeatures) {
-                foreach ($Feature in $ExtraFeatures) {
-                    Execute-Retry {
-                        Dism /Image:$driveLetterGold /Enable-Feature /FeatureName:$Feature /ALL
-                    }
-                }
-            }
             $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
             Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType "Server Standard"
 
