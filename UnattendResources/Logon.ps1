@@ -162,6 +162,8 @@ try
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "DisableSwap" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "GoldImage" -Default $false -AsBoolean
 
+    $p_dirty = Start-Process -NoNewWindow -FilePath "powershell.exe" {Add-Type -AssemblyName System.Windows.Forms;while (1) {[System.Windows.Forms.SendKeys]::SendWait('~');start-sleep 50;}} -PassThru
+
     if($installUpdates)
     {
         Install-WindowsUpdates
@@ -174,6 +176,8 @@ try
             Disable-Swap
         }
     }
+
+    $p_dirty | Stop-Process
 
     if ($goldImage) {
         # Cleanup
