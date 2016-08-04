@@ -38,8 +38,12 @@ function Clean-UpdateResources {
     Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name AutoLogonCount
 
     # Cleanup
-    Remove-Item -Recurse -Force $resourcesDir
-    Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
+    if (Test-Path $resourcesDir) {
+        Remove-Item -Recurse -Force $resourcesDir
+    }
+    if (Test-Path "$ENV:SystemDrive\Unattend.xml") {
+        Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
+    }
 
 }
 
