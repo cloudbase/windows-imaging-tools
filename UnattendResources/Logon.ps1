@@ -91,8 +91,8 @@ function Install-WindowsUpdates {
     $OSKernelVersion = ($BaseOSKernelVersion.Major.ToString() + "." + $BaseOSKernelVersion.Minor.ToString())
     $KBIdsBlacklist = @{
         "6.1" = @("KB3013538","KB2808679", "KB2894844", "KB3019978", "KB2984976");
-        "6.2" = @("KB3013538", "KB3042058")
-        "6.3" = @("KB3013538", "KB3042058")
+        "6.2" = @("KB3013538", "KB3042058", "KB3172729")
+        "6.3" = @("KB3013538", "KB3042058", "KB3172729")
     }
     $excludedUpdates = $KBIdsBlacklist[$OSKernelVersion]
 
