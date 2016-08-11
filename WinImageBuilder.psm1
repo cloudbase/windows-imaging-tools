@@ -1174,14 +1174,14 @@ function New-WindowsFromGoldenImage {
            if ($Type -eq "MAAS") {
                 $RawImagePath = $barePath + ".img"
                 Write-Output "Converting VHD to RAW"
-                Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
+                Convert-VirtualDisk $WindowsImageVHDXPath $RawImagePath "RAW"
                 Remove-Item -Force $WindowsImageVHDXPath
                 Compress-Image $RawImagePath $WindowsImagePath
             }
             if ($Type -eq "KVM") {
                 $Qcow2ImagePath = $barePath + ".qcow2"
                 Write-Output "Converting VHD to QCow2"
-                Convert-VirtualDisk $VirtualDiskPath $Qcow2ImagePath "qcow2"
+                Convert-VirtualDisk $WindowsImageVHDXPath $Qcow2ImagePath "qcow2"
                 Remove-Item -Force $WindowsImageVHDXPath
             }
         } catch {
