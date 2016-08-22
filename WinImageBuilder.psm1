@@ -1131,10 +1131,6 @@ function New-WindowsFromGoldenImage {
                 Dism /Image:$driveLetterGold /Add-Driver /Driver:$ExtraDriversPath /ForceUnsigned /Recurse
             }
 
-            $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
-            Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType "Server Standard"
-
-            Download-CloudbaseInit $resourcesDir "AMD64"
             $configValues = @{
                 "InstallUpdates"=$InstallUpdates;
                 "PersistDriverInstall"=$PersistDriverInstall;
@@ -1143,7 +1139,15 @@ function New-WindowsFromGoldenImage {
                 "GoldImage"=$false;
             }
 
+            if ($productKey) {
+                $configValues.Add("ProductKey","$productKey")
+            }
+
+            $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
+            Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType "Server Standard"
             Generate-ConfigFile $resourcesDir $configValues
+            Download-CloudbaseInit $resourcesDir ([string]"AMD64")
+            
             Dismount-VHD -Path $WindowsImageVHDXPath
 
             $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
@@ -1167,11 +1171,11 @@ function New-WindowsFromGoldenImage {
             Wait-ForVMShutdown $Name
             Remove-VM $Name -Confirm:$False -Force
 
-           Resize-VHDImage $WindowsImageVHDXPath
+            Resize-VHDImage $WindowsImageVHDXPath
 
-           $barePath = Get-PathWithoutExtension $WindowsImageTargetPath
+            $barePath = Get-PathWithoutExtension $WindowsImageTargetPath
 
-           if ($Type -eq "MAAS") {
+            if ($Type -eq "MAAS") {
                 $RawImagePath = $barePath + ".img"
                 Write-Output "Converting VHD to RAW"
                 Convert-VirtualDisk $WindowsImageVHDXPath $RawImagePath "RAW"

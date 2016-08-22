@@ -178,9 +178,10 @@ try
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PurgeUpdates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "DisableSwap" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "GoldImage" -Default $false -AsBoolean
+    $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "ProductKey" -Default $null
 
     $p_dirty = Start-Process -NoNewWindow -FilePath "powershell.exe" {Add-Type -AssemblyName System.Windows.Forms;while (1) {[System.Windows.Forms.SendKeys]::SendWait('~');start-sleep 50;}} -PassThru
-    $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "ProductKey" -Default $null
+
 
     if ($productKey) {
         Activate-Windows
