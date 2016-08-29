@@ -644,12 +644,12 @@ function Resize-VHDImage {
         Write-Host "New partition size: $newSizeGB GB"
 
         if ($NewSize -gt $MinSize) {
-            $global:i = 0
+            $local:i = 0
             $step = 100MB
             Execute-Retry {
-                $sizeIncreased = ($NewSize + ($step * $global:i))
+                $sizeIncreased = ($NewSize + ($step * $i))
                 Write-Host "Size increased: $sizeIncreased"
-                $global:i = $global:i + 1
+                $i = $i + 1
                 Resize-Partition -DriveLetter $Drive -Size $sizeIncreased -ErrorAction "Stop"
             }
         }
@@ -1180,7 +1180,7 @@ function New-WindowsFromGoldenImage {
                 Write-Output "Converting VHD to RAW"
                 Convert-VirtualDisk $WindowsImageVHDXPath $RawImagePath "RAW"
                 Remove-Item -Force $WindowsImageVHDXPath
-                Compress-Image $RawImagePath $WindowsImagePath
+                Compress-Image $RawImagePath $WindowsImageTargetPath
             }
             if ($Type -eq "KVM") {
                 $Qcow2ImagePath = $barePath + ".qcow2"
