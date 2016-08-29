@@ -83,30 +83,34 @@ function Release-IP {
 
 function Install-WindowsUpdates {
     Import-Module "$resourcesDir\WindowsUpdates\WindowsUpdates"
-    $BaseOSKernelVersion = [System.Environment]::OSVersion.Version
-    $OSKernelVersion = ($BaseOSKernelVersion.Major.ToString() + "." + $BaseOSKernelVersion.Minor.ToString())
-    $KBIdsBlacklist = @{
-        "6.1" = @("KB3013538","KB2808679", "KB2894844", "KB3019978", "KB2984976");
-        "6.2" = @("KB3013538", "KB3042058")
-        "6.3" = @("KB3013538", "KB3042058")
-    }
-    $excludedUpdates = $KBIdsBlacklist[$OSKernelVersion]
 
-    $updates = Get-WindowsUpdate -Verbose -ExcludeKBId $excludedUpdates
-    $maximumUpdates = 20
+
+    $updates = ExecRetry {
+        Get-WindowsUpdate -Verbose
+    } -maxRetryCount 30 -retryInterval 1
+    $maximumUpdates = 100
     if (!$updates.Count) {
         $updates = [array]$updates
     }
     if ($updates) {
         $availableUpdatesNumber = $updates.Count
         Write-Host "Found $availableUpdatesNumber updates. Installing..."
-        Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
-        Restart-Computer -Force
+        
+        try {
+            #Note (cgalan): We have observed that in case the update fails to install
+            #we need to restart the computer in order to apply the eariler ones
+            Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
+        } catch {
+            Restart-Computer -Force
+            exit 0
+        } finally {
+            Restart-Computer -Force
+        }
+
     }
 }
 
-function ExecRetry($command, $maxRetryCount=4, $retryInterval=4)
-{
+function ExecRetry($command, $maxRetryCount=4, $retryInterval=4) {
     $currErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
 

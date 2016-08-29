@@ -437,7 +437,7 @@ function Is-IsoFile {
     return ([System.IO.Path]::GetExtension($FilePath) -eq ".iso")
 }
 
-function Is-ServerInstalationType {
+function Is-ServerInstallationType {
     Param(
         [parameter(Mandatory=$true)]
         [object]$image
@@ -477,20 +477,20 @@ function Add-VirtIODrivers {
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0) {
         $virtioVer = "2k8"
     } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1) {
-        if (Is-ServerInstalationType $image) {
+        if (Is-ServerInstallationType $image) {
             $virtioVer = "2k8r2"
         } else {
             $virtioVer = "w7"
         }
     } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 2) {
-        if (Is-ServerInstalationType $image) {
+        if (Is-ServerInstallationType $image) {
             $virtioVer = "2k12"
         } else {
             $virtioVer = "w8"
         }
     } elseif (($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 3) `
         -or $image.ImageVersion.Major -gt 6) {
-        if (Is-ServerInstalationType $image) {
+        if (Is-ServerInstallationType $image) {
             $virtioVer = "2k12R2"
         } else {
             $virtioVer = "w8.1"
@@ -644,12 +644,12 @@ function Resize-VHDImage {
         Write-Host "New partition size: $newSizeGB GB"
 
         if ($NewSize -gt $MinSize) {
-            $global:i = 0
+            $local:i = 0
             $step = 100MB
             Execute-Retry {
-                $sizeIncreased = ($NewSize + ($step * $global:i))
+                $sizeIncreased = ($NewSize + ($step * $i))
                 Write-Host "Size increased: $sizeIncreased"
-                $global:i = $global:i + 1
+                $i = $i + 1
                 Resize-Partition -DriveLetter $Drive -Size $sizeIncreased -ErrorAction "Stop"
             }
         }
@@ -807,7 +807,8 @@ function New-MaaSImage {
         [parameter(Mandatory=$false)]
         [switch]$DisableSwap
     )
-        PROCESS
+    
+    PROCESS
     {
         New-WindowsOnlineImage -Type "MAAS" -WimFilePath $WimFilePath -ImageName $ImageName `
             -WindowsImagePath $MaaSImagePath -SizeBytes $SizeBytes -DiskLayout $DiskLayout `
