@@ -31,6 +31,43 @@ function Set-PersistDrivers {
     $xml.Save($Path)
 }
 
+function Set-UnattendEnableSwap {
+    Param(
+    [parameter(Mandatory=$true)]
+    [string]$Path
+    )
+    if (!(Test-Path $Path)){
+        return $false
+    }
+    try {
+        $xml = [xml](Get-Content $Path)
+    }catch{
+        Write-Error "Failed to load $Path"
+        return $false
+    }
+    if (!$xml.unattend.settings){
+        return $false
+    }
+    foreach ($i in $xml.unattend.settings) {
+        if ($i.pass -eq "specialize"){
+            $index = [array]::IndexOf($xml.unattend.settings, $i)
+            if ($xml.unattend.settings[$index].component.RunSynchronous.RunSynchronousCommand.Order) {
+                $xml.unattend.settings[$index].component.RunSynchronous.RunSynchronousCommand.Order = "2" 
+            }
+            [xml]$RunSynchronousCommandXml = @"
+        <RunSynchronousCommand xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>1</Order>
+          <Path>"C:\Windows\System32\reg.exe" ADD "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "PagingFiles" /d "?:\pagefile.sys" /f</Path>
+          <Description>Set page file to be automatically managed by the system</Description>
+          <WillReboot>Never</WillReboot>
+        </RunSynchronousCommand>
+"@
+          $xml.unattend.settings[$index].component.RunSynchronous.AppendChild($xml.ImportNode($RunSynchronousCommandXml.RunSynchronousCommand, $true))
+        }
+    }
+    $xml.Save($Path)
+}
+
 function Clean-UpdateResources {
     $HOST.UI.RawUI.WindowTitle = "Running update resources cleanup"
     # We're done, disable AutoLogon
@@ -169,12 +206,6 @@ try
     
     Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
 
-    if ($disableSwap) {
-        ExecRetry {
-            Disable-Swap
-        }
-    }
-
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
     
     $programFilesDir = $ENV:ProgramFiles
@@ -202,6 +233,14 @@ try
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
     $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
     Set-PersistDrivers -Path $unattendedXmlPath -Persist:$persistDrivers
+
+    if ($disableSwap) {
+        ExecRetry {
+            Disable-Swap
+        }
+        Set-UnattendEnableSwap -Path $unattendedXmlPath
+    }
+
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
 }
 catch
