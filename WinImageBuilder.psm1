@@ -437,7 +437,7 @@ function Is-IsoFile {
     return ([System.IO.Path]::GetExtension($FilePath) -eq ".iso")
 }
 
-function Is-ServerInstalationType {
+function Is-ServerInstallationType {
     Param(
         [parameter(Mandatory=$true)]
         [object]$image
@@ -477,20 +477,20 @@ function Add-VirtIODrivers {
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0) {
         $virtioVer = "2k8"
     } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1) {
-        if (Is-ServerInstalationType $image) {
+        if (Is-ServerInstallationType $image) {
             $virtioVer = "2k8r2"
         } else {
             $virtioVer = "w7"
         }
     } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 2) {
-        if (Is-ServerInstalationType $image) {
+        if (Is-ServerInstallationType $image) {
             $virtioVer = "2k12"
         } else {
             $virtioVer = "w8"
         }
     } elseif (($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 3) `
         -or $image.ImageVersion.Major -gt 6) {
-        if (Is-ServerInstalationType $image) {
+        if (Is-ServerInstallationType $image) {
             $virtioVer = "2k12R2"
         } else {
             $virtioVer = "w8.1"
@@ -810,7 +810,8 @@ function New-MaaSImage {
         [switch]$GoldImage=$false
 
     )
-        PROCESS
+    
+    PROCESS
     {
         New-WindowsOnlineImage -Type "MAAS" -WimFilePath $WimFilePath -ImageName $ImageName `
             -WindowsImagePath $MaaSImagePath -SizeBytes $SizeBytes -DiskLayout $DiskLayout `
