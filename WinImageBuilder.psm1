@@ -644,12 +644,12 @@ function Resize-VHDImage {
         Write-Host "New partition size: $newSizeGB GB"
 
         if ($NewSize -gt $MinSize) {
-            $local:i = 0
+            $global:i = 0
             $step = 100MB
             Execute-Retry {
-                $sizeIncreased = ($NewSize + ($step * $i))
+                $sizeIncreased = ($NewSize + ($step * $global:i))
                 Write-Host "Size increased: $sizeIncreased"
-                $i = $i + 1
+                $global:i = $global:i + 1
                 Resize-Partition -DriveLetter $Drive -Size $sizeIncreased -ErrorAction "Stop"
             }
         }
