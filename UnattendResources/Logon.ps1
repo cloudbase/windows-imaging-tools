@@ -52,7 +52,7 @@ function Set-UnattendEnableSwap {
         if ($i.pass -eq "specialize"){
             $index = [array]::IndexOf($xml.unattend.settings, $i)
             if ($xml.unattend.settings[$index].component.RunSynchronous.RunSynchronousCommand.Order) {
-                $xml.unattend.settings[$index].component.RunSynchronous.RunSynchronousCommand.Order = "2" 
+                $xml.unattend.settings[$index].component.RunSynchronous.RunSynchronousCommand.Order = "2"
             }
             [xml]$RunSynchronousCommandXml = @"
         <RunSynchronousCommand xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
@@ -120,10 +120,17 @@ function Release-IP {
 
 function Install-WindowsUpdates {
     Import-Module "$resourcesDir\WindowsUpdates\WindowsUpdates"
+    $BaseOSKernelVersion = [System.Environment]::OSVersion.Version
+    $OSKernelVersion = ($BaseOSKernelVersion.Major.ToString() + "." + $BaseOSKernelVersion.Minor.ToString())
 
-
+    #Note (cgalan): We are adding some updates to a blacklist because
+    # we have observed that they will break the operation system.
+    $KBIdsBlacklist = @{
+        "6.3" = @("KB2887595")
+    }
+    $excludedUpdates = $KBIdsBlacklist[$OSKernelVersion]
     $updates = ExecRetry {
-        Get-WindowsUpdate -Verbose
+        Get-WindowsUpdate -Verbose -ExcludeKBId $excludedUpdates
     } -maxRetryCount 30 -retryInterval 1
     $maximumUpdates = 100
     if (!$updates.Count) {
@@ -132,18 +139,18 @@ function Install-WindowsUpdates {
     if ($updates) {
         $availableUpdatesNumber = $updates.Count
         Write-Host "Found $availableUpdatesNumber updates. Installing..."
-        
         try {
             #Note (cgalan): We have observed that in case the update fails to install
             #we need to restart the computer in order to apply the eariler ones
             Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
-        } catch {
+         } catch {
             Restart-Computer -Force
             exit 0
-        } finally {
+         } finally {
             Restart-Computer -Force
-        }
-
+         }
+        Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
+        Restart-Computer -Force
     }
 }
 
@@ -203,11 +210,11 @@ try
     {
         Install-WindowsUpdates
     }
-    
+
     Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
 
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
-    
+
     $programFilesDir = $ENV:ProgramFiles
 
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
@@ -223,7 +230,7 @@ try
 
     $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
     & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
-    
+
     Run-Defragment
 
     Clean-UpdateResources
