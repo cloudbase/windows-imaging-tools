@@ -1128,6 +1128,11 @@ function New-WindowsFromGoldenImage {
             Get-PSDrive | Out-Null
 
             $driveLetterGold = ((Get-DiskImage -ImagePath $WindowsImageVHDXPath | Get-Disk | Get-Partition | Get-Volume).DriveLetter + ":")
+            
+            Execute-Retry {
+                Resize-Partition -DriveLetter $driveLetterGold -Size $SizeBytes
+            }
+            
             if ($ExtraDriversPath) {
                 Dism /Image:$driveLetterGold /Add-Driver /Driver:$ExtraDriversPath /ForceUnsigned /Recurse
             }
