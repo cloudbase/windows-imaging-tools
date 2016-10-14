@@ -7,12 +7,13 @@ Supports any version of Windows starting with Windows 2008 R2 and Windows 7, inc
 
 * Windows Server 2008 R2
 * Hyper-V Server 2008 R2
-* Windows 7
 * Windows Server 2012
 * Hyper-V Server 2012
-* Windows 8
 * Windows Server 2012 R2
 * Hyper-V Server 2012 R2
+* Windows Server 2016 
+* Windows 7
+* Windows 8
 * Windows 8.1
 
 Supports both x64 and x86 images.
