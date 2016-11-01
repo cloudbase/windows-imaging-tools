@@ -123,8 +123,7 @@ function Install-WindowsUpdates {
     $BaseOSKernelVersion = [System.Environment]::OSVersion.Version
     $OSKernelVersion = ($BaseOSKernelVersion.Major.ToString() + "." + $BaseOSKernelVersion.Minor.ToString())
 
-    #Note (cgalan): We are adding some updates to a blacklist because
-    # we have observed that they will break the operation system.
+    #Note (cgalan): Some updates are black-listed as they are either failing to install or superseeded by the newer updates.
     $KBIdsBlacklist = @{
         "6.3" = @("KB2887595")
     }
@@ -140,17 +139,13 @@ function Install-WindowsUpdates {
         $availableUpdatesNumber = $updates.Count
         Write-Host "Found $availableUpdatesNumber updates. Installing..."
         try {
-            #Note (cgalan): We have observed that in case the update fails to install
-            #we need to restart the computer in order to apply the eariler ones
+            #Note (cgalan): In case the update fails, we need to reboot the instance in order for the updates
+            # to be retrieved on a changed system state and be applied correctly.
             Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
-         } catch {
-            Restart-Computer -Force
-            exit 0
          } finally {
             Restart-Computer -Force
+            exit 0
          }
-        Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
-        Restart-Computer -Force
     }
 }
 
@@ -167,7 +162,7 @@ function ExecRetry($command, $maxRetryCount=4, $retryInterval=4) {
             $ErrorActionPreference = $currErrorActionPreference
             return $res
         }
-          catch [System.Exception]
+        catch [System.Exception]
         {
             $retryCount++
             if ($retryCount -ge $maxRetryCount)

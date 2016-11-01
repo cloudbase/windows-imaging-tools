@@ -807,7 +807,7 @@ function New-MaaSImage {
         [parameter(Mandatory=$false)]
         [switch]$DisableSwap
     )
-    
+
     PROCESS
     {
         New-WindowsOnlineImage -Type "MAAS" -WimFilePath $WimFilePath -ImageName $ImageName `
@@ -1035,7 +1035,15 @@ function New-WindowsCloudImage {
                 "DisableSwap"=$DisableSwap;
             }
 
-            Generate-UnattendXml $UnattendXmlPath $unattedXmlPath $image $ProductKey $AdministratorPassword
+            $xmlParams = @{'inUnattendXmlPath' = '$UnattendXmlPath';
+                           'outUnattendXmlPath' = '$unattedXmlPath';
+                           'image' = '$image';
+                           'administratorPassword' = '$AdministratorPassword';
+            }
+            if ($ProductKey) {
+                $xmlParams.Add('productKey' = '$ProductKey');
+            }
+            Generate-UnattendXml @xmlParams
             Copy-UnattendResources $resourcesDir $image.ImageInstallationType $InstallMaaSHooks
             Generate-ConfigFile $resourcesDir $configValues
             Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
