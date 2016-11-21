@@ -1,136 +1,113 @@
-windows-openstack-imaging-tools
+Windows Imaging Tools
 ===============================
+Windows OpenStack Imaging Tools automates the generation of Windows images.<br/>
+The tools are a bundle of PowerShell modules and scripts.
 
-Tools to automate the creation of a Windows image for OpenStack, supporting KVM, Hyper-V, ESXi, baremetal and more.
+The supported target environments for the Windows images are:
+* OpenStack with KVM, Hyper-V, VMware and baremetal hypervisor types
+* MAAS with KVM, Hyper-V, VMware and baremetal
 
-Supports any version of Windows starting with Windows 2008 R2 and Windows 7, including:
+The generation environment needs to be a Windows one, with Hyper-V virtualization enabled.<br/>
+If you plan to run the online Windows setup step on another system / hypervisor, the Hyper-V virtualization is not required.
 
-* Windows Server 2008 R2
-* Hyper-V Server 2008 R2
-* Windows Server 2012
-* Hyper-V Server 2012
-* Windows Server 2012 R2
-* Hyper-V Server 2012 R2
+The following versions of Windows images (both x86 / x64, if existent) to be generated are supported:
+* Windows Server 2008 / 2008 R2
+* Windows Server 2012 / 2012 R2
 * Windows Server 2016 
-* Windows 7
-* Windows 8
-* Windows 8.1
+* Windows 7 / 8 / 8.1 / 10
 
-Supports both x64 and x86 images.
+To generate Windows Nano Server 2016, please use the following repository:
 
-### How to create a Windows template image
+https://github.com/cloudbase/cloudbase-init-offline-install
 
-Requirements:
+## Fast path to create a Windows image
 
-* A host or VM running Windows 
+### Requirements:
+
+* A Windows host, with Hyper-V virtualization enabled, PowerShell >=v4 support<br/>
+and Windows Assessment and Deployment Kit (ADK)
+* A Windows installation ISO or DVD
+i* Windows compatible drivers, if required by the target environment
+* Git environment
+
+### Steps to generate the Windows image
 * Clone this repository
-* A Windows installation ISO or DVD, that needs to be either mounted or extracted (e.g. with 7-zip)
-* For KVM, download the VirtIO tools ISO, e.g. from: http://alt.fedoraproject.org/pub/alt/virtio-win/stable/
+* Mount or extract the Windows ISO file
+* Download and / or extract the Windows compatible drivers
+* If the target environment is MAAS or the image generation is configured to install updates,<br/>
+the windows-curtin-hooks and WindowsUpdates git submodules are required.<br/>
+Run `git submodule update --init` to retrieve them
+* Import the WinImageBuilder.psm1 module
+* Use the New-WindowsCloudImage or New-WindowsOnlineCloudImage methods with <br/> the appropriate configuration options
 
-Example PowerShell script:
+### PowerShell image generation example for OpenStack KVM (host requires Hyper-V enabled)
+```powershell
+git clone https://github.com/cloudbase/windows-openstack-imaging-tools.git
+pushd windows-openstack-imaging-tools
+Import-Module .\WinImageBuilder.psm1
 
-    Import-Module .\WinImageBuilder.psm1
+# The Windows image file path that will be generated
+$windowsImagePath = "C:\images\my-windows-image.qcow2"
 
-    # The disk format can be: VHD, VHDX, QCow2, VMDK or RAW
-    $virtualDiskPath = "c:\Images\mywindowsimage.qcow2"
-    # This is the content of your Windows ISO
-    $wimFilePath = "D:\sources\install.wim"
-    # Optionally, if you target KVM
-    $virtIOISOPath = "C:\ISO\virtio-win-0.1-81.iso"
+# The wim file path is the installation image on the Windows ISO
+$wimFilePath = "D:\Sources\install.wim"
 
-    # Check what images are supported in this Windows ISO
-    $images = Get-WimFileImagesInfo -WimFilePath $wimFilePath
-    # Select the first one
-    $image = $images[0]
-    $image
+# Every Windows ISO can contain multiple Windows flavors like Core, Standard, Datacenter
+# Usually, the first image version is the Core one
+$image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[0]
 
-    # The product key is optional
-    #$productKey = “xxxxx-xxxxx…"
+New-WindowsOnlineImage -WimFilePath $wimFilePath -ImageName $image.Name `
+    -WindowsImagePath $windowsImagePath -Type 'KVM' `
+    -SizeBytes 30GB -CpuCores 4 -Memory 4GB -SwitchName 'external'
 
-    # Add -InstallUpdates for the Windows updates (it takes longer and requires
-    # more space but it's highly recommended)
-    New-WindowsCloudImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
-    -VirtualDiskFormat QCow2 -VirtualDiskPath $virtualDiskPath `
-    -SizeBytes 16GB -ProductKey $productKey -VirtIOISOPath $virtIOISOPath
+popd
 
-No extra configurations are needed for specific Windows versions, the New-WindowsCloudImage cmdlet takes care of everything.
+```
 
-### How to upload the image in OpenStack
+## Image generation workflow
 
-We're not yet done, the next steps consist in:
+### New-WindowsCloudImage
 
-* uploading the image to Glance
-* booting an instance on your target hypervisor compute node
-* waiting for the setup to complete (the instance will shutdown once the setup is done) 
-* take a snapshot of the instance which will contain the final sysprepped image ready for your deployments
+This command does not require Hyper-V to be enabled, but the generated image<br/>
+is not ready to be deployed, as it needs to be started manually on another hypervisor.<br/>
+The image is ready to be used when it shuts down.
 
-TODO: Add OpenStack scripts
+You can find a PowerShell example to generate a raw OpenStack Ironic image that also works on KVM<br/>
+in `Examples/create-windows-cloud-image.ps1`
 
-### Notes
+### New-WindowsOnlineImage
+This command requires Hyper-V to be enabled, a VMSwitch to be configured for external<br/>
+network connectivity if the updates are to be installed, which is highly recommended.
 
-The Windows host where you plan to create the instance needs either:
+This command uses internally the `New-WindowsCloudImage` to generate the base image and<br/>
+start a Hyper-V instance using the base image. After the Hyper-V instance shuts down, <br/>
+the resulting VHDX is shrinked to a minimum size and converted to the required format.
 
-* A version greater or equal to the version of the Windows image that you want to generate
-* A recent Windows ADK installed
-
-E.g. to generate a Windows Server 2012 R2 image, you need a host running either Windows Server 2012 R2 / Hyper-V Server 2012 R2 or Windows 8.1.
-
-
-Generate MaaS compatible image
-==============================
-
-Generating an image for MaaS follows the same rules outlined above for OpenStack images. For this purpose there is a separate commandlet:
+You can find a PowerShell example to generate a raw OpenStack Ironic image that also works on KVM<br/>
+in `Examples/create-windows-online-cloud-image.ps1`
 
 
-Example:
+## For developers
 
-    Import-Module .\WinImageBuilder.psm1
-    # This is the content of your Windows ISO
-    $wimFilePath = "D:\sources\install.wim"
+### Running unit tests
 
-    # Check what images are supported in this Windows ISO
-    $images = Get-WimFileImagesInfo -WimFilePath $wimFilePath
+You will need PowerShell Pester package installed on your system.
 
-    # Select the first one. Note, the first image in the index is usually a Server Core
-    # image. If you would like to select something else, print the $images variable to see
-    # alternatives
-    $image = $images[0]
-
-    # If you select to sysprep the image, the Hyper-V role needs to be enabled.
-    # You will also need a VMSwitch on your system that allows internet access
-    # If the -SwitchName parameter is not used, the commandlet will automatically
-    # create an external vmswitch using a net adapter with a default route set
-    # Also, if you are targeting an UEFI enabled system, you can use the -DiskLayout UEFI
-    # option to create the proper partition layout.
-
-    New-MaaSImage -WimFilePath $wimFilePath -ImageName $image.ImageName`
-    -MaaSImagePath C:\images\win2012hvr2-dd -SizeBytes 16GB -Memory 4GB `
-    -CpuCores 2 -DiskLayout BIOS -RunSysprep
-
-This commandlet adds the ability to sysprep the image. Please take note that this will require the installation of the Hyper-V role on the local machine. The Memory and CpuCores options allow you to specify the resources that should be allocated to the sysprep VM.
-
-Please make sure that when cloning this repository on Windows, you preserve original line endings. The curtin finalize script will fail otherwise.
-
-The resulting image can be copied to your MaaS install and uploaded as follows:
-
-    maas root boot-resources create name=windows/win2012hvr2 architecture=amd64/generic filetype=ddtgz content@=$HOME/win2012hvr2-dd
-
-### Notes:
-    
-In order to generate MAAS compatible images, you need to ` git submodule update --init ` in order to get the latest files of windows-curtin-hooks
-
-## How to run tests
-
-You will need pester on your system. It should already be installed on your system if you are running Windows 10. If it is not:
+It should already be installed on your system if you are running Windows 10.<br/>
+If it is not installed you can install it on Windows 10 or greater:
 
 ```powershell
 Install-Package Pester
 ```
 
-Running the actual tests:
+or you can clone it from: https://github.com/pester/Pester
 
-```powershell
-powershell.exe -NonInteractive {Invoke-Pester}
+
+Running the tests in a closed envionment:
+
+```cmd
+cmd /c 'powershell.exe -NonInteractive { Invoke-Pester }'
 ```
 
-This will run all tests without polluting your current shell environment. The -NonInteractive flag will make sure that any test that checks for mandatory parameters will not block the tests if run in an interactive session. This is not needed if you run this in a CI.
+This will run all tests without polluting your current shell environment. <br/>
+This is not needed if you run it in a Continous Integration environment.
