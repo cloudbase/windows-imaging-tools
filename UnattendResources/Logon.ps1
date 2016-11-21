@@ -31,6 +31,43 @@ function Set-PersistDrivers {
     $xml.Save($Path)
 }
 
+function Set-UnattendEnableSwap {
+    Param(
+    [parameter(Mandatory=$true)]
+    [string]$Path
+    )
+    if (!(Test-Path $Path)){
+        return $false
+    }
+    try {
+        $xml = [xml](Get-Content $Path)
+    }catch{
+        Write-Error "Failed to load $Path"
+        return $false
+    }
+    if (!$xml.unattend.settings){
+        return $false
+    }
+    foreach ($i in $xml.unattend.settings) {
+        if ($i.pass -eq "specialize"){
+            $index = [array]::IndexOf($xml.unattend.settings, $i)
+            if ($xml.unattend.settings[$index].component.RunSynchronous.RunSynchronousCommand.Order) {
+                $xml.unattend.settings[$index].component.RunSynchronous.RunSynchronousCommand.Order = "2"
+            }
+            [xml]$RunSynchronousCommandXml = @"
+        <RunSynchronousCommand xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>1</Order>
+          <Path>"C:\Windows\System32\reg.exe" ADD "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v "PagingFiles" /d "?:\pagefile.sys" /f</Path>
+          <Description>Set page file to be automatically managed by the system</Description>
+          <WillReboot>Never</WillReboot>
+        </RunSynchronousCommand>
+"@
+          $xml.unattend.settings[$index].component.RunSynchronous.AppendChild($xml.ImportNode($RunSynchronousCommandXml.RunSynchronousCommand, $true))
+        }
+    }
+    $xml.Save($Path)
+}
+
 function Clean-UpdateResources {
     $HOST.UI.RawUI.WindowTitle = "Running update resources cleanup"
     # We're done, disable AutoLogon
@@ -38,16 +75,27 @@ function Clean-UpdateResources {
     Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name AutoLogonCount
 
     # Cleanup
-    Remove-Item -Recurse -Force $resourcesDir
-    Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
+    if (Test-Path $resourcesDir) {
+        Remove-Item -Recurse -Force $resourcesDir
+    }
+    if (Test-Path "$ENV:SystemDrive\Unattend.xml") {
+        Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
+    }
 
 }
 
 function Clean-WindowsUpdates {
+    Param(
+        $PurgeUpdates
+    )
     $HOST.UI.RawUI.WindowTitle = "Running Dism cleanup..."
     if (([System.Environment]::OSVersion.Version.Major -gt 6) -or ([System.Environment]::OSVersion.Version.Minor -ge 2))
     {
-        Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+        if (!$PurgeUpdates) {
+            Dism.exe /Online /Cleanup-Image /StartComponentCleanup
+        } else {
+            Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase
+        }
         if ($LASTEXITCODE)
         {
             throw "Dism.exe clean failed"
@@ -74,47 +122,127 @@ function Release-IP {
         }
 }
 
+function Install-WindowsUpdates {
+    Import-Module "$resourcesDir\WindowsUpdates\WindowsUpdates"
+    $BaseOSKernelVersion = [System.Environment]::OSVersion.Version
+    $OSKernelVersion = ($BaseOSKernelVersion.Major.ToString() + "." + $BaseOSKernelVersion.Minor.ToString())
+    $KBIdsBlacklist = @{
+        "6.1" = @("KB3013538","KB2808679", "KB2894844", "KB3019978", "KB2984976");
+        "6.2" = @("KB3013538", "KB3042058", "KB3172729")
+        "6.3" = @("KB3013538", "KB3042058", "KB3172729")
+    }
+    $excludedUpdates = $KBIdsBlacklist[$OSKernelVersion]
+
+    $updates = ExecRetry {
+        Get-WindowsUpdate -Verbose -ExcludeKBId $excludedUpdates
+    } -maxRetryCount 30 -retryInterval 1
+    $maximumUpdates = 20
+    if (!$updates.Count) {
+        $updates = [array]$updates
+    }
+    if ($updates) {
+        $availableUpdatesNumber = $updates.Count
+        Write-Host "Found $availableUpdatesNumber updates. Installing..."
+        Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
+        Restart-Computer -Force
+        exit 0
+    }
+}
+
+function ExecRetry($command, $maxRetryCount=4, $retryInterval=4)
+{
+    $currErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+
+    $retryCount = 0
+    while ($true)
+    {
+        try
+        {
+            $res = Invoke-Command -ScriptBlock $command
+            $ErrorActionPreference = $currErrorActionPreference
+            return $res
+        }
+          catch [System.Exception]
+        {
+            $retryCount++
+            if ($retryCount -ge $maxRetryCount)
+            {
+                $ErrorActionPreference = $currErrorActionPreference
+                throw
+            }
+            else
+            {
+                if($_) {
+                Write-Warning $_
+                }
+                Start-Sleep $retryInterval
+            }
+        }
+    }
+}
+
+function Disable-Swap {
+    $computerSystem = Get-WmiObject Win32_ComputerSystem
+    if ($computerSystem.AutomaticManagedPagefile) {
+        $computerSystem.AutomaticManagedPagefile = $False
+        $computerSystem.Put()
+    }
+    $pageFileSetting = Get-WmiObject Win32_PageFileSetting
+    if ($pageFileSetting) {
+        $pageFileSetting.Delete()
+    }
+}
+
+function Skip-Rearm {
+    #Note: On 2008R2 we need to make sure that the sysprep process will not reset the activation status.
+    # We can set the registry key SkipRearm to 1 in order to stop this.
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform\' -Name SkipRearm -Value '1'
+}
+
+function Activate-Windows {
+    #Note: On 2008R2 the initial product key activation fails
+    # so we need to manually activate it using slmgr
+    slmgr /ipk $productKey
+    slmgr /ato
+}
+
 try
 {
     Import-Module "$resourcesDir\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PersistDriverInstall" -Default $true -AsBoolean
+    $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PurgeUpdates" -Default $false -AsBoolean
+    $disableSwap = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "DisableSwap" -Default $false -AsBoolean
+    $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "GoldImage" -Default $false -AsBoolean
+    $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "ProductKey" -Default $null
+
+    $p_dirty = Start-Process -NoNewWindow -FilePath "powershell.exe" {Add-Type -AssemblyName System.Windows.Forms;while (1) {[System.Windows.Forms.SendKeys]::SendWait('~');start-sleep 50;}} -PassThru
+
+
+    if ($productKey) {
+        Activate-Windows
+        Skip-Rearm
+    }
 
     if($installUpdates)
     {
-        if (!(Test-Path "$resourcesDir\PSWindowsUpdate"))
-        {
-            #Fixes Windows Server 2008 R2 inexistent Unblock-File command Bug
-            if ($(Get-Host).version.major -eq 2)
-            {
-                $psWindowsUpdatePath = "$resourcesDir\PSWindowsUpdate_1.4.5.zip"
-            }
-            else
-            {
-                $psWindowsUpdatePath = "$resourcesDir\PSWindowsUpdate.zip"
-            }
-
-            & "$resourcesDir\7za.exe" x $psWindowsUpdatePath $("-o" + $resourcesDir)
-            if($LASTEXITCODE) { throw "7za.exe failed to extract PSWindowsUpdate" }
-        }
-
-        $Host.UI.RawUI.WindowTitle = "Installing updates..."
-
-        Import-Module "$resourcesDir\PSWindowsUpdate"
-
-        Get-WUInstall -AcceptAll -IgnoreReboot -IgnoreUserInput -NotCategory "Language packs"
-        if (Get-WURebootStatus -Silent)
-        {
-            $Host.UI.RawUI.WindowTitle = "Updates installation finished. Rebooting."
-            shutdown /r /t 0
-            exit 0
-        }
+        Install-WindowsUpdates
     }
-    
-    Clean-WindowsUpdates
+
+    Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
+
+    $p_dirty | Stop-Process
+
+    if ($goldImage) {
+        # Cleanup
+        Remove-Item -Recurse -Force $resourcesDir
+        Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
+        shutdown -s -t 0 -f
+    }
 
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
-    
+
     $programFilesDir = $ENV:ProgramFiles
 
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
@@ -130,7 +258,7 @@ try
 
     $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
     & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
-    
+
     Run-Defragment
 
     Clean-UpdateResources
@@ -140,6 +268,14 @@ try
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
     $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
     Set-PersistDrivers -Path $unattendedXmlPath -Persist:$persistDrivers
+
+    if ($disableSwap) {
+        ExecRetry {
+            Disable-Swap
+        }
+        Set-UnattendEnableSwap -Path $unattendedXmlPath
+    }
+
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
 }
 catch
