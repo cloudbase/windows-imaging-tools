@@ -1,5 +1,7 @@
 Windows Imaging Tools
 ===============================
+[![Master branch](https://ci.appveyor.com/api/projects/status/github/cloudbase/windows-openstack-imaging-tools?branch=master&svg=true)](https://ci.appveyor.com/project/ader1990/windows-openstack-imaging-tools-w885m)
+
 Windows OpenStack Imaging Tools automates the generation of Windows images.<br/>
 The tools are a bundle of PowerShell modules and scripts.
 
@@ -111,3 +113,4 @@ cmd /c 'powershell.exe -NonInteractive { Invoke-Pester }'
 
 This will run all tests without polluting your current shell environment. <br/>
 This is not needed if you run it in a Continous Integration environment.
+
