@@ -1035,13 +1035,13 @@ function New-WindowsCloudImage {
                 "DisableSwap"=$DisableSwap;
             }
 
-            $xmlParams = @{'inUnattendXmlPath' = '$UnattendXmlPath';
-                           'outUnattendXmlPath' = '$unattedXmlPath';
-                           'image' = '$image';
-                           'administratorPassword' = '$AdministratorPassword';
+            $xmlParams = @{'InUnattendXmlPath' = $UnattendXmlPath;
+                           'OutUnattendXmlPath' = $unattedXmlPath;
+                           'Image' = $image;
+                           'AdministratorPassword' = $AdministratorPassword;
             }
             if ($ProductKey) {
-                $xmlParams.Add('productKey' = '$ProductKey');
+                $xmlParams.Add('productKey', $ProductKey);
             }
             Generate-UnattendXml @xmlParams
             Copy-UnattendResources $resourcesDir $image.ImageInstallationType $InstallMaaSHooks
