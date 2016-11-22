@@ -14,13 +14,11 @@
 
 $ErrorActionPreference = "Stop"
 
-git clone https://github.com/cloudbase/windows-openstack-imaging-tools.git
-pushd windows-openstack-imaging-tools
 git submodule update --init
-Import-Module .\WinImageBuilder.psm1
+Import-Module ..\WinImageBuilder.psm1
 
 # The Windows image file path that will be generated
-$virtualDiskPath = "C:\images\my-windows-image.raw"
+$windowsImagePath = "C:\images\my-windows-image.raw.tgz"
 
 # The wim file path is the installation image on the Windows ISO
 $wimFilePath = "D:\Sources\install.wim"
@@ -41,14 +39,16 @@ $extraDriversPath = "C:\drivers\"
 # Usually, the second image version is the Standard one
 $image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[1]
 
-# This scripts generates a raw image file that can be directly used with Ironic or KVM hypervisor in OpenStack.
-New-WindowsOnlineImage -WimFilePath $wimFilePath -ImageName $image.Name `
+# Make sure the switch exists and it allows Internet access if updates
+# are to be installed
+$switchName = 'external'
+
+# This scripts generates a raw tar.gz-ed image file, that can be used with MAAS
+New-WindowsOnlineImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
     -WindowsImagePath $windowsImagePath -Type 'MAAS' -ExtraFeatures @() `
-    -SizeBytes 30GB -CpuCores 4 -Memory 4GB -SwitchName 'external'
+    -SizeBytes 30GB -CpuCores 4 -Memory 4GB -SwitchName $switchName `
     -ProductKey $productKey -DiskLayout 'BIOS' -VirtioISOPath $virtIOISOPath `
-    -ExtraFeatures @("Hyper-V") -ExtraDriversPath $extraDriversPath `
+    -ExtraDriversPath $extraDriversPath `
     -InstallUpdates:$true -AdministratorPassword 'Pa$$w0rd' `
     -PurgeUpdates:$true -DisableSwap:$true
-
-popd
 

@@ -14,10 +14,8 @@
 
 $ErrorActionPreference = "Stop"
 
-git clone https://github.com/cloudbase/windows-openstack-imaging-tools.git
-pushd windows-openstack-imaging-tools
 git submodule update --init
-Import-Module .\WinImageBuilder.psm1
+Import-Module ..\WinImageBuilder.psm1
 
 # The Windows image file path that will be generated
 $virtualDiskPath = "C:\images\my-windows-image.raw"
@@ -43,13 +41,10 @@ $image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[1]
 
 # This scripts generates a raw image file that, after being started as an instance and
 # after it shuts down, it can be used with Ironic or KVM hypervisor in OpenStack.
-New-WindowsCloudImage -WimFilePath $wimFilePath -ImageName $image.Name `
+New-WindowsCloudImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
     -VirtualDiskPath $virtualDiskPath -SizeBytes 30GB -ProductKey $productKey `
     -VirtualDiskFormat 'RAW' -DiskLayout 'BIOS' -VirtioISOPath $virtIOISOPath `
-    -ExtraFeatures @("Hyper-V") -ExtraDriversPath $extraDriversPath `
-    -InstallUpdates:$true -AdministratorPassword 'Pa$$w0rd' `
-    -PersistDriversInstall:$false -InstallMAASHooks:$false `
+    -ExtraDriversPath $extraDriversPath -InstallUpdates:$true `
+    -AdministratorPassword 'Pa$$w0rd' -InstallMAASHooks:$false `
     -PurgeUpdates:$true -DisableSwap:$true
-
-popd
 
