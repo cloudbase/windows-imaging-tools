@@ -830,6 +830,36 @@ function Run-Sysprep {
     Remove-VM $Name -Confirm:$false -Force
 }
 
+function Get-ImageInformation {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$driveLetter
+    )
+
+if (Test-Path "$driveLetter\Windows\system32\ntdll.dll") {
+        $versionString = (Get-Item "$driveLetter\Windows\system32\ntdll.dll").VersionInfo.ProductVersion
+        $OSVersion = $versionString.split('.')
+        $ImageVersion = @{
+            "Major" = $OSVersion[0];
+            "Minor" = $OSVersion[1];
+        }
+    } else {
+        Throw "Unable to determine OS Version"
+    }
+
+    if (Test-Path "$driveLetter\Windows\SysWOW64") {
+        $ImageArchitecture = "AMD64"
+    } else {
+        $ImageArchitecture = "i386"
+    }
+
+    return $image = @{
+        "ImageVersion" = $ImageVersion;
+        "ImageArchitecture" = $ImageArchitecture;
+        "ImageInstallationType" = "Server";
+    }
+}
+
 function New-MaaSImage {
     [CmdletBinding()]
     param
@@ -1241,6 +1271,12 @@ function New-WindowsFromGoldenImage {
             Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType "Server Standard"
             Generate-ConfigFile $resourcesDir $configValues
             Download-CloudbaseInit $resourcesDir ([string]"AMD64")
+
+            $imageInfo = Get-ImageInformation $driveLetterGold
+            if ($VirtIOISOPath) {
+                Add-VirtIODriversFromISO $driveLetterGold $imageInfo $VirtIOISOPath
+            }
+
             Dismount-VHD -Path $WindowsImageVHDXPath
 
             $Name = "WindowsGoldImage-Sysprep" + (Get-Random)

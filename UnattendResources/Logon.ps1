@@ -88,8 +88,7 @@ function Clean-WindowsUpdates {
         $PurgeUpdates
     )
     $HOST.UI.RawUI.WindowTitle = "Running Dism cleanup..."
-    if (([System.Environment]::OSVersion.Version.Major -gt 6)
-        -or ([System.Environment]::OSVersion.Version.Minor -ge 2)) {
+    if (([System.Environment]::OSVersion.Version.Major -gt 6) -or ([System.Environment]::OSVersion.Version.Minor -ge 2)) {
         if (!$PurgeUpdates) {
             Dism.exe /Online /Cleanup-Image /StartComponentCleanup
         } else {
