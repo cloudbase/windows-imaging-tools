@@ -206,7 +206,9 @@ try
         Install-WindowsUpdates
     }
 
-    Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
+    ExecRetry {
+        Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
+    }
 
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
