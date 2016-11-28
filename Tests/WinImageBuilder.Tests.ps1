@@ -2,8 +2,6 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $moduleName = "WinImageBuilder"
 $moduleHome = Split-Path -Parent $here
-
-echo $moduleHome
 $modulePath = Join-Path $moduleHome "${moduleName}.psm1"
 
 if (Get-Module $moduleName -ErrorAction SilentlyContinue) {
@@ -68,24 +66,8 @@ function Compare-HashTables ($tab1, $tab2) {
 
 Import-Module $modulePath
 
-Describe "Test Get-WimFileImagesInfo" {
-
-    Mock Get-WimInteropObject -Verifiable -ModuleName $moduleName `
-        {
-            $imagesMock = New-Object -TypeName PSObject
-            Add-Member -InputObject ([ref]$imagesMock).value `
-                -MemberType NoteProperty -Name "Images" -Value @{"Win"=1}
-            return $imagesMock
-        }
-
-    It "Should return fake images" {
-        Compare-HashTables (Get-WimFileImagesInfo "FakePath") @{
-                "Win"=1
-            } | Should Be $true
-    }
-}
-
 Describe "Test New-WindowsCloudImage" {
+    Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
     Mock Set-DotNetCWD -Verifiable -ModuleName $moduleName { return 0 }
     Mock Is-Administrator -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-WimFileImagesInfo -Verifiable -ModuleName $moduleName `
@@ -138,15 +120,89 @@ Describe "Test New-WindowsCloudImage" {
     }
 }
 
+
+Describe "Test Get-WimFileImagesInfo" {
+
+    Mock Get-WimInteropObject -Verifiable -ModuleName $moduleName {
+        $imagesMock = New-Object -TypeName PSObject
+        Add-Member -InputObject ([ref]$imagesMock).value `
+            -MemberType NoteProperty -Name "Images" -Value @{"Win"=1}
+        return $imagesMock
+    }
+
+    It "Should return fake images" {
+        Compare-HashTables (Get-WimFileImagesInfo "FakePath") @{
+            "Win"=1
+        } | Should Be $true
+    }
+}
+
+
 Describe "Test New-MaaSImage" {
+    Mock New-WindowsOnlineImage -Verifiable -ModuleName $moduleName { return 0 }
+
+    It "Should create a maas image" {
+        New-MaaSImage -Wimfilepath "fakeWimFilepath" `
+            -ImageName "fakeImageName" `
+            -SizeBytes 1 -MaaSImagePath "fakeMAASPath" | Should Be 0
+    }
+
+    It "should run all mocked commands" {
+        Assert-VerifiableMocks
+    }
+}
+
+
+Describe "Test Resize-VHDImage" {
+    function Get-VHD { }
+    function Mount-VHD { }
+    function Resize-VHD { }
+    function Dismount-VHD { }
+    Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Get-VHD -Verifiable -ModuleName $moduleName { return @{"Size" = 100; "MinimumSize" = 10} }
+    Mock Mount-VHD -Verifiable -ModuleName $moduleName {
+        $b = New-Object System.Management.Automation.PSObject
+        $b | Add-Member -MemberType NoteProperty -Name "Number" -Value 1 -Force
+        return $b
+    }
+    Mock Get-Disk -Verifiable -ModuleName $moduleName {
+        $b = New-Object System.Management.Automation.PSObject
+        $b | Add-Member -MemberType NoteProperty -Name "DiskId" -Value 1 -Force
+        return $b
+    }
+    Mock Get-Partition -Verifiable -ModuleName $moduleName {
+        $b = New-Object System.Management.Automation.PSObject
+        $b | Add-Member -MemberType NoteProperty -Name "DriveLetter" -Value "L" -Force
+        $b | Add-Member -MemberType NoteProperty -Name "Size" -Value 90 -Force
+       return $b
+    }
+    Mock Get-Volume -Verifiable -ModuleName $moduleName { return @{"DriveLetter" = "F"} }
+    Mock Optimize-Volume -Verifiable -ModuleName $moduleName { return }
+    Mock Get-PartitionSupportedSize -Verifiable -ModuleName $moduleName { return @{"SizeMin" = 100} }
+    Mock Resize-Partition -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Resize-VHD -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Dismount-VHD -Verifiable -ModuleName $moduleName { return 0 }
+
+    It "Should resize a vhd image" {
+        Resize-VHDImage -VirtualDiskPath "fakePath" `
+            -FreeSpace 100 | Should Be 0
+    }
+
+    It "should run all mocked commands" {
+        Assert-VerifiableMocks
+    }
+}
+
+
+Describe "Test New-WindowsOnlineImage" {
+    Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
     Mock Is-Administrator -Verifiable -ModuleName $moduleName { return 0 }
     Mock Check-Prerequisites -Verifiable -ModuleName $moduleName { return 0 }
-    Mock GetOrCreate-Switch -Verifiable -ModuleName $moduleName `
-        {
-            return @{
-                "Name" = "fakeswitch"
-            }
+    Mock GetOrCreate-Switch -Verifiable -ModuleName $moduleName {
+        return @{
+            "Name" = "fakeswitch"
         }
+    }
     Mock Get-PathWithoutExtension -Verifiable -ModuleName $moduleName { return "fakePath" }
     Mock New-WindowsCloudImage -Verifiable -ModuleName $moduleName { return 0 }
     Mock Run-Sysprep -Verifiable -ModuleName $moduleName  { return 0 }
@@ -156,26 +212,24 @@ Describe "Test New-MaaSImage" {
     Mock Remove-Item -Verifiable -ModuleName $moduleName { return 0 }
     Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
 
-    It "Should create a maas image" {
-        New-MaaSImage -Wimfilepath "fakeWimFilepath" `
-                    -ImageName "fakeImageName" `
-                    -SizeBytes 1 -MaaSImagePath "fakeMAASPath" | Should Be 0
-
-
-                    }
+    It "Should create an online image" {
+        New-WindowsOnlineImage -Wimfilepath "fakeWimFilepath" `
+            -ImageName "fakeImageName" `
+            -SizeBytes 1 -WindowsImagePath "fakeWindowsImagePath" | Should Be 0
+    }
 
     It "Should accept valid product key" {
-        New-MaaSImage -Wimfilepath "fakeWimFilepath" `
-                    -ImageName "fakeImageName" `
-                    -ProductKey "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" `
-                    -SizeBytes 1 -MaaSImagePath "fakeMAASPath" | Should Be 0
+        New-WindowsOnlineImage -Wimfilepath "fakeWimFilepath" `
+            -ImageName "fakeImageName" `
+            -ProductKey "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" `
+            -SizeBytes 1 -WindowsImagePath "fakeWindowsImagePath" | Should Be 0
     }
 
     It "Should throw on invalid product key" {
-        { New-MaaSImage -Wimfilepath "fakeWimFilepath" `
-                    -ImageName "fakeImageName" `
-                    -ProductKey "foo" `
-                    -SizeBytes 1 -MaaSImagePath "fakeMAASPath" } | Should Throw
+        { New-WindowsOnlineImage -Wimfilepath "fakeWimFilepath" `
+            -ImageName "fakeImageName" `
+            -ProductKey "foo" `
+            -SizeBytes 1 -WindowsImagePath "fakeWindowsImagePath" } | Should Throw
     }
 
     It "should run all mocked commands" {
