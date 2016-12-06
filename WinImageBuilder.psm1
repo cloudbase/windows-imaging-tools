@@ -22,6 +22,20 @@ will not be ready to deploy.
 The image is set to automatically sysprep on first boot.
 Please make sure you boot this image at least once before you use it.
 "@
+$VirtIODrivers = @("balloon", "netkvm", "pvpanic", "qemupciserial", "qxl",
+             "qxldod", "vioinput", "viorng", "vioscsi", "vioserial", "viostor")
+
+$VirtIODriverMappings = @{
+    "2k8" = @(60, 1);
+    "2k8r2" = @(61, 1);
+    "w7" = @(61, 0);
+    "2k12" = @(62, 1);
+    "w8" = @(62, 0);
+    "2k12r2" = @(63, 1);
+    "w8.1" = @(63, 0);
+    "2k16" = @(100, 1);
+    "w10" = @(100, 0);
+}
 
 . "$scriptPath\Interop.ps1"
 
@@ -445,6 +459,43 @@ function Is-ServerInstallationType {
     return ($image.ImageInstallationType -in @("Server", "Server Core"))
 }
 
+function Get-VirtIODrivers {
+    Param(
+        [parameter(Mandatory=$true)]
+        [int]$MajorMinorVersion,
+        [parameter(Mandatory=$true)]
+        [int]$IsServer,
+        [parameter(Mandatory=$true)]
+        [string]$BasePath,
+        [parameter(Mandatory=$true)]
+        [string]$Architecture,
+        [parameter(Mandatory=$false)]
+        [int]$RecursionDepth = 0
+    )
+
+    $driverPaths = @()
+    foreach ($driver in $VirtioDrivers) {
+        foreach ($osVersion in $VirtIODriverMappings.Keys) {
+            $map = $VirtIODriverMappings[$osVersion]
+            if (!(($map[0] -eq $MajorMinorVersion) -and ($map[1] -eq $isServer))) {
+              continue
+            }
+            $driverPath = "{0}\{1}\{2}\{3}" -f @($basePath,
+                                                 $driver,
+                                                 $osVersion,
+                                                 $architecture)
+            if (Test-Path $driverPath) {
+                $driverPaths += $driverPath
+                break
+            }
+        }
+    }
+    if (!$driverPaths -and $RecursionDepth -lt 1) {
+        # Note(avladu): Fallback to 2012r2/w8.1 if no drivers are found
+        $driverPaths = Get-VirtIODrivers 63 $IsServer $BasePath $Architecture 1
+    }
+    return $driverPaths
+}
 
 function Add-VirtIODrivers {
     Param(
@@ -474,37 +525,13 @@ function Add-VirtIODrivers {
     }
 
     # For VirtIO ISO with drivers version higher than 1.8.x
-    if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0) {
-        $virtioVer = "2k8"
-    } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1) {
-        if (Is-ServerInstallationType $image) {
-            $virtioVer = "2k8r2"
-        } else {
-            $virtioVer = "w7"
-        }
-    } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 2) {
-        if (Is-ServerInstallationType $image) {
-            $virtioVer = "2k12"
-        } else {
-            $virtioVer = "w8"
-        }
-    } elseif (($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 3) `
-        -or $image.ImageVersion.Major -gt 6) {
-        if (Is-ServerInstallationType $image) {
-            $virtioVer = "2k12R2"
-        } else {
-            $virtioVer = "w8.1"
-        }
-    } else {
-        throw "Unsupported Windows version for VirtIO drivers: {0}" `
-            -f $image.ImageVersion
-    }
-
-    $drivers = @("Balloon", "NetKVM", "viorng", "vioscsi", "vioserial", "viostor")
-    foreach ($driver in $drivers) {
-        $virtioDir = "{0}\{1}\{2}\{3}" -f $driversBasePath, $driver, $virtioVer, $image.ImageArchitecture
-        if (Test-Path $virtioDir) {
-            Add-DriversToImage $vhdDriveLetter $virtioDir
+    $majorMinorVersion = [string]$image.ImageVersion.Major + [string]$image.ImageVersion.Minor
+    $virtioDriversPaths = Get-VirtIODrivers -MajorMinorVersion $majorMinorVersion `
+        -IsServer ([int](Is-ServerInstallationType $image)) -BasePath $driversBasePath `
+        -Architecture $image.ImageArchitecture
+    foreach ($virtioDriversPath in $virtioDriversPaths) {
+        if (Test-Path $virtioDriversPath) {
+            Add-DriversToImage $vhdDriveLetter $virtioDriversPath
         }
     }
 }
@@ -1078,5 +1105,5 @@ function New-WindowsCloudImage {
 }
 
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
-    New-WindowsOnlineImage
+    New-WindowsOnlineImage, Add-VirtIODriversFromISO
 
