@@ -118,6 +118,40 @@ function Release-IP {
         }
 }
 
+function Set_WSUSServer{
+	# Set up the registry values to WSUS server
+	$WindowsUpdateRegKey = "HKLM:\Software\Policies\Microsoft\Windows\WindowsUpdate\AU"
+	$WindowsUpdateRootRegKey = "HKLM:\Software\Policies\Microsoft\Windows\WindowsUpdate\"
+	$WSUSServer = "http://wsusserveruri/"
+	$StatServer = "http://wsusserveruri/"
+    	$TargetGroupEnabled = 1
+    	$TargetGroup = "WSUS_Target_Group"
+	$Enabled = 1
+
+    # Test if the Registry Key doesn't exist already
+    if(-not (Test-Path $WindowsUpdateRegKey))
+    {
+        # Create the WindowsUpdate\AU key, since it doesn't exist already
+        # The -Force parameter will create any non-existing parent keys recursively
+        New-Item -Path $WindowsUpdateRegKey -Force
+    }
+
+    # Enable an Intranet-specific WSUS server
+    Set-ItemProperty -Path $WindowsUpdateRegKey -Name UseWUServer -Value $Enabled -Type DWord
+
+    # Specify the WSUS server
+    Set-ItemProperty -Path $WindowsUpdateRootRegKey -Name WUServer -Value $WSUSServer -Type String
+
+    # Specify the Statistics server
+    Set-ItemProperty -Path $WindowsUpdateRootRegKey -Name WUStatusServer -Value $StatServer -Type String
+    
+    #set machine to reflect to target group
+    Set-ItemProperty -Path $WindowsUpdateRootRegKey -Name TargetGroupEnabled -Value $TargetGroupEnabled -Type DWord
+
+    #Specify the target group in WSUS
+    Set-ItemProperty -Path $WindowsUpdateRootRegKey -Name TargetGroup -Value $TargetGroup -Type String
+}
+
 function Install-WindowsUpdates {
     Import-Module "$resourcesDir\WindowsUpdates\WindowsUpdates"
     $BaseOSKernelVersion = [System.Environment]::OSVersion.Version
@@ -201,37 +235,7 @@ try
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PurgeUpdates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "DisableSwap" -Default $false -AsBoolean
     
-    # Set up the registry values to WSUS server
-	$WindowsUpdateRegKey = "HKLM:\Software\Policies\Microsoft\Windows\WindowsUpdate\AU"
-	$WindowsUpdateRootRegKey = "HKLM:\Software\Policies\Microsoft\Windows\WindowsUpdate\"
-	$WSUSServer = "http://wsusserveruri/"
-	$StatServer = "http://wsusserveruri/"
-    $TargetGroupEnabled = 1
-    $TargetGroup = "WSUS_Target_Group"
-	$Enabled = 1
-
-    # Test if the Registry Key doesn't exist already
-    if(-not (Test-Path $WindowsUpdateRegKey))
-    {
-        # Create the WindowsUpdate\AU key, since it doesn't exist already
-        # The -Force parameter will create any non-existing parent keys recursively
-        New-Item -Path $WindowsUpdateRegKey -Force
-    }
-
-    # Enable an Intranet-specific WSUS server
-    Set-ItemProperty -Path $WindowsUpdateRegKey -Name UseWUServer -Value $Enabled -Type DWord
-
-    # Specify the WSUS server
-    Set-ItemProperty -Path $WindowsUpdateRootRegKey -Name WUServer -Value $WSUSServer -Type String
-
-    # Specify the Statistics server
-    Set-ItemProperty -Path $WindowsUpdateRootRegKey -Name WUStatusServer -Value $StatServer -Type String
-    
-    #set machine to reflect to target group
-    Set-ItemProperty -Path $WindowsUpdateRootRegKey -Name TargetGroupEnabled -Value $TargetGroupEnabled -Type DWord
-
-    #Specify the target group in WSUS
-    Set-ItemProperty -Path $WindowsUpdateRootRegKey -Name TargetGroup -Value $TargetGroup -Type String
+    Set_WSUSServer
     
     if($installUpdates)
     {
