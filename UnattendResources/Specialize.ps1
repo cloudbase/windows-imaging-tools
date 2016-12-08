@@ -3,7 +3,7 @@ $resourcesDir = "$ENV:SystemDrive\UnattendResources"
 
 try
 {
-    $wallpaper = "$resourcesDir\Wallpaper.png"
+    $wallpaper = "$resourcesDir\Wallpaper.jpg"
     if(Test-Path $wallpaper)
     {
         $Host.UI.RawUI.WindowTitle = "Configuring wallpaper..."
@@ -15,7 +15,7 @@ try
             mkdir $wallpaper_dir
         }
 
-        copy "$wallpaper" "$wallpaper_dir\Wallpaper-Cloudbase-2013.png"
+        copy "$wallpaper" "$wallpaper_dir\Wallpaper-Cloudbase-2013.jpg"
         $gpoZipPath = "$resourcesDir\GPO.zip"
         foreach($item in (New-Object -com shell.application).NameSpace($gpoZipPath).Items())
         {
