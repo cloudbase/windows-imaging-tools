@@ -1233,6 +1233,8 @@ function New-WindowsFromGoldenImage {
         [parameter(Mandatory=$false)]
         [switch]$DisableSwap,
         [parameter(Mandatory=$false)]
+        [switch]$GoldImage=$false,
+        [parameter(Mandatory=$false)]
         [string]$ZipPassword
     )
     PROCESS
@@ -1242,15 +1244,13 @@ function New-WindowsFromGoldenImage {
                 Resize-VHD -Path $WindowsImageVHDXPath -SizeBytes $SizeBytes
             }
 
-            Mount-VHD -Path $WindowsImageVHDXPath | Out-Null
+            Mount-VHD -Path $WindowsImageVHDXPath -Passthru | Out-Null
             Get-PSDrive | Out-Null
-
-            $driveLetterGold = ((Get-DiskImage -ImagePath $WindowsImageVHDXPath | Get-Disk | Get-Partition | Get-Volume).DriveLetter + ":")
-
+            $driveLetter = (Get-DiskImage -ImagePath $WindowsImageVHDXPath | Get-Disk | Get-Partition).DriveLetter
+            $driveLetterGold = $driveLetter + ":"
             Execute-Retry {
-                Resize-Partition -DriveLetter $driveLetterGold -Size $SizeBytes
+                Resize-Partition -DriveLetter $driveLetter -Size ($SizeBytes - 500MB) -ErrorAction Stop
             }
-
             if ($ExtraDriversPath) {
                 Dism /Image:$driveLetterGold /Add-Driver /Driver:$ExtraDriversPath /ForceUnsigned /Recurse
             }
@@ -1260,7 +1260,7 @@ function New-WindowsFromGoldenImage {
                 "PersistDriverInstall"=$PersistDriverInstall;
                 "PurgeUpdates"=$PurgeUpdates;
                 "DisableSwap"=$DisableSwap;
-                "GoldImage"=$false;
+                "GoldImage"=$GoldImage;
             }
 
             if ($productKey) {
