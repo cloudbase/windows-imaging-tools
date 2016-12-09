@@ -138,9 +138,12 @@ function Install-WindowsUpdates {
     if ($updates) {
         $availableUpdatesNumber = $updates.Count
         Write-Host "Found $availableUpdatesNumber updates. Installing..."
-        Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
-        Restart-Computer -Force
-        exit 0
+        try {
+            Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
+        } finally {
+            Restart-Computer -Force
+            exit 0
+        }
     }
 }
 
