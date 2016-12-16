@@ -90,6 +90,16 @@ function Get-WimInteropObject {
 }
 
 function Get-WimFileImagesInfo {
+    <#
+    .SYNOPSIS
+     This function retrieves a list of the Windows Editions from an ISO file.
+    .DESCRIPTION
+     This function reads the Images content of the WIM file that can be found
+     on a mounted ISO and it returns an object for each Windows Edition, each
+     object containing a list of properties.
+    .PARAMETER WimFilePath
+     Location of the install.wim file found on the mounted ISO image.
+    #>
     [CmdletBinding()]
     Param(
         [parameter(Mandatory=$true)]
@@ -537,6 +547,23 @@ function Add-VirtIODrivers {
 }
 
 function Add-VirtIODriversFromISO {
+    <#
+    .SYNOPSIS
+     This function adds VirtIO drivers from a given ISO path to a mounted Windows VHD image.
+     The VirtIO ISO contains all the synthetic drivers for the KVM hypervisor. 
+    .DESCRIPTION
+     This function takes the VirtIO drivers from a specified ISO file and installs them into the 
+     given VHD, based on the characteristics given by the image parameter (which contains the
+     image version, image architecture and installation type).
+     More info can be found here: https://fedoraproject.org/wiki/Windows_Virtio_Drivers
+    .PARAMETER VHDDriveLetter
+     The drive letter of the mounted Windows VHD image.
+    .PARAMETER Image
+     The exact flavor of Windows installed on that image, so that the supported VirtIO drivers
+     can be installed.
+    .PARAMETER ISOPath
+     The full path of the VirtIO ISO file containing the drivers.
+    #>
     Param(
         [parameter(Mandatory=$true)]
         [string]$vhdDriveLetter,
@@ -644,6 +671,17 @@ function Compress-Image {
 }
 
 function Resize-VHDImage {
+    <#
+    .SYNOPSIS
+     This function resizes the VHD image to a minimum VHD size plus a FreeSpace parameter value buffer.
+    .DESCRIPTION
+     This function mounts the VHD given as parameter and retrieves the drive letter. After that it computes
+     the actual size and the minimum supported size.
+    .PARAMETER VirtualDiskPath
+     The path to the VHD image  to resize.
+    .PARAMETER FreeSpace
+     This is the extra buffer parameter.
+    #>
     Param(
         [Parameter(Mandatory=$true)]
         [string]$VirtualDiskPath,
@@ -792,6 +830,63 @@ function Run-Sysprep {
 }
 
 function New-MaaSImage {
+    <#
+    .SYNOPSIS
+     This is a wrapper method on top of New-WdindowsOnlineImage.
+     This function generates a MAAS ready image from an ISO file.
+    .DESCRIPTION
+     It calls New-WindowsOnlineImage with the Type parameter set to MAAS.
+    .PARAMETER WimFilePath
+     The location of the WIM file from the Windows ISO.
+    .PARAMETER ImageName
+     This is the object which contains all the information about the Windows flavor selected.
+    .PARAMETER MaaSImagePath
+     The destination of the generated image.
+    .PARAMETER SizeBytes
+     The size of the VHD used to generate the image.
+    .PARAMETER DiskLayout
+     This parameter can be set to either BIOS or UEFI.
+    .PARAMETER ProductKey
+     The product key for the OS selected.
+    .PARAMETER VirtIOISOPath
+     The path to the ISO file containing the VirtIO drivers.
+    .PARAMETER InstallUpdates
+     If set to true, the latest updates will be downloaded and installed.
+    .PARAMETER AdministratorPassword
+     Is used by the script to auto-login in the instance while it is generating.
+    .PARAMETER PersistDriverInstall
+     In case the hardware on which the image is generated will also be the hardware on
+     which the image will be deployed this can be set to true, otherwise the spawned
+     instance is prone to BSOD.
+    .PARAMETER ExtraFeatures
+     Name of the extra features to enable on the generated image.
+     The $ExtraFeatures need be present in the ISO file.
+    .PARAMETER ExtraDriversPath
+     The path to the additional drivers to install recursively.
+    .PARAMETER Memory
+     RAM assigned to the VM used to generate the image.
+    .PARAMETER CpuCores
+     The number of CPU cores assigned to the VM used to generate the image.
+    .PARAMETER RunSysprep
+     Used to clean the OS on the VM, and to prepare it for a first-time use.
+    .PARAMETER SwitchName
+     Used to specify the virtual switch the VM will be using to connect to the internet.
+     If none is specified, one will be created.
+    .PARAMETER Force
+     It will force the image generation when $RunSysprep is $False or the selected $SwitchName 
+     is not an external one. Use this parameter with caution because it can easily generate
+     unstable images.
+    .PARAMETER PurgeUpdates
+     If set to true, will run DISM with /resetbase option. This will reduce the size of 
+     WinSXS folder, but after that Windows updates cannot be uninstalled.
+    .PARAMETER DisableSwap
+     DisableSwap option will disable the swap when the image is generated and will add a setting
+     in the Unattend.xml file which will enable swap at boot time during specialize step. This
+     is required as by default, the amount of swap space on Windows machine is directly
+     proportional to the RAM size and if the image has in the initial stage low disk space,
+     the first boot will fail due to not enough disk space. The swap is set to the default
+     automatic setting right after the resize of the partitions is performed by cloudbase-init.
+    #>
     [CmdletBinding()]
     param
     (
@@ -848,6 +943,70 @@ function New-MaaSImage {
 }
 
 function New-WindowsOnlineImage {
+    <#
+    .SYNOPSIS
+     This function generates a Windows image using Hyper-V  to instantiate the image in
+     order to apply the updates and install cloudbase-init.
+    .DESCRIPTION
+     This command requires Hyper-V to be enabled, a VMSwitch to be configured for external
+     network connectivity if the updates are to be installed, which is highly recommended.
+     This command uses internally the New-WindowsCloudImage to generate the base image and
+     start a Hyper-V instance using the base image. After the Hyper-V instance shuts down, 
+     the resulting VHDX is shrunk to a minimum size and converted to the required format.
+    .PARAMETER WimFilePath
+     The location of the WIM file from the Windows ISO.
+    .PARAMETER ImageName
+     This is the object which contains all the information about the Windows
+     flavor selected.
+    .PARAMETER WindowsImagePath
+     The destination of the generated image.
+    .PARAMETER SizeBytes
+     The size of the VHD used to generate the image.
+    .PARAMETER DiskLayout
+     This parameter can be set to either BIOS or UEFI.
+    .PARAMETER ProductKey
+     The product key for the OS selected.
+    .PARAMETER VirtIOISOPath
+     The path to the ISO file containing the VirtIO drivers.
+    .PARAMETER InstallUpdates
+     If set to true, the latest updates will be downloaded and installed.
+    .PARAMETER AdministratorPassword
+     Is used by the script to auto-login to the instance while it is generating.
+    .PARAMETER ExtraFeatures
+     Name of the extra features to enable on the generated image.
+     The $ExtraFeatures need be present in the ISO file.
+    .PARAMETER ExtraDriversPath
+     The path to the additional drivers to install recursively.
+    .PARAMETER PersistDriverInstall
+     In case the hardware on which the image is generated will also be the hardware on
+     which the image will be deployed this can be set to true, otherwise the spawned
+     instance is prone to BSOD.
+    .PARAMETER Memory
+     RAM assigned to the VM used to generate the image.
+    .PARAMETER CpuCores
+     The number of CPU cores assigned to the VM used to generate the image.
+    .PARAMETER RunSysprep
+     Used to clean the OS on the VM, and to prepare it for a first-time use.
+    .PARAMETER SwitchName
+     Used to specify the virtual switch the VM will be using to connect to the internet.
+     If none is specified, one will be created.
+    .PARAMETER Force
+     It will force the image generation when $RunSysprep is $False or the selected $SwitchName 
+     is not an external one. Use this parameter with caution because it can easily generate
+     unstable images.
+    .PARAMETER Type
+     This parameter allows to choose between MAAS, KVM and Hyper-V specific images.
+    .PARAMETER PurgeUpdates
+     If set to true, will run DISM with /resetbase option. This will reduce the size of 
+     WinSXS folder, but after that Windows updates cannot be uninstalled.
+    .PARAMETER DisableSwap
+     DisableSwap option will disable the swap when the image is generated and will add a setting
+     in the Unattend.xml file which will enable swap at boot time during specialize step. This
+     is required as by default, the amount of swap space on Windows machine is directly
+     proportional to the RAM size and if the image has in the initial stage low disk space,
+     the first boot will fail due to not enough disk space. The swap is set to the default
+     automatic setting right after the resize of the partitions is performed by cloudbase-init.
+    #>
     [CmdletBinding()]
     param
     (
@@ -984,6 +1143,64 @@ function New-WindowsOnlineImage {
 }
 
 function New-WindowsCloudImage {
+    <#
+    .SYNOPSIS
+     This function creates a functional Windows Image, starting from an ISO file,
+     without the need of Hyper-V to be enabled.
+    .DESCRIPTION
+     This script can generate a Windows Image in one of the following formats: VHD,
+     VHDX, QCow2, VMDK or RAW. It takes the Windows flavor indicated by the ImageName
+     from the WIM file and based on the parameters given, it will generate an image.
+     This function does not require Hyper-V to be enabled, but the generated image
+     is not ready to be deployed, as it needs to be started manually on another hypervisor.
+     The image is ready to be used when it shuts down. 
+    .PARAMETER WimFilePath
+     The location of the WIM file from the Windows ISO.
+    .PARAMETER ImageName
+     This is the object which contains all the information about the Windows
+     flavor selected.
+    .PARAMETER VirtualDiskPath
+     The destination of the generated image.
+    .PARAMETER SizeBytes
+     The size of the VHD used to generate the image.
+    .PARAMETER ProductKey
+     The product key for the OS selected.
+    .PARAMETER VirtualDiskFormat
+     Select between VHD, VHDX, QCow2, VMDK or RAW formats.
+    .PARAMETER DiskLayout
+     This parameter can be set to either BIOS or UEFI.
+    .PARAMETER VirtIOISOPath
+     The path to the ISO file containing the VirtIO drivers.
+    .PARAMETER ExtraFeatures
+     Name of the extra features to enable on the generated image.
+     The $ExtraFeatures need be present in the ISO file.
+    .PARAMETER ExtraDriversPath
+     The path to the additional drivers to install recursively.
+    .PARAMETER InstallUpdates
+     If set to true, the latest updates will be downloaded and installed.
+    .PARAMETER AdministratorPassword
+     Is used by the script to auto-login in the instance while it is generating.
+    .PARAMETER UnattendXmlPath
+     The path to the Unattend XML template file.
+    .PARAMETER PersistDriverInstall
+     In case the hardware on which the image is generated will also be the hardware on
+     which the image will be deployed this can be set to true, otherwise the spawned
+     instance is prone to BSOD.
+    .PARAMETER InstallMaaSHooks
+     If set to true, MaaSHooks will be installed.
+    .PARAMETER VirtIOBasePath
+     The drive letter of the mounted VirtIO drivers ISO file.
+    .PARAMETER PurgeUpdates
+     If set to true, will run DISM with /resetbase option. This will reduce the size of 
+     WinSXS folder, but after that Windows updates cannot be uninstalled.
+    .PARAMETER DisableSwap
+     DisableSwap option will disable the swap when the image is generated and will add a setting
+     in the Unattend.xml file which will enable swap at boot time during specialize step. This
+     is required as by default, the amount of swap space on Windows machine is directly
+     proportional to the RAM size and if the image has in the initial stage low disk space,
+     the first boot will fail due to not enough disk space. The swap is set to the default
+     automatic setting right after the resize of the partitions is performed by cloudbase-init.
+    #>
     [CmdletBinding()]
     Param(
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
