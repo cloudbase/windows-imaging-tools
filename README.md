@@ -29,7 +29,7 @@ https://github.com/cloudbase/cloudbase-init-offline-install
 * A Windows host, with Hyper-V virtualization enabled, PowerShell >=v4 support<br/>
 and Windows Assessment and Deployment Kit (ADK)
 * A Windows installation ISO or DVD
-i* Windows compatible drivers, if required by the target environment
+* Windows compatible drivers, if required by the target environment
 * Git environment
 
 ### Steps to generate the Windows image
@@ -105,12 +105,12 @@ Install-Package Pester
 or you can clone it from: https://github.com/pester/Pester
 
 
-Running the tests in a closed envionment:
+Running the tests in a closed environment:
 
 ```cmd
 cmd /c 'powershell.exe -NonInteractive { Invoke-Pester }'
 ```
 
 This will run all tests without polluting your current shell environment. <br/>
-This is not needed if you run it in a Continous Integration environment.
+This is not needed if you run it in a Continuous Integration environment.
 
