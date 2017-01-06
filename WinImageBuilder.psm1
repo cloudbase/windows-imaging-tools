@@ -332,7 +332,7 @@ function Copy-UnattendResources {
 
     if ($imageInstallationType -eq "Server Core") {
         # Skip the wallpaper on server core
-        Remove-Item -Force "$resourcesDir\Wallpaper.png"
+        Remove-Item -Force "$resourcesDir\Wallpaper.jpg"
         Remove-Item -Force "$resourcesDir\GPO.zip"
     }
     if ($InstallMaaSHooks) {
