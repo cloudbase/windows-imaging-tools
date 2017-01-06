@@ -328,7 +328,7 @@ function Copy-UnattendResources {
         $d = New-Item -Type Directory $resourcesDir
     }
     Write-Host "Copying: $localResourcesDir $resourcesDir"
-    Copy-Item -Recurse "$localResourcesDir\*" $resourcesDir
+    Copy-Item -Recurse "$localResourcesDir\*" $resourcesDir -Force
 
     if ($imageInstallationType -eq "Server Core") {
         # Skip the wallpaper on server core
@@ -643,6 +643,45 @@ function Compress-Image {
     Write-Output "MaaS image is ready and available at: $ImagePath"
 }
 
+function Start-Executable {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [Alias("7za.exe")]
+        [array]$Command
+    )
+    PROCESS {
+        $cmdType = (Get-Command $Command[0]).CommandType
+        if ($cmdType -eq "Application") {
+            $ErrorActionPreference = "SilentlyContinue"
+            $ret = & $Command[0] $Command[1..$Command.Length] 2>&1
+            $ErrorActionPreference = "Stop"
+        } else {
+            $ret = & $Command[0] $Command[1..$Command.Length]
+        }
+        if ($cmdType -eq "Application" -and $LASTEXITCODE) {
+            Throw ("Failed to run: " + ($Command -Join " "))
+        }
+        if ($ret -and $ret.Length -gt 0) {
+            return $ret
+        }
+        return $false
+    }
+}
+
+function New-ProtectedZip {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$ZipPassword,
+        [Parameter(Mandatory=$true)]
+        [string]$VirtualDiskPath
+    )
+        $zipPath = (Get-PathWithoutExtension $VirtualDiskPath) + ".zip"
+        $7zip = Join-Path $localResourcesDir 7za.exe
+        Write-Host "Creating protected zip ..."
+        Start-Executable -Command @("$7zip", "a" , "-tzip", "$zipPath", "$VirtualDiskPath", "-p$ZipPassword", "-mx1")
+}
+
 function Resize-VHDImage {
     Param(
         [Parameter(Mandatory=$true)]
@@ -791,6 +830,36 @@ function Run-Sysprep {
     Remove-VM $Name -Confirm:$false -Force
 }
 
+function Get-ImageInformation {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$driveLetter
+    )
+
+if (Test-Path "$driveLetter\Windows\system32\ntdll.dll") {
+        $versionString = (Get-Item "$driveLetter\Windows\system32\ntdll.dll").VersionInfo.ProductVersion
+        $OSVersion = $versionString.split('.')
+        $ImageVersion = @{
+            "Major" = $OSVersion[0];
+            "Minor" = $OSVersion[1];
+        }
+    } else {
+        Throw "Unable to determine OS Version"
+    }
+
+    if (Test-Path "$driveLetter\Windows\SysWOW64") {
+        $ImageArchitecture = "AMD64"
+    } else {
+        $ImageArchitecture = "i386"
+    }
+
+    return $image = @{
+        "ImageVersion" = $ImageVersion;
+        "ImageArchitecture" = $ImageArchitecture;
+        "ImageInstallationType" = "Server";
+    }
+}
+
 function New-MaaSImage {
     [CmdletBinding()]
     param
@@ -832,9 +901,13 @@ function New-MaaSImage {
         [parameter(Mandatory=$false)]
         [switch]$PurgeUpdates,
         [parameter(Mandatory=$false)]
-        [switch]$DisableSwap
-    )
+        [switch]$DisableSwap,
+        [parameter(Mandatory=$false)]
+        [switch]$GoldImage=$false,
+        [parameter(Mandatory=$false)]
+        [string]$ZipPassword
 
+    )
     PROCESS
     {
         New-WindowsOnlineImage -Type "MAAS" -WimFilePath $WimFilePath -ImageName $ImageName `
@@ -843,7 +916,7 @@ function New-MaaSImage {
             -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
             -ExtraDriversPath $ExtraDriversPath -Memory $Memory -CpuCores $CpuCores `
             -RunSysprep:$RunSysprep -SwitchName $SwitchName -Force:$Force -PurgeUpdates:$PurgeUpdates `
-            -DisableSwap:$DisableSwap
+            -DisableSwap:$DisableSwap -GoldImage:$GoldImage -ZipPassword $ZipPassword
     }
 }
 
@@ -889,7 +962,11 @@ function New-WindowsOnlineImage {
         [parameter(Mandatory=$false)]
         [switch]$PurgeUpdates,
         [parameter(Mandatory=$false)]
-        [switch]$DisableSwap
+        [switch]$DisableSwap,
+        [parameter(Mandatory=$false)]
+        [switch]$GoldImage=$false,
+        [parameter(Mandatory=$false)]
+        [string]$ZipPassword
     )
     PROCESS
     {
@@ -943,7 +1020,8 @@ function New-WindowsOnlineImage {
                 -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
                 -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
                 -InstallMaaSHooks:$InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
-                -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap
+                -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap -GoldImage:$GoldImage `
+                -ZipPassword $ZipPassword
 
             if ($RunSysprep) {
                 if($DiskLayout -eq "UEFI") {
@@ -972,6 +1050,9 @@ function New-WindowsOnlineImage {
                 $Qcow2ImagePath = $barePath + ".qcow2"
                 Write-Host "Converting VHD to QCow2"
                 Convert-VirtualDisk $VirtualDiskPath $Qcow2ImagePath "qcow2"
+                if ($ZipPassword) {
+                    New-ProtectedZip -ZipPassword $ZipPassword -VirtualDiskPath $Qcow2ImagePath
+                }
                 Remove-Item -Force $VirtualDiskPath
             }
         } catch {
@@ -1023,7 +1104,12 @@ function New-WindowsCloudImage {
         [parameter(Mandatory=$false)]
         [switch]$PurgeUpdates,
         [parameter(Mandatory=$false)]
-        [switch]$DisableSwap
+        [switch]$DisableSwap,
+        [parameter(Mandatory=$false)]
+        [switch]$GoldImage=$false,
+        [parameter(Mandatory=$false)]
+        [string]$ZipPassword
+
     )
 
     PROCESS
@@ -1060,6 +1146,8 @@ function New-WindowsCloudImage {
                 "PersistDriverInstall"=$PersistDriverInstall;
                 "PurgeUpdates"=$PurgeUpdates;
                 "DisableSwap"=$DisableSwap;
+                "GoldImage"=$GoldImage;
+                "ProductKey"=$ProductKey;
             }
 
             $xmlParams = @{'InUnattendXmlPath' = $UnattendXmlPath;
@@ -1098,12 +1186,150 @@ function New-WindowsCloudImage {
 
         if ($VHDPath -ne $VirtualDiskPath) {
             Convert-VirtualDisk $VHDPath $VirtualDiskPath $VirtualDiskFormat
+            if ($ZipPassword) {
+                New-ProtectedZip -ZipPassword $ZipPassword -VirtualDiskPath $VirtualDiskPath
+            }
             Remove-Item -Force $VHDPath
         }
         Write-Host ("Image generation finished at: {0}" -f @(Get-Date))
     }
 }
 
+function New-WindowsFromGoldenImage {
+    [CmdletBinding()]
+    param
+    (
+        [parameter(Mandatory=$true)]
+        [string]$WindowsImageVHDXPath,
+        [parameter(Mandatory=$true)]
+        [string]$WindowsImageTargetPath,
+        [parameter(Mandatory=$true)]
+        [Uint64]$SizeBytes,
+        [parameter(Mandatory=$false)]
+        [string]$ProductKey,
+        [parameter(Mandatory=$false)]
+        [string]$VirtIOISOPath,
+        [parameter(Mandatory=$false)]
+        [switch]$InstallUpdates,
+        [array]$ExtraFeatures = @("Microsoft-Hyper-V"),
+        [parameter(Mandatory=$false)]
+        [string]$ExtraDriversPath,
+        [parameter(Mandatory=$false)]
+        [switch]$PersistDriverInstall = $true,
+        [parameter(Mandatory=$false)]
+        [Uint64]$Memory=2GB,
+        [parameter(Mandatory=$false)]
+        [int]$CpuCores=1,
+        [parameter(Mandatory=$false)]
+        [switch]$RunSysprep=$true,
+        [parameter(Mandatory=$false)]
+        [string]$SwitchName,
+        [parameter(Mandatory=$false)]
+        [switch]$Force=$false,
+        [ValidateSet("MAAS", "KVM", "HYPER-V", ignorecase=$false)]
+        [string]$Type = "MAAS",
+        [parameter(Mandatory=$false)]
+        [switch]$PurgeUpdates,
+        [parameter(Mandatory=$false)]
+        [switch]$DisableSwap,
+        [parameter(Mandatory=$false)]
+        [switch]$GoldImage=$false,
+        [parameter(Mandatory=$false)]
+        [string]$ZipPassword
+    )
+    PROCESS
+    {
+        try {
+            Execute-Retry {
+                Resize-VHD -Path $WindowsImageVHDXPath -SizeBytes $SizeBytes
+            }
+
+            Mount-VHD -Path $WindowsImageVHDXPath -Passthru | Out-Null
+            Get-PSDrive | Out-Null
+            $driveLetter = (Get-DiskImage -ImagePath $WindowsImageVHDXPath | Get-Disk | Get-Partition).DriveLetter
+            $driveLetterGold = $driveLetter + ":"
+            Execute-Retry {
+                Resize-Partition -DriveLetter $driveLetter -Size ($SizeBytes - 500MB) -ErrorAction Stop
+            }
+            if ($ExtraDriversPath) {
+                Dism /Image:$driveLetterGold /Add-Driver /Driver:$ExtraDriversPath /ForceUnsigned /Recurse
+            }
+
+            $configValues = @{
+                "InstallUpdates"=$InstallUpdates;
+                "PersistDriverInstall"=$PersistDriverInstall;
+                "PurgeUpdates"=$PurgeUpdates;
+                "DisableSwap"=$DisableSwap;
+                "GoldImage"=$GoldImage;
+            }
+
+            if ($productKey) {
+                $configValues.Add("ProductKey","$productKey")
+            }
+
+            $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
+            Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType "Server Standard"
+            Generate-ConfigFile $resourcesDir $configValues
+            Download-CloudbaseInit $resourcesDir ([string]"AMD64")
+
+            $imageInfo = Get-ImageInformation $driveLetterGold
+            if ($VirtIOISOPath) {
+                Add-VirtIODriversFromISO $driveLetterGold $imageInfo $VirtIOISOPath
+            }
+
+            Dismount-VHD -Path $WindowsImageVHDXPath
+
+            $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
+            if ($SwitchName) {
+                $switch = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
+                if (!$switch) {
+                    throw "Selected vmswitch ($SwitchName) does not exist"
+                }
+                if ($switch.SwitchType -ne "External" -and !$Force) {
+                    throw "Selected switch ($SwitchName) is not an external
+                        switch. If you really want to continue use the -Force:$true flag."
+                }
+            } else {
+                $switch = GetOrCreate-Switch
+            }
+            New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $switch.Name -VHDPath $WindowsImageVHDXPath
+            Set-VMProcessor -VMname $Name -count $CpuCores
+
+            Start-VM $Name
+            Start-Sleep 10
+            Wait-ForVMShutdown $Name
+            Remove-VM $Name -Confirm:$False -Force
+
+            Resize-VHDImage $WindowsImageVHDXPath
+
+            $barePath = Get-PathWithoutExtension $WindowsImageTargetPath
+
+            if ($Type -eq "MAAS") {
+                $RawImagePath = $barePath + ".img"
+                Write-Output "Converting VHD to RAW"
+                Convert-VirtualDisk $WindowsImageVHDXPath $RawImagePath "RAW"
+                Remove-Item -Force $WindowsImageVHDXPath
+                Compress-Image $RawImagePath $WindowsImageTargetPath
+            }
+            if ($Type -eq "KVM") {
+                $Qcow2ImagePath = $barePath + ".qcow2"
+                Write-Output "Converting VHD to QCow2"
+                Convert-VirtualDisk $WindowsImageVHDXPath $Qcow2ImagePath "qcow2"
+                if ($ZipPassword) {
+                    New-ProtectedZip -ZipPassword $ZipPassword -VirtualDiskPath $Qcow2ImagePath
+                }
+                Remove-Item -Force $WindowsImageVHDXPath
+            }
+        } catch {
+            Write-Host $_
+            try {
+                Get-VHD $WindowsImageVHDXPath | Dismount-VHD
+            }
+            catch {}
+        }
+    }
+}
+
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
-    New-WindowsOnlineImage, Add-VirtIODriversFromISO
+    New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage
 
