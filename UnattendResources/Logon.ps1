@@ -8,22 +8,22 @@ function Set-PersistDrivers {
     [string]$Path,
     [switch]$Persist=$true
     )
-    if (!(Test-Path $Path)){
+    if (!(Test-Path $Path)) {
         return $false
     }
     try {
         $xml = [xml](Get-Content $Path)
-    }catch{
+    } catch {
         Write-Error "Failed to load $Path"
         return $false
     }
-    if (!$xml.unattend.settings){
+    if (!$xml.unattend.settings) {
         return $false
     }
     foreach ($i in $xml.unattend.settings) {
-        if ($i.pass -eq "generalize"){
+        if ($i.pass -eq "generalize") {
             $index = [array]::IndexOf($xml.unattend.settings, $i)
-            if ($xml.unattend.settings[$index].component -and $xml.unattend.settings[$index].component.PersistAllDeviceInstalls -ne $Persist.ToString()){
+            if ($xml.unattend.settings[$index].component -and $xml.unattend.settings[$index].component.PersistAllDeviceInstalls -ne $Persist.ToString()) {
                 $xml.unattend.settings[$index].component.PersistAllDeviceInstalls = $Persist.ToString()
             }
         }
@@ -36,20 +36,19 @@ function Set-UnattendEnableSwap {
     [parameter(Mandatory=$true)]
     [string]$Path
     )
-    if (!(Test-Path $Path)){
+    if (!(Test-Path $Path)) {
         return $false
-    }
-    try {
+    } try {
         $xml = [xml](Get-Content $Path)
-    }catch{
+    } catch {
         Write-Error "Failed to load $Path"
         return $false
     }
-    if (!$xml.unattend.settings){
+    if (!$xml.unattend.settings) {
         return $false
     }
     foreach ($i in $xml.unattend.settings) {
-        if ($i.pass -eq "specialize"){
+        if ($i.pass -eq "specialize") {
             $index = [array]::IndexOf($xml.unattend.settings, $i)
             if ($xml.unattend.settings[$index].component.RunSynchronous.RunSynchronousCommand.Order) {
                 $xml.unattend.settings[$index].component.RunSynchronous.RunSynchronousCommand.Order = "2"
@@ -92,8 +91,7 @@ function Clean-WindowsUpdates {
         } else {
             Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase
         }
-        if ($LASTEXITCODE)
-        {
+        if ($LASTEXITCODE) {
             throw "Dism.exe clean failed"
         }
     }
@@ -103,8 +101,7 @@ function Run-Defragment {
     $HOST.UI.RawUI.WindowTitle = "Running Defrag..."
     #Defragmenting all drives at normal priority
     defrag.exe /C /H /V
-    if ($LASTEXITCODE)
-    {
+    if ($LASTEXITCODE) {
         throw "Defrag.exe failed"
     }
 }
@@ -112,8 +109,7 @@ function Run-Defragment {
 function Release-IP {
     $HOST.UI.RawUI.WindowTitle = "Releasing IP..."
     ipconfig.exe /release
-    if ($LASTEXITCODE)
-        {
+    if ($LASTEXITCODE) {
             throw "IPconfig release failed"
         }
 }
@@ -154,24 +150,17 @@ function ExecRetry($command, $maxRetryCount=4, $retryInterval=4) {
     $ErrorActionPreference = "Continue"
 
     $retryCount = 0
-    while ($true)
-    {
-        try
-        {
+    while ($true) {
+        try {
             $res = Invoke-Command -ScriptBlock $command
             $ErrorActionPreference = $currErrorActionPreference
             return $res
-        }
-        catch [System.Exception]
-        {
+        } catch [System.Exception] {
             $retryCount++
-            if ($retryCount -ge $maxRetryCount)
-            {
+            if ($retryCount -ge $maxRetryCount) {
                 $ErrorActionPreference = $currErrorActionPreference
                 throw
-            }
-            else
-            {
+            } else {
                 if($_) {
                 Write-Warning $_
                 }
@@ -201,8 +190,7 @@ try
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PurgeUpdates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "DisableSwap" -Default $false -AsBoolean
 
-    if($installUpdates)
-    {
+    if ($installUpdates) {
         Install-WindowsUpdates
     }
 
@@ -220,8 +208,7 @@ try
     $serialPortName = @(Get-WmiObject Win32_SerialPort)[0].DeviceId
 
     $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog LOGGINGSERIALPORTNAME=$serialPortName"
-    if ($p.ExitCode -ne 0)
-    {
+    if ($p.ExitCode -ne 0) {
         throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
     }
 
@@ -246,9 +233,7 @@ try
     }
 
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
-}
-catch
-{
+} catch {
     $host.ui.WriteErrorLine($_.Exception.ToString())
     $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     throw
