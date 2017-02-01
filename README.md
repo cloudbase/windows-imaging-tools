@@ -58,7 +58,7 @@ $wimFilePath = "D:\Sources\install.wim"
 # Usually, the first image version is the Core one
 $image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[0]
 
-New-WindowsOnlineImage -WimFilePath $wimFilePath -ImageName $image.Name `
+New-WindowsOnlineImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
     -WindowsImagePath $windowsImagePath -Type 'KVM' `
     -SizeBytes 30GB -CpuCores 4 -Memory 4GB -SwitchName 'external'
 
