@@ -1161,9 +1161,9 @@ function New-WindowsFromGoldenImage {
 
             $driveLetterGold = ((Get-DiskImage -ImagePath $WindowsImageVHDXPath | Get-Disk | Get-Partition | Get-Volume).DriveLetter + ":")
 
-            Execute-Retry {
-                Resize-Partition -DriveLetter $driveLetter -Size ($SizeBytes - 500MB) -ErrorAction Stop
-            }
+            $driveNumber = (Get-DiskImage -ImagePath $WindowsImageVHDXPath | Get-Disk).Number
+            $maxPartitionSize = (Get-PartitionSupportedSize -DiskNumber $driveNumber -PartitionNumber 1).SizeMax
+            Resize-Partition -DiskNumber $driveNumber -PartitioNumber 1 -Size $maxPartitionSize
 
             if ($ExtraDriversPath) {
                 Dism /Image:$driveLetterGold /Add-Driver /Driver:$ExtraDriversPath /ForceUnsigned /Recurse
