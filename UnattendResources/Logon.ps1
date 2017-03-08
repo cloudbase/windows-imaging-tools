@@ -189,6 +189,7 @@ try
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PersistDriverInstall" -Default $true -AsBoolean
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PurgeUpdates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "DisableSwap" -Default $false -AsBoolean
+    $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "GoldImage" -Default $false -AsBoolean
 
     if ($installUpdates) {
         Install-WindowsUpdates
@@ -197,6 +198,13 @@ try
     ExecRetry {
         Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
     }
+
+    if ($goldImage) {
+        # Cleanup
+        Remove-Item -Recurse -Force $resourcesDir
+        Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
+        shutdown -s -t 0 -f
+     }
 
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
