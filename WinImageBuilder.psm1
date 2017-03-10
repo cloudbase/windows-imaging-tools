@@ -4,6 +4,8 @@ Import-Module Dism
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $localResourcesDir = "$scriptPath\UnattendResources"
+Import-Module "$localResourcesDir\ini.psm1"
+
 $noHypervWarning = @"
 The Hyper-V role is missing from this machine. In order to be able to finish
 generating the image, you need to install the Hyper-V role.
@@ -38,6 +40,29 @@ $VirtIODriverMappings = @{
 }
 
 . "$scriptPath\Interop.ps1"
+
+
+function Get-AvailableConfigs {
+    $availableConfigs = []
+    $configWimfilePath = Get-ConfigFromTemplate -Name "wim_file_path" -DefaultValue "Default" `
+                                     -GroupName "DEFAULT"
+    $availableConfigs += $config
+    
+}
+
+function Get-GlobalConfigs {
+    param($ConfigPath)
+    $availableConfigs = Get-AvailableConfigs
+    foreach($availableConfig in $availableConfigs) {
+        # get config from file
+        # add config to the configs by key name
+    }
+    $configs = {}
+    return $configs
+	
+{"wim_file_path" = "value"; ""}
+}
+
 
 function Execute-Retry {
     Param(
@@ -791,111 +816,20 @@ function Run-Sysprep {
     Remove-VM $Name -Confirm:$false -Force
 }
 
-function New-MaaSImage {
-    [CmdletBinding()]
-    param
-    (
-        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [string]$WimFilePath = "D:\Sources\install.wim",
-        [parameter(Mandatory=$true)]
-        [string]$ImageName,
-        [parameter(Mandatory=$true)]
-        [string]$MaaSImagePath,
-        [parameter(Mandatory=$true)]
-        [Uint64]$SizeBytes,
-        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
-        [string]$DiskLayout = "BIOS",
-        [ValidatePattern("^\S{5}-\S{5}-\S{5}-\S{5}-\S{5}")]
-        [parameter(Mandatory=$false)]
-        [string]$ProductKey,
-        [parameter(Mandatory=$false)]
-        [string]$VirtIOISOPath,
-        [parameter(Mandatory=$false)]
-        [switch]$InstallUpdates,
-        [parameter(Mandatory=$false)]
-        [string]$AdministratorPassword = "Pa`$`$w0rd",
-        [parameter(Mandatory=$false)]
-        [switch]$PersistDriverInstall = $false,
-        [array]$ExtraFeatures = @(),
-        [parameter(Mandatory=$false)]
-        [string]$ExtraDriversPath,
-        [parameter(Mandatory=$false)]
-        [Uint64]$Memory=2GB,
-        [parameter(Mandatory=$false)]
-        [int]$CpuCores=1,
-        [parameter(Mandatory=$false)]
-        [switch]$RunSysprep=$true,
-        [parameter(Mandatory=$false)]
-        [string]$SwitchName,
-        [parameter(Mandatory=$false)]
-        [switch]$Force=$false,
-        [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates,
-        [parameter(Mandatory=$false)]
-        [switch]$DisableSwap
-    )
-
-    PROCESS
-    {
-        New-WindowsOnlineImage -Type "MAAS" -WimFilePath $WimFilePath -ImageName $ImageName `
-            -WindowsImagePath $MaaSImagePath -SizeBytes $SizeBytes -DiskLayout $DiskLayout `
-            -ProductKey $ProductKey -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
-            -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-            -ExtraDriversPath $ExtraDriversPath -Memory $Memory -CpuCores $CpuCores `
-            -RunSysprep:$RunSysprep -SwitchName $SwitchName -Force:$Force -PurgeUpdates:$PurgeUpdates `
-            -DisableSwap:$DisableSwap
-    }
-}
-
 function New-WindowsOnlineImage {
     [CmdletBinding()]
     param
     (
-        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [string]$WimFilePath = "D:\Sources\install.wim",
-        [parameter(Mandatory=$true)]
-        [string]$ImageName,
-        [parameter(Mandatory=$true)]
-        [string]$WindowsImagePath,
-        [parameter(Mandatory=$true)]
-        [Uint64]$SizeBytes,
-        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
-        [string]$DiskLayout = "BIOS",
-        [parameter(Mandatory=$false)]
-        [string]$ProductKey,
-        [parameter(Mandatory=$false)]
-        [string]$VirtIOISOPath,
-        [parameter(Mandatory=$false)]
-        [switch]$InstallUpdates,
-        [parameter(Mandatory=$false)]
-        [string]$AdministratorPassword = "Pa`$`$w0rd",
-        [array]$ExtraFeatures = @(),
-        [parameter(Mandatory=$false)]
-        [string]$ExtraDriversPath,
-        [parameter(Mandatory=$false)]
-        [switch]$PersistDriverInstall = $true,
-        [parameter(Mandatory=$false)]
-        [Uint64]$Memory=2GB,
-        [parameter(Mandatory=$false)]
-        [int]$CpuCores=1,
-        [parameter(Mandatory=$false)]
-        [switch]$RunSysprep=$true,
-        [parameter(Mandatory=$false)]
-        [string]$SwitchName,
-        [parameter(Mandatory=$false)]
-        [switch]$Force=$false,
-        [ValidateSet("MAAS", "KVM", "HYPER-V", ignorecase=$false)]
-        [string]$Type = "MAAS",
-        [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates,
-        [parameter(Mandatory=$false)]
-        [switch]$DisableSwap
+        [parameter(Mandatory=$false, ValueFromPipeline=$true)]
+        [string]$ConfigFilePath = 
+
     )
     PROCESS
     {
+	    $CONFIG = Get-AvailableConfigs $ConfigFilePath
         Write-Host ("Windows online image generation started at: {0}" -f @(Get-Date))
         Is-Administrator
-        if (!$RunSysprep -and !$Force) {
+        if (!$CONFIG["run_sysprep"] -and !$CONFIG["force"]) {
             throw "You chose not to run sysprep.
                 This will build an unusable MaaS image.
                 If you really want to continue use the -Force:$true flag."
@@ -938,12 +872,7 @@ function New-WindowsOnlineImage {
             if ($Type -eq "KVM") {
                 $PersistDriverInstall = $false
             }
-            New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
-                -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
-                -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
-                -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-                -InstallMaaSHooks:$InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
-                -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap
+            New-WindowsCloudImage -Config $CONFIG
 
             if ($RunSysprep) {
                 if($DiskLayout -eq "UEFI") {
@@ -988,42 +917,6 @@ function New-WindowsCloudImage {
     Param(
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
         [string]$WimFilePath = "D:\Sources\install.wim",
-        [parameter(Mandatory=$true)]
-        [string]$ImageName,
-        [parameter(Mandatory=$true)]
-        [string]$VirtualDiskPath,
-        [parameter(Mandatory=$true)]
-        [Uint64]$SizeBytes,
-        [ValidatePattern("^$|^\S{5}-\S{5}-\S{5}-\S{5}-\S{5}")]
-        [parameter(Mandatory=$false)]
-        [string]$ProductKey,
-        [parameter(Mandatory=$false)]
-        [ValidateSet("VHD", "VHDX", "QCow2", "VMDK", "RAW", ignorecase=$false)]
-        [string]$VirtualDiskFormat = "VHDX",
-        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
-        [string]$DiskLayout = "BIOS",
-        [parameter(Mandatory=$false)]
-        [string]$VirtIOISOPath,
-        [parameter(Mandatory=$false)]
-        [array]$ExtraFeatures = @(),
-        [parameter(Mandatory=$false)]
-        [string]$ExtraDriversPath,
-        [parameter(Mandatory=$false)]
-        [switch]$InstallUpdates,
-        [parameter(Mandatory=$false)]
-        [string]$AdministratorPassword = "Pa`$`$w0rd",
-        [parameter(Mandatory=$false)]
-        [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml",
-        [parameter(Mandatory=$false)]
-        [switch]$PersistDriverInstall = $true,
-        [parameter(Mandatory=$false)]
-        [switch]$InstallMaaSHooks,
-        [parameter(Mandatory=$false)]
-        [string]$VirtIOBasePath,
-        [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates,
-        [parameter(Mandatory=$false)]
-        [switch]$DisableSwap
     )
 
     PROCESS
