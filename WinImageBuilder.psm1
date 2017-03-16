@@ -1325,7 +1325,7 @@ function New-WindowsCloudImage {
             $drives = Create-ImageVirtualDisk $VHDPath $SizeBytes $DiskLayout
             $winImagePath = "$($drives[1])\"
             $resourcesDir = "${winImagePath}UnattendResources"
-            $unattedXmlPath = "${winImagePath}Unattend.xml"
+            $outUnattendXmlPath = "${winImagePath}Unattend.xml"
             $configValues = @{
                 "InstallUpdates"=$InstallUpdates;
                 "PersistDriverInstall"=$PersistDriverInstall;
@@ -1334,7 +1334,7 @@ function New-WindowsCloudImage {
             }
 
             $xmlParams = @{'InUnattendXmlPath' = $UnattendXmlPath;
-                           'OutUnattendXmlPath' = $unattedXmlPath;
+                           'OutUnattendXmlPath' = $outUnattendXmlPath;
                            'Image' = $image;
                            'AdministratorPassword' = $AdministratorPassword;
             }
