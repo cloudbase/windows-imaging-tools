@@ -625,7 +625,7 @@ function Compress-Image {
     $tmpName = $ImagePath + "." + (Get-Random)
 
     $7zip = Get-7zipPath
-    $pigz = Join-Path $localResourcesDir pigz.exe
+    $pigz = Get-PigzPath
     try {
         Write-Host "Archiving $VirtualDiskPath to tarfile $tmpName"
         pushd ([System.IO.Path]::GetDirectoryName((Resolve-path $VirtualDiskPath).Path))
@@ -700,6 +700,10 @@ function Get-7zipPath {
     return Join-Path -Path "$localResourcesDir" -ChildPath "7za.exe"
 }
 
+function Get-PigzPath {
+    return Join-Path -Path "$localResourcesDir" -ChildPath "pigz.exe"
+}
+
 function New-ProtectedZip {
     Param(
         [parameter(Mandatory=$true)]
@@ -708,7 +712,7 @@ function New-ProtectedZip {
         [string]$VirtualDiskPath
     )
         $zipPath = (Get-PathWithoutExtension $VirtualDiskPath) + ".zip"
-        $7zip = Get-7zip
+        $7zip = Get-7zipPath
         Write-Host "Creating protected zip"
         Start-Executable -Command @("$7zip", "a" , "-tzip", "$zipPath", `
                                     "$VirtualDiskPath", "-p$ZipPassword", "-mx1")
