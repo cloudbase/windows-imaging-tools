@@ -782,7 +782,7 @@ function New-ProtectedZip {
         [string]$VirtualDiskPath
     )
         $zipPath = (Get-PathWithoutExtension $VirtualDiskPath) + ".zip"
-        $7zip = Get-7zip
+        $7zip = Get-7zipPath
         Write-Host "Creating protected zip"
         Start-Executable -Command @("$7zip", "a" , "-tzip", "$zipPath", `
                                     "$VirtualDiskPath", "-p$ZipPassword", "-mx1")
@@ -1030,8 +1030,8 @@ function New-WindowsOnlineImage {
                 $Qcow2ImagePath = $barePath + ".qcow2"
                 Write-Host "Converting VHD to QCow2"
                 Convert-VirtualDisk $VirtualDiskPath $Qcow2ImagePath "qcow2"
-                if ($ZipPassword) {
-                    New-ProtectedZip -ZipPassword $ZipPassword -VirtualDiskPath $Qcow2ImagePath
+                if ($CONFIG["zip_password"]) {
+                    New-ProtectedZip -ZipPassword "$CONFIG["zip_password"]" -VirtualDiskPath $Qcow2ImagePath
                 }
                 Remove-Item -Force $VirtualDiskPath
             }
