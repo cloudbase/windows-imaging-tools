@@ -361,16 +361,21 @@ function Download-CloudbaseInit {
         [Parameter(Mandatory=$true)]
         [string]$resourcesDir,
         [Parameter(Mandatory=$true)]
-        [string]$osArch
+        [string]$osArch,
+        [parameter(Mandatory=$false)]
+        [switch]$BetaRelease
     )
     Write-Host "Downloading Cloudbase-Init..."
 
-    if ($osArch -eq "AMD64") {
-        $CloudbaseInitMsi = "CloudbaseInitSetup_Stable_x64.msi"
-    } else {
-        $CloudbaseInitMsi = "CloudbaseInitSetup_Stable_x86.msi"
+    $msiBuildArchMap = @{
+        "amd64" = "x64"
+        "i386" = "x86"
     }
-
+    $msiBuildSuffix = ""
+    if (-not $BetaRelease) {
+        $msiBuildSuffix = "_Stable"
+    }
+    $CloudbaseInitMsi = "CloudbaseInitSetup{0}_{1}.msi" -f @($msiBuildSuffix, $msiBuildArchMap[$osArch])
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
     $CloudbaseInitMsiUrl = "https://www.cloudbase.it/downloads/$CloudbaseInitMsi"
 
@@ -934,6 +939,9 @@ function New-MaaSImage {
      proportional to the RAM size and if the image has in the initial stage low disk space,
      the first boot will fail due to not enough disk space. The swap is set to the default
      automatic setting right after the resize of the partitions is performed by cloudbase-init.
+    .PARAMETER BetaRelease
+     This is a switch that allows the selection of Cloudbase-Init branches. If set to true, the
+     beta branch will be used, otherwise the stable branch will be used.
     #>
     [CmdletBinding()]
     param
@@ -977,7 +985,9 @@ function New-MaaSImage {
         [parameter(Mandatory=$false)]
         [switch]$DisableSwap,
         [parameter(Mandatory=$false)]
-        [string]$ZipPassword
+        [string]$ZipPassword,
+        [parameter(Mandatory=$false)]
+        [switch]$BetaRelease=$false
     )
 
     PROCESS
@@ -988,7 +998,7 @@ function New-MaaSImage {
             -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
             -ExtraDriversPath $ExtraDriversPath -Memory $Memory -CpuCores $CpuCores `
             -RunSysprep:$RunSysprep -SwitchName $SwitchName -Force:$Force -PurgeUpdates:$PurgeUpdates `
-            -DisableSwap:$DisableSwap -ZipPassword $ZipPassword
+            -DisableSwap:$DisableSwap -ZipPassword $ZipPassword -BetaRelease:$BetaRelease
     }
 }
 
@@ -1056,6 +1066,9 @@ function New-WindowsOnlineImage {
      proportional to the RAM size and if the image has in the initial stage low disk space,
      the first boot will fail due to not enough disk space. The swap is set to the default
      automatic setting right after the resize of the partitions is performed by cloudbase-init.
+    .PARAMETER BetaRelease
+     This is a switch that allows the selection of Cloudbase-Init branches. If set to true, the
+     beta branch will be used, otherwise the stable branch will be used.
     #>
     [CmdletBinding()]
     param
@@ -1100,7 +1113,9 @@ function New-WindowsOnlineImage {
         [parameter(Mandatory=$false)]
         [switch]$DisableSwap,
         [parameter(Mandatory=$false)]
-        [string]$ZipPassword
+        [string]$ZipPassword,
+        [parameter(Mandatory=$false)]
+        [switch]$BetaRelease=$false
     )
     PROCESS
     {
@@ -1155,7 +1170,7 @@ function New-WindowsOnlineImage {
                 -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
                 -InstallMaaSHooks:$InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
                 -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap `
-                -ZipPassword $ZipPassword
+                -ZipPassword $ZipPassword -BetaRelease:$BetaRelease
 
             if ($RunSysprep) {
                 if($DiskLayout -eq "UEFI") {
@@ -1256,6 +1271,9 @@ function New-WindowsCloudImage {
      proportional to the RAM size and if the image has in the initial stage low disk space,
      the first boot will fail due to not enough disk space. The swap is set to the default
      automatic setting right after the resize of the partitions is performed by cloudbase-init.
+    .PARAMETER BetaRelease
+     This is a switch that allows the selection of Cloudbase-Init branches. If set to true, the
+     beta branch will be used, otherwise the stable branch will be used.
     #>
     [CmdletBinding()]
     Param(
@@ -1298,7 +1316,9 @@ function New-WindowsCloudImage {
         [parameter(Mandatory=$false)]
         [switch]$DisableSwap,
         [parameter(Mandatory=$false)]
-        [string]$ZipPassword
+        [string]$ZipPassword,
+        [parameter(Mandatory=$false)]
+        [switch]$BetaRelease=$false
     )
 
     PROCESS
@@ -1348,7 +1368,7 @@ function New-WindowsCloudImage {
             Generate-UnattendXml @xmlParams
             Copy-UnattendResources $resourcesDir $image.ImageInstallationType $InstallMaaSHooks
             Generate-ConfigFile $resourcesDir $configValues
-            Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture)
+            Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$BetaRelease
             Apply-Image $winImagePath $wimFilePath $image.ImageIndex
             Create-BCDBootConfig $drives[0] $drives[1] $DiskLayout $image
             Check-EnablePowerShellInImage $winImagePath $image
