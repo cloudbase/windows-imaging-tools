@@ -1,9 +1,23 @@
+# Copyright 2017 Cloudbase Solutions Srl
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2
 Import-Module Dism
-
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $localResourcesDir = "$scriptPath\UnattendResources"
+Import-Module "$scriptPath\Config.psm1"
+
 $noHypervWarning = @"
 The Hyper-V role is missing from this machine. In order to be able to finish
 generating the image, you need to install the Hyper-V role.
@@ -15,6 +29,7 @@ Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-
 
 Don't forget to reboot after you install the Hyper-V role.
 "@
+
 $noSysprepWarning = @"
 You have chosen not to sysprep the image now. If you want to run sysprep now,
 use the -RunSysprep flag. If you do not run sysprep now, the resulting image
@@ -22,6 +37,7 @@ will not be ready to deploy.
 The image is set to automatically sysprep on first boot.
 Please make sure you boot this image at least once before you use it.
 "@
+
 $VirtIODrivers = @("balloon", "netkvm", "pvpanic", "qemupciserial", "qxl",
              "qxldod", "vioinput", "viorng", "vioscsi", "vioserial", "viostor")
 
@@ -817,31 +833,6 @@ function Check-Prerequisites {
     }
 }
 
-function GetOrCreate-Switch {
-    $vmSwitches = Get-VMSwitch -SwitchType external
-    $vmswitch = $null
-    if ($vmSwitches) {
-        foreach ($i in $vmSwitches) {
-            $name = $i.Name
-            $netadapter = Get-NetAdapter -Name "vEthernet ($name)" -ErrorAction SilentlyContinue
-            if (!$netadapter) { continue }
-            if ($netadapter.Status -eq "Up") {
-                $vmswitch = $i
-                break
-            }
-        }
-        if (!$vmswitch) {
-            $vmswitch = Create-VirtualSwitch -Name "br100"
-        }
-    } else {
-        $vmswitch = Create-VirtualSwitch -Name "br100"
-    }
-    if (!$vmswitch) {
-        Throw "Count not retrieve VMSwitch"
-    }
-    return $vmswitch
-}
-
 function Wait-ForVMShutdown {
     Param(
         [Parameter(Mandatory=$true)]
@@ -860,7 +851,7 @@ function Run-Sysprep {
         [Parameter(Mandatory=$true)]
         [string]$Name,
         [Parameter(Mandatory=$true)]
-        [string]$VHDPath,
+        [string]$VhdPath,
         [Parameter(Mandatory=$true)]
         [Uint64]$Memory,
         [Parameter(Mandatory=$true)]
@@ -873,7 +864,7 @@ function Run-Sysprep {
 
     Write-Output "Creating VM $Name attached to $VMSwitch"
     New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch `
-        -VHDPath $VHDPath -Generation $Generation
+        -VhdPath $VhdPath -Generation $Generation
     Set-VMProcessor -VMname $Name -count $CpuCores
     Write-Output "Starting $Name"
     Start-VM $Name
@@ -882,526 +873,159 @@ function Run-Sysprep {
     Remove-VM $Name -Confirm:$false -Force
 }
 
-function New-MaaSImage {
-    <#
-    .SYNOPSIS
-     This is a wrapper method on top of New-WdindowsOnlineImage.
-     This function generates a MAAS ready image from an ISO file.
-    .DESCRIPTION
-     It calls New-WindowsOnlineImage with the Type parameter set to MAAS.
-    .PARAMETER WimFilePath
-     The location of the WIM file from the Windows ISO.
-    .PARAMETER ImageName
-     This is the object which contains all the information about the Windows flavor selected.
-    .PARAMETER MaaSImagePath
-     The destination of the generated image.
-    .PARAMETER SizeBytes
-     The size of the VHD used to generate the image.
-    .PARAMETER DiskLayout
-     This parameter can be set to either BIOS or UEFI.
-    .PARAMETER ProductKey
-     The product key for the OS selected.
-    .PARAMETER VirtIOISOPath
-     The path to the ISO file containing the VirtIO drivers.
-    .PARAMETER InstallUpdates
-     If set to true, the latest updates will be downloaded and installed.
-    .PARAMETER AdministratorPassword
-     Is used by the script to auto-login in the instance while it is generating.
-    .PARAMETER PersistDriverInstall
-     In case the hardware on which the image is generated will also be the hardware on
-     which the image will be deployed this can be set to true, otherwise the spawned
-     instance is prone to BSOD.
-    .PARAMETER ExtraFeatures
-     Name of the extra features to enable on the generated image.
-     The $ExtraFeatures need be present in the ISO file.
-    .PARAMETER ExtraDriversPath
-     The path to the additional drivers to install recursively.
-    .PARAMETER Memory
-     RAM assigned to the VM used to generate the image.
-    .PARAMETER CpuCores
-     The number of CPU cores assigned to the VM used to generate the image.
-    .PARAMETER RunSysprep
-     Used to clean the OS on the VM, and to prepare it for a first-time use.
-    .PARAMETER SwitchName
-     Used to specify the virtual switch the VM will be using to connect to the internet.
-     If none is specified, one will be created.
-    .PARAMETER Force
-     It will force the image generation when $RunSysprep is $False or the selected $SwitchName 
-     is not an external one. Use this parameter with caution because it can easily generate
-     unstable images.
-    .PARAMETER PurgeUpdates
-     If set to true, will run DISM with /resetbase option. This will reduce the size of 
-     WinSXS folder, but after that Windows updates cannot be uninstalled.
-    .PARAMETER DisableSwap
-     DisableSwap option will disable the swap when the image is generated and will add a setting
-     in the Unattend.xml file which will enable swap at boot time during specialize step. This
-     is required as by default, the amount of swap space on Windows machine is directly
-     proportional to the RAM size and if the image has in the initial stage low disk space,
-     the first boot will fail due to not enough disk space. The swap is set to the default
-     automatic setting right after the resize of the partitions is performed by cloudbase-init.
-    .PARAMETER BetaRelease
-     This is a switch that allows the selection of Cloudbase-Init branches. If set to true, the
-     beta branch will be used, otherwise the stable branch will be used.
-    #>
-    [CmdletBinding()]
-    param
-    (
-        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [string]$WimFilePath = "D:\Sources\install.wim",
-        [parameter(Mandatory=$true)]
-        [string]$ImageName,
-        [parameter(Mandatory=$true)]
-        [string]$MaaSImagePath,
-        [parameter(Mandatory=$true)]
-        [Uint64]$SizeBytes,
-        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
-        [string]$DiskLayout = "BIOS",
-        [ValidatePattern("^\S{5}-\S{5}-\S{5}-\S{5}-\S{5}")]
-        [parameter(Mandatory=$false)]
-        [string]$ProductKey,
-        [parameter(Mandatory=$false)]
-        [string]$VirtIOISOPath,
-        [parameter(Mandatory=$false)]
-        [switch]$InstallUpdates,
-        [parameter(Mandatory=$false)]
-        [string]$AdministratorPassword = "Pa`$`$w0rd",
-        [parameter(Mandatory=$false)]
-        [switch]$PersistDriverInstall = $false,
-        [array]$ExtraFeatures = @(),
-        [parameter(Mandatory=$false)]
-        [string]$ExtraDriversPath,
-        [parameter(Mandatory=$false)]
-        [Uint64]$Memory=2GB,
-        [parameter(Mandatory=$false)]
-        [int]$CpuCores=1,
-        [parameter(Mandatory=$false)]
-        [switch]$RunSysprep=$true,
-        [parameter(Mandatory=$false)]
-        [string]$SwitchName,
-        [parameter(Mandatory=$false)]
-        [switch]$Force=$false,
-        [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates,
-        [parameter(Mandatory=$false)]
-        [switch]$DisableSwap,
-        [parameter(Mandatory=$false)]
-        [string]$ZipPassword,
-        [parameter(Mandatory=$false)]
-        [switch]$BetaRelease=$false
-    )
-
-    PROCESS
-    {
-        New-WindowsOnlineImage -Type "MAAS" -WimFilePath $WimFilePath -ImageName $ImageName `
-            -WindowsImagePath $MaaSImagePath -SizeBytes $SizeBytes -DiskLayout $DiskLayout `
-            -ProductKey $ProductKey -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
-            -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-            -ExtraDriversPath $ExtraDriversPath -Memory $Memory -CpuCores $CpuCores `
-            -RunSysprep:$RunSysprep -SwitchName $SwitchName -Force:$Force -PurgeUpdates:$PurgeUpdates `
-            -DisableSwap:$DisableSwap -ZipPassword $ZipPassword -BetaRelease:$BetaRelease
-    }
-}
-
 function New-WindowsOnlineImage {
-    <#
-    .SYNOPSIS
-     This function generates a Windows image using Hyper-V  to instantiate the image in
-     order to apply the updates and install cloudbase-init.
-    .DESCRIPTION
-     This command requires Hyper-V to be enabled, a VMSwitch to be configured for external
-     network connectivity if the updates are to be installed, which is highly recommended.
-     This command uses internally the New-WindowsCloudImage to generate the base image and
-     start a Hyper-V instance using the base image. After the Hyper-V instance shuts down, 
-     the resulting VHDX is shrunk to a minimum size and converted to the required format.
-    .PARAMETER WimFilePath
-     The location of the WIM file from the Windows ISO.
-    .PARAMETER ImageName
-     This is the object which contains all the information about the Windows
-     flavor selected.
-    .PARAMETER WindowsImagePath
-     The destination of the generated image.
-    .PARAMETER SizeBytes
-     The size of the VHD used to generate the image.
-    .PARAMETER DiskLayout
-     This parameter can be set to either BIOS or UEFI.
-    .PARAMETER ProductKey
-     The product key for the OS selected.
-    .PARAMETER VirtIOISOPath
-     The path to the ISO file containing the VirtIO drivers.
-    .PARAMETER InstallUpdates
-     If set to true, the latest updates will be downloaded and installed.
-    .PARAMETER AdministratorPassword
-     Is used by the script to auto-login to the instance while it is generating.
-    .PARAMETER ExtraFeatures
-     Name of the extra features to enable on the generated image.
-     The $ExtraFeatures need be present in the ISO file.
-    .PARAMETER ExtraDriversPath
-     The path to the additional drivers to install recursively.
-    .PARAMETER PersistDriverInstall
-     In case the hardware on which the image is generated will also be the hardware on
-     which the image will be deployed this can be set to true, otherwise the spawned
-     instance is prone to BSOD.
-    .PARAMETER Memory
-     RAM assigned to the VM used to generate the image.
-    .PARAMETER CpuCores
-     The number of CPU cores assigned to the VM used to generate the image.
-    .PARAMETER RunSysprep
-     Used to clean the OS on the VM, and to prepare it for a first-time use.
-    .PARAMETER SwitchName
-     Used to specify the virtual switch the VM will be using to connect to the internet.
-     If none is specified, one will be created.
-    .PARAMETER Force
-     It will force the image generation when $RunSysprep is $False or the selected $SwitchName 
-     is not an external one. Use this parameter with caution because it can easily generate
-     unstable images.
-    .PARAMETER Type
-     This parameter allows to choose between MAAS, KVM and Hyper-V specific images.
-    .PARAMETER PurgeUpdates
-     If set to true, will run DISM with /resetbase option. This will reduce the size of 
-     WinSXS folder, but after that Windows updates cannot be uninstalled.
-    .PARAMETER DisableSwap
-     DisableSwap option will disable the swap when the image is generated and will add a setting
-     in the Unattend.xml file which will enable swap at boot time during specialize step. This
-     is required as by default, the amount of swap space on Windows machine is directly
-     proportional to the RAM size and if the image has in the initial stage low disk space,
-     the first boot will fail due to not enough disk space. The swap is set to the default
-     automatic setting right after the resize of the partitions is performed by cloudbase-init.
-    .PARAMETER BetaRelease
-     This is a switch that allows the selection of Cloudbase-Init branches. If set to true, the
-     beta branch will be used, otherwise the stable branch will be used.
-    #>
-    [CmdletBinding()]
-    param
-    (
+    Param(
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [string]$WimFilePath = "D:\Sources\install.wim",
-        [parameter(Mandatory=$true)]
-        [string]$ImageName,
-        [parameter(Mandatory=$true)]
-        [string]$WindowsImagePath,
-        [parameter(Mandatory=$true)]
-        [Uint64]$SizeBytes,
-        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
-        [string]$DiskLayout = "BIOS",
-        [parameter(Mandatory=$false)]
-        [string]$ProductKey,
-        [parameter(Mandatory=$false)]
-        [string]$VirtIOISOPath,
-        [parameter(Mandatory=$false)]
-        [switch]$InstallUpdates,
-        [parameter(Mandatory=$false)]
-        [string]$AdministratorPassword = "Pa`$`$w0rd",
-        [array]$ExtraFeatures = @(),
-        [parameter(Mandatory=$false)]
-        [string]$ExtraDriversPath,
-        [parameter(Mandatory=$false)]
-        [switch]$PersistDriverInstall = $true,
-        [parameter(Mandatory=$false)]
-        [Uint64]$Memory=2GB,
-        [parameter(Mandatory=$false)]
-        [int]$CpuCores=1,
-        [parameter(Mandatory=$false)]
-        [switch]$RunSysprep=$true,
-        [parameter(Mandatory=$false)]
-        [string]$SwitchName,
-        [parameter(Mandatory=$false)]
-        [switch]$Force=$false,
-        [ValidateSet("MAAS", "KVM", "HYPER-V", ignorecase=$false)]
-        [string]$Type = "MAAS",
-        [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates,
-        [parameter(Mandatory=$false)]
-        [switch]$DisableSwap,
-        [parameter(Mandatory=$false)]
-        [string]$ZipPassword,
-        [parameter(Mandatory=$false)]
-        [switch]$BetaRelease=$false
+        [string]$ConfigFilePath
     )
-    PROCESS
-    {
-        Write-Host ("Windows online image generation started at: {0}" -f @(Get-Date))
-        Is-Administrator
-        if (!$RunSysprep -and !$Force) {
-            throw "You chose not to run sysprep.
-                This will build an unusable MaaS image.
-                If you really want to continue use the -Force:$true flag."
-        }
-
-        Check-Prerequisites
-        if ($SwitchName) {
-            $switch = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
-            if (!$switch) {
-                throw "Selected vmswitch ($SwitchName) does not exist"
-            }
-            if ($switch.SwitchType -ne "External" -and !$Force) {
-                throw "Selected switch ($SwitchName) is not an external
-                    switch. If you really want to continue use the -Force:$true flag."
-            }
-        } else {
-            $switch = GetOrCreate-Switch
-        }
-        $cpuCount = 0
-        $coreCount = (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors
-        foreach ($i in $coreCount) {
-            $cpuCount += $i
-        }
-        if ($cpuCount -eq 0) {
-            $cpuCount = 1
-        }
-        if ($CpuCores -gt $cpuCount) {
-            Write-Warning "CpuCores larger then available (logical) CPU cores.
-                Setting CpuCores to $coreCount"
-            $CpuCores = $coreCount
-        }
-
-        try {
-            $barePath = Get-PathWithoutExtension $WindowsImagePath
-            $VirtualDiskPath = $barePath + ".vhdx"
-            $InstallMaaSHooks = $false
-            if ($Type -eq "MAAS") {
-                $InstallMaaSHooks = $true
-            }
-            if ($Type -eq "KVM") {
-                $PersistDriverInstall = $false
-            }
-            New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
-                -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
-                -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
-                -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-                -InstallMaaSHooks:$InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
-                -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap `
-                -ZipPassword $ZipPassword -BetaRelease:$BetaRelease
-
-            if ($RunSysprep) {
-                if($DiskLayout -eq "UEFI") {
-                    $generation = "2"
-                } else {
-                    $generation = "1"
-                }
-
-                $Name = "WindowsOnlineImage-Sysprep" + (Get-Random)
-                Run-Sysprep -Name $Name -Memory $Memory -VHDPath $VirtualDiskPath `
-                    -VMSwitch $switch.Name -CpuCores $CpuCores `
-                    -Generation $generation
-            }
-
-            Resize-VHDImage $VirtualDiskPath
-
-            if ($Type -eq "MAAS") {
-                $RawImagePath = $barePath + ".img"
-                Write-Host "Converting VHD to RAW"
-                Convert-VirtualDisk $VirtualDiskPath $RawImagePath "RAW"
-                Remove-Item -Force $VirtualDiskPath
-                Compress-Image $RawImagePath $WindowsImagePath
-            }
-
-            if ($Type -eq "KVM") {
-                $Qcow2ImagePath = $barePath + ".qcow2"
-                Write-Host "Converting VHD to QCow2"
-                Convert-VirtualDisk $VirtualDiskPath $Qcow2ImagePath "qcow2"
-                if ($ZipPassword) {
-                    New-ProtectedZip -ZipPassword $ZipPassword -VirtualDiskPath $Qcow2ImagePath
-                }
-                Remove-Item -Force $VirtualDiskPath
-            }
-        } catch {
-            Remove-Item -Force $WindowsImagePath* -ErrorAction SilentlyContinue
-            Throw
-        }
-        Write-Host ("Windows online image generation finished at: {0}" -f @((Get-Date)))
+    $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
+    Write-Host ("Windows online image generation started at: {0}" -f @(Get-Date))
+    Is-Administrator
+    if (!$windowsImageConfig.run_sysprep -and !$windowsImageConfig.force) {
+        throw "You chose not to run sysprep.
+            This will build an unusable Windows image.
+            If you really want to continue use the `force = true` config option."
     }
 
+    Check-Prerequisites
+    if ($windowsImageConfig.external_switch) {
+        $switch = Get-VMSwitch -Name $windowsImageConfig.external_switch -ErrorAction SilentlyContinue
+        if (!$switch) {
+            throw "Selected vmswitch {0} does not exist" -f $windowsImageConfig.external_switch
+        }
+        if ($switch.SwitchType -ne "External" -and !$windowsImageConfig.force) {
+            throw "Selected switch {0}} is not an external
+                switch. If you really want to continue use the `force = true` flag." `
+                -f $windowsImageConfig.external_switch
+        }
+    }
+    if ($windowsImageConfig.cpu_count -gt `
+        (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors) {
+        throw "CpuCores larger then available (logical) CPU cores."
+    }
+
+    try {
+        $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
+        $virtualDiskPath = $barePath + ".vhdx"
+        New-WindowsCloudImage -ConfigFilePath $ConfigFilePath
+        if ($windowsImageConfig.run_sysprep) {
+            if($windowsImageConfig.disk_layout -eq "UEFI") {
+                $generation = "2"
+            } else {
+                $generation = "1"
+            }
+
+            $Name = "WindowsOnlineImage-Sysprep" + (Get-Random)
+            Run-Sysprep -Name $Name -Memory $windowsImageConfig.ram_size -vhdPath $virtualDiskPath `
+                -VMSwitch $switch.Name -CpuCores $windowsImageConfig.cpu_count `
+                -Generation $generation
+        }
+        Resize-VHDImage $virtualDiskPath
+
+        if ($windowsImageConfig.image_type -eq "MAAS") {
+            $rawImagePath = $barePath + ".img"
+            Write-Host "Converting VHD to RAW"
+            Convert-VirtualDisk $virtualDiskPath $rawImagePath "raw"
+            Remove-Item -Force $virtualDiskPath
+            Compress-Image $rawImagePath $windowsImageConfig['image_path']
+        }
+
+        if ($windowsImageConfig.image_type -eq "KVM") {
+            $qcow2ImagePath = $barePath + ".qcow2"
+            Write-Host "Converting VHD to QCow2"
+            Convert-VirtualDisk $virtualDiskPath $qcow2ImagePath "qcow2"
+            if ($windowsImageConfig.zip_password) {
+                New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password -VirtualDiskPath $qcow2ImagePath
+            }
+            Remove-Item -Force $virtualDiskPath
+        }
+    } catch {
+        if ($windowsImageConfig.image_path -and (Test-Path windowsImageConfig.image_path)) {
+            Remove-Item -Force ${windowsImageConfig.image_path} -ErrorAction SilentlyContinue
+        }
+        Throw
+    }
+    Write-Host ("Windows online image generation finished at: {0}" -f @((Get-Date)))
 }
 
 function New-WindowsCloudImage {
-    <#
-    .SYNOPSIS
-     This function creates a functional Windows Image, starting from an ISO file,
-     without the need of Hyper-V to be enabled.
-    .DESCRIPTION
-     This script can generate a Windows Image in one of the following formats: VHD,
-     VHDX, QCow2, VMDK or RAW. It takes the Windows flavor indicated by the ImageName
-     from the WIM file and based on the parameters given, it will generate an image.
-     This function does not require Hyper-V to be enabled, but the generated image
-     is not ready to be deployed, as it needs to be started manually on another hypervisor.
-     The image is ready to be used when it shuts down. 
-    .PARAMETER WimFilePath
-     The location of the WIM file from the Windows ISO.
-    .PARAMETER ImageName
-     This is the object which contains all the information about the Windows
-     flavor selected.
-    .PARAMETER VirtualDiskPath
-     The destination of the generated image.
-    .PARAMETER SizeBytes
-     The size of the VHD used to generate the image.
-    .PARAMETER ProductKey
-     The product key for the OS selected.
-    .PARAMETER VirtualDiskFormat
-     Select between VHD, VHDX, QCow2, VMDK or RAW formats.
-    .PARAMETER DiskLayout
-     This parameter can be set to either BIOS or UEFI.
-    .PARAMETER VirtIOISOPath
-     The path to the ISO file containing the VirtIO drivers.
-    .PARAMETER ExtraFeatures
-     Name of the extra features to enable on the generated image.
-     The $ExtraFeatures need be present in the ISO file.
-    .PARAMETER ExtraDriversPath
-     The path to the additional drivers to install recursively.
-    .PARAMETER InstallUpdates
-     If set to true, the latest updates will be downloaded and installed.
-    .PARAMETER AdministratorPassword
-     Is used by the script to auto-login in the instance while it is generating.
-    .PARAMETER UnattendXmlPath
-     The path to the Unattend XML template file.
-    .PARAMETER PersistDriverInstall
-     In case the hardware on which the image is generated will also be the hardware on
-     which the image will be deployed this can be set to true, otherwise the spawned
-     instance is prone to BSOD.
-    .PARAMETER InstallMaaSHooks
-     If set to true, MaaSHooks will be installed.
-    .PARAMETER VirtIOBasePath
-     The drive letter of the mounted VirtIO drivers ISO file.
-    .PARAMETER PurgeUpdates
-     If set to true, will run DISM with /resetbase option. This will reduce the size of 
-     WinSXS folder, but after that Windows updates cannot be uninstalled.
-    .PARAMETER DisableSwap
-     DisableSwap option will disable the swap when the image is generated and will add a setting
-     in the Unattend.xml file which will enable swap at boot time during specialize step. This
-     is required as by default, the amount of swap space on Windows machine is directly
-     proportional to the RAM size and if the image has in the initial stage low disk space,
-     the first boot will fail due to not enough disk space. The swap is set to the default
-     automatic setting right after the resize of the partitions is performed by cloudbase-init.
-    .PARAMETER BetaRelease
-     This is a switch that allows the selection of Cloudbase-Init branches. If set to true, the
-     beta branch will be used, otherwise the stable branch will be used.
-    #>
-    [CmdletBinding()]
-    Param(
+    param
+    (
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [string]$WimFilePath = "D:\Sources\install.wim",
-        [parameter(Mandatory=$true)]
-        [string]$ImageName,
-        [parameter(Mandatory=$true)]
-        [string]$VirtualDiskPath,
-        [parameter(Mandatory=$true)]
-        [Uint64]$SizeBytes,
-        [ValidatePattern("^$|^\S{5}-\S{5}-\S{5}-\S{5}-\S{5}")]
-        [parameter(Mandatory=$false)]
-        [string]$ProductKey,
-        [parameter(Mandatory=$false)]
-        [ValidateSet("VHD", "VHDX", "QCow2", "VMDK", "RAW", ignorecase=$false)]
-        [string]$VirtualDiskFormat = "VHDX",
-        [ValidateSet("BIOS", "UEFI", ignorecase=$false)]
-        [string]$DiskLayout = "BIOS",
-        [parameter(Mandatory=$false)]
-        [string]$VirtIOISOPath,
-        [parameter(Mandatory=$false)]
-        [array]$ExtraFeatures = @(),
-        [parameter(Mandatory=$false)]
-        [string]$ExtraDriversPath,
-        [parameter(Mandatory=$false)]
-        [switch]$InstallUpdates,
-        [parameter(Mandatory=$false)]
-        [string]$AdministratorPassword = "Pa`$`$w0rd",
-        [parameter(Mandatory=$false)]
-        [string]$UnattendXmlPath = "$scriptPath\UnattendTemplate.xml",
-        [parameter(Mandatory=$false)]
-        [switch]$PersistDriverInstall = $true,
-        [parameter(Mandatory=$false)]
-        [switch]$InstallMaaSHooks,
-        [parameter(Mandatory=$false)]
-        [string]$VirtIOBasePath,
-        [parameter(Mandatory=$false)]
-        [switch]$PurgeUpdates,
-        [parameter(Mandatory=$false)]
-        [switch]$DisableSwap,
-        [parameter(Mandatory=$false)]
-        [string]$ZipPassword,
-        [parameter(Mandatory=$false)]
-        [switch]$BetaRelease=$false
+        [string]$ConfigFilePath
     )
+    Write-Host ("Image generation started at: {0}" -f @(Get-Date))
 
-    PROCESS
-    {
-        Write-Host ("Image generation started at: {0}" -f @(Get-Date))
-        Set-DotNetCWD
-        Is-Administrator
-
-        $image = Get-WimFileImagesInfo -WimFilePath $wimFilePath | `
-            Where { $_.ImageName -eq $ImageName }
-        if (!$image) {
-            throw 'Image "$ImageName" not found in WIM file "$WimFilePath"'
-        }
-        Check-DismVersionForImage $image
-
-        if (Test-Path $VirtualDiskPath) {
-            Remove-Item -Force $VirtualDiskPath
-        }
-
-        if ($VirtualDiskFormat -in @("VHD", "VHDX")) {
-            $VHDPath = $VirtualDiskPath
-        } else {
-            $VHDPath = "{0}.vhd" -f (Get-PathWithoutExtension $VirtualDiskPath)
-            if (Test-Path $VHDPath) { Remove-Item -Force $VHDPath }
-        }
-
-        try {
-            $drives = Create-ImageVirtualDisk $VHDPath $SizeBytes $DiskLayout
-            $winImagePath = "$($drives[1])\"
-            $resourcesDir = "${winImagePath}UnattendResources"
-            $outUnattendXmlPath = "${winImagePath}Unattend.xml"
-            $configValues = @{
-                "InstallUpdates"=$InstallUpdates;
-                "PersistDriverInstall"=$PersistDriverInstall;
-                "PurgeUpdates"=$PurgeUpdates;
-                "DisableSwap"=$DisableSwap;
-            }
-
-            $xmlParams = @{'InUnattendXmlPath' = $UnattendXmlPath;
-                           'OutUnattendXmlPath' = $outUnattendXmlPath;
-                           'Image' = $image;
-                           'AdministratorPassword' = $AdministratorPassword;
-            }
-            if ($ProductKey) {
-                $xmlParams.Add('productKey', $ProductKey);
-            }
-            Generate-UnattendXml @xmlParams
-            Copy-UnattendResources $resourcesDir $image.ImageInstallationType $InstallMaaSHooks
-            Generate-ConfigFile $resourcesDir $configValues
-            Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$BetaRelease
-            Apply-Image $winImagePath $wimFilePath $image.ImageIndex
-            Create-BCDBootConfig $drives[0] $drives[1] $DiskLayout $image
-            Check-EnablePowerShellInImage $winImagePath $image
-
-            if ($ExtraDriversPath -and (Test-Path $ExtraDriversPath)) {
-                Add-DriversToImage $winImagePath $ExtraDriversPath
-            }
-            if ($VirtIOISOPath) {
-                Add-VirtIODriversFromISO $winImagePath $image $VirtIOISOPath
-            }
-            if ($VirtIOBasePath) {
-                Add-VirtIODrivers $winImagePath $image $VirtIOBasePath
-            }
-            if ($ExtraFeatures) {
-                Enable-FeaturesInImage $winImagePath $ExtraFeatures
-            }
-        } finally {
-            if (Test-Path $VHDPath) {
-                Detach-VirtualDisk $VHDPath
-            }
-        }
-
-        if ($VHDPath -ne $VirtualDiskPath) {
-            Convert-VirtualDisk $VHDPath $VirtualDiskPath $VirtualDiskFormat
-            if ($ZipPassword) {
-                New-ProtectedZip -ZipPassword $ZipPassword -VirtualDiskPath $VirtualDiskPath
-            }
-            Remove-Item -Force $VHDPath
-        }
-        Write-Host ("Image generation finished at: {0}" -f @(Get-Date))
+    $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
+    Set-DotNetCWD
+    Is-Administrator
+    $image = Get-WimFileImagesInfo -WimFilePath $windowsImageConfig.wim_file_path | `
+        Where { $_.ImageName -eq $windowsImageConfig.image_name }
+    if (!$image) {
+        throw ("Image {0} not found in WIM file {1}" -f @($windowsImageConfig.image_name, $windowsImageConfig.wim_file_path))
     }
+    Check-DismVersionForImage $image
+
+    if (Test-Path $windowsImageConfig.image_path) {
+        Remove-Item -Force $windowsImageConfig.image_path
+    }
+
+    if ($windowsImageConfig.virtual_disk_format -in @("VHD", "VHDX")) {
+        $vhdPath = $windowsImageConfig.image_path
+    } else {
+        $vhdPath = "{0}.vhd" -f (Get-PathWithoutExtension $windowsImageConfig.image_path)
+        if (Test-Path $vhdPath) { Remove-Item -Force $vhdPath }
+    }
+
+    try {
+        $drives = Create-ImageVirtualDisk $vhdPath $windowsImageConfig.disk_size $windowsImageConfig.disk_layout
+        $winImagePath = "$($drives[1])\"
+        $resourcesDir = "${winImagePath}UnattendResources"
+        $outUnattendXmlPath = "${winImagePath}Unattend.xml"
+        $xmlunattendPath = Join-Path $scriptPath $windowsImageConfig['unattend_xml_path']
+        $xmlParams = @{'InUnattendXmlPath' = $xmlunattendPath;
+                       'OutUnattendXmlPath' = $outUnattendXmlPath;
+                       'Image' = $image;
+                       'AdministratorPassword' = $windowsImageConfig.administrator_password;
+        }
+        if ($windowsImageConfig.product_key) {
+            $xmlParams.Add('productKey', $windowsImageConfig.product_key);
+        }
+        Generate-UnattendXml @xmlParams
+        Copy-UnattendResources $resourcesDir $image.ImageInstallationType $windowsImageConfig.install_maas_hooks
+        Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
+        Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release
+        Apply-Image $winImagePath $windowsImageConfig.wim_file_path $image.ImageIndex
+        Create-BCDBootConfig $drives[0] $drives[1] $windowsImageConfig.disk_layout $image
+        Check-EnablePowerShellInImage $winImagePath $image
+
+        if ($windowsImageConfig.drivers_path -and (Test-Path $windowsImageConfig.drivers_path)) {
+            Add-DriversToImage $winImagePath $windowsImageConfig.drivers_path
+        }
+        if ($windowsImageConfig.virtio_iso_path) {
+            Add-VirtIODriversFromISO $winImagePath $image $windowsImageConfig.virtio_iso_path
+        }
+        if ($windowsImageConfig.virtio_base_path) {
+            Add-VirtIODrivers $winImagePath $image $windowsImageConfig.virtio_base_path
+        }
+        if ($windowsImageConfig.extra_features) {
+            Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features
+        }
+    } finally {
+        if (Test-Path $vhdPath) {
+            Detach-VirtualDisk $vhdPath
+        }
+    }
+
+    if ($vhdPath -ne $windowsImageConfig.image_path) {
+        Convert-VirtualDisk $vhdPath $windowsImageConfig.image_path $windowsImageConfig.virtual_disk_format
+        if ($ZipPassword) {
+            New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password -virtualDiskPath $windowsImageConfig.image_path
+        }
+        Remove-Item -Force $vhdPath
+    }
+    Write-Host ("Image generation finished at: {0}" -f @(Get-Date))
 }
 
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
     New-WindowsOnlineImage, Add-VirtIODriversFromISO
-

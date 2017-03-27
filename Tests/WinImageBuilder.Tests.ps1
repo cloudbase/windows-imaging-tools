@@ -2,6 +2,7 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $moduleName = "WinImageBuilder"
 $moduleHome = Split-Path -Parent $here
+$fakeConfigPath = Join-Path $here "fake-config.ini"
 $modulePath = Join-Path $moduleHome "${moduleName}.psm1"
 
 if (Get-Module $moduleName -ErrorAction SilentlyContinue) {
@@ -73,7 +74,7 @@ Describe "Test New-WindowsCloudImage" {
     Mock Get-WimFileImagesInfo -Verifiable -ModuleName $moduleName `
         {
             return @{
-                "ImageName"="fakeImageName"
+                "ImageName"="Windows Server 2012 R2 SERVERSTANDARD"
                 "ImageInstallationType"="ImageInstallationType"
                 "ImageArchitecture"="ImageArchitecture"
                 "ImageIndex"=1
@@ -87,7 +88,7 @@ Describe "Test New-WindowsCloudImage" {
         }
     Mock Generate-UnattendXml -Verifiable -ModuleName $moduleName { return 0 }
     Mock Copy-UnattendResources -Verifiable -ModuleName $moduleName { return 0 }
-    Mock Generate-ConfigFile -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Copy-Item -Verifiable -ModuleName $moduleName { return 0 }
     Mock Download-CloudbaseInit -Verifiable -ModuleName $moduleName { return 0 }
     Mock Apply-Image -Verifiable -ModuleName $moduleName { return 0 }
     Mock Create-BCDBootConfig -Verifiable -ModuleName $moduleName { return 0 }
@@ -95,24 +96,7 @@ Describe "Test New-WindowsCloudImage" {
     Mock Enable-FeaturesInImage -Verifiable -ModuleName $moduleName { return 0 }
 
     It "Should create a windows image" {
-        New-WindowsCloudImage -Wimfilepath "fakeWimFilepath" `
-                    -ImageName "fakeImageName" `
-                    -ExtraFeatures @("Windows-Hyper-V") `
-                    -SizeBytes 1 -VirtualDiskPath "fakeVirtualDiskPath" | Should Be 0
-    }
-
-    It "Should accept valid product key" {
-        New-WindowsCloudImage -Wimfilepath "fakeWimFilepath" `
-                    -ImageName "fakeImageName" `
-                    -ProductKey "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" `
-                    -SizeBytes 1 -VirtualDiskPath "fakeVirtualDiskPath" | Should Be 0
-    }
-
-    It "Should throw on invalid product key" {
-        { New-WindowsCloudImage -Wimfilepath "fakeWimFilepath" `
-                    -ImageName "fakeImageName" `
-                    -ProductKey "foo" `
-                    -SizeBytes 1 -VirtualDiskPath "fakeVirtualDiskPath" } | Should Throw
+        New-WindowsCloudImage -ConfigFilePath $fakeConfigPath | Should Be 0
     }
 
     It "should run all mocked commands" {
@@ -136,22 +120,6 @@ Describe "Test Get-WimFileImagesInfo" {
         } | Should Be $true
     }
 }
-
-
-Describe "Test New-MaaSImage" {
-    Mock New-WindowsOnlineImage -Verifiable -ModuleName $moduleName { return 0 }
-
-    It "Should create a maas image" {
-        New-MaaSImage -Wimfilepath "fakeWimFilepath" `
-            -ImageName "fakeImageName" `
-            -SizeBytes 1 -MaaSImagePath "fakeMAASPath" | Should Be 0
-    }
-
-    It "should run all mocked commands" {
-        Assert-VerifiableMocks
-    }
-}
-
 
 Describe "Test Resize-VHDImage" {
     function Get-VHD { }
@@ -198,11 +166,6 @@ Describe "Test New-WindowsOnlineImage" {
     Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
     Mock Is-Administrator -Verifiable -ModuleName $moduleName { return 0 }
     Mock Check-Prerequisites -Verifiable -ModuleName $moduleName { return 0 }
-    Mock GetOrCreate-Switch -Verifiable -ModuleName $moduleName {
-        return @{
-            "Name" = "fakeswitch"
-        }
-    }
     Mock Get-PathWithoutExtension -Verifiable -ModuleName $moduleName { return "fakePath" }
     Mock New-WindowsCloudImage -Verifiable -ModuleName $moduleName { return 0 }
     Mock Run-Sysprep -Verifiable -ModuleName $moduleName  { return 0 }
@@ -213,23 +176,7 @@ Describe "Test New-WindowsOnlineImage" {
     Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
 
     It "Should create an online image" {
-        New-WindowsOnlineImage -Wimfilepath "fakeWimFilepath" `
-            -ImageName "fakeImageName" `
-            -SizeBytes 1 -WindowsImagePath "fakeWindowsImagePath" | Should Be 0
-    }
-
-    It "Should accept valid product key" {
-        New-WindowsOnlineImage -Wimfilepath "fakeWimFilepath" `
-            -ImageName "fakeImageName" `
-            -ProductKey "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" `
-            -SizeBytes 1 -WindowsImagePath "fakeWindowsImagePath" | Should Be 0
-    }
-
-    It "Should throw on invalid product key" {
-        { New-WindowsOnlineImage -Wimfilepath "fakeWimFilepath" `
-            -ImageName "fakeImageName" `
-            -ProductKey "foo" `
-            -SizeBytes 1 -WindowsImagePath "fakeWindowsImagePath" } | Should Throw
+        New-WindowsOnlineImage -ConfigFilePath $fakeConfigPath | Should Be 0
     }
 
     It "should run all mocked commands" {
