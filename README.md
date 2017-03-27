@@ -15,7 +15,7 @@ If you plan to run the online Windows setup step on another system / hypervisor,
 The following versions of Windows images (both x86 / x64, if existent) to be generated are supported:
 * Windows Server 2008 / 2008 R2
 * Windows Server 2012 / 2012 R2
-* Windows Server 2016 
+* Windows Server 2016
 * Windows 7 / 8 / 8.1 / 10
 
 To generate Windows Nano Server 2016, please use the following repository:
@@ -44,7 +44,7 @@ Run `git submodule update --init` to retrieve them
 
 ### PowerShell image generation example for OpenStack KVM (host requires Hyper-V enabled)
 ```powershell
-git clone https://github.com/cloudbase/windows-openstack-imaging-tools.git
+git clone https://github.com/cloudbase/windows-openstack-imaging-tools.git --recursive
 pushd windows-openstack-imaging-tools
 Import-Module .\WinImageBuilder.psm1
 
@@ -59,7 +59,7 @@ $wimFilePath = "D:\Sources\install.wim"
 $image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[0]
 
 New-WindowsOnlineImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
-    -WindowsImagePath $windowsImagePath -Type 'KVM' `
+    -WindowsImagePath $windowsImagePath -Type 'KVM' -InstallUpdates `
     -SizeBytes 30GB -CpuCores 4 -Memory 4GB -SwitchName 'external'
 
 popd
@@ -113,4 +113,3 @@ cmd /c 'powershell.exe -NonInteractive { Invoke-Pester }'
 
 This will run all tests without polluting your current shell environment. <br/>
 This is not needed if you run it in a Continuous Integration environment.
-
