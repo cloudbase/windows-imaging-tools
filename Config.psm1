@@ -21,57 +21,85 @@ Import-Module "$localResourcesDir\ini.psm1"
 function Get-availableConfigOptionOptions {
     return @(
         @{"Name" = "wim_file_path"; "DefaultValue" = "D:\Sources\install.wim";
-          "Description" = "Wim file path."},
+          "Description" = "The location of the WIM file from the mounted Windows ISO."},
         @{"Name" = "image_name"; "DefaultValue" = "Windows Server 2012 R2 SERVERSTANDARD";
-          "Description" = "Wim image name"},
+          "Description" = "This is the complete name of the Windows version that will be generated.
+                           In order to find the possible options, use the Get-WimFileImagesInfo command
+                           and look for the Name property."},
         @{"Name" = "image_path"; "DefaultValue" = "${ENV:TEMP}\win-image.vhdx";
-          "Description" = "Image path"},
+          "Description" = "The destination of the generated image."},
         @{"Name" = "virtual_disk_format"; "DefaultValue" = "VHDX";
-          "Description" = "Virtual disk format"},
+          "Description" = "Select between VHD, VHDX, QCOW2, VMDK or RAW formats."},
         @{"Name" = "image_type"; "DefaultValue" = "HYPER-V";
-          "Description" = ""},
+          "Description" = "This parameter allows to choose between MAAS, KVM and Hyper-V specific images.
+                           For HYPER-V, cloudbase-init will be installed and the generated image should be in vhd or vhdx format.
+                           For MAAS, in addition to cloudbase-init, the curtin tools are installed
+                           and the generated image should be in raw.tgz format.
+                           For KVM, in addition to cloudbase-init, the VirtIO drivers are installed
+                           and the generated image should be in qcow2 format."},
         @{"Name" = "disk_layout"; "DefaultValue" = "BIOS";
-          "Description" = ""},
+          "Description" = "This parameter can be set to either BIOS or UEFI."},
         @{"Name" = "product_key";
-          "Description" = ""},
+          "Description" = "The product key for the selected OS."},
         @{"Name" = "extra_features";
-          "Description" = ""},
+          "Description" = "A comma separated array of extra features that will be enabled on the resulting image.
+                           These features need to be present in the ISO file."},
         @{"Name" = "force"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = ""},
+          "Description" = "It will force the image generation when RunSysprep is False or the selected SwitchName
+                           is not an external one. Use this parameter with caution because it can easily generate
+                           unstable images."},
         @{"Name" = "install_maas_hooks"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = ""},
+          "Description" = "If set to true, MAAS Windows curtin hooks will be copied to the image root directory."},
         @{"Name" = "zip_password";
-          "Description" = ""},
+          "Description" = "If this parameter is set, after the image is generated,
+                           a password protected zip archive with the image will be created."},
         @{"Name" = "administrator_password"; "GroupName" = "vm"; "DefaultValue" = "Pa`$`$w0rd";
-          "Description" = ""},
+          "Description" = "This will be the Administrator user's, so that AutoLogin can be performed on the instance,
+                           in order to install the required products,
+                           updates and perform the generation tasks like sysprep."},
         @{"Name" = "external_switch"; "GroupName" = "vm"; "DefaultValue" = "external";
-          "Description" = ""},
+          "Description" = "Used to specify the virtual switch the VM will be using.
+                           If it is specified but it is not external or if the switch does not exist,
+                           you will get an error message."},
         @{"Name" = "cpu_count"; "GroupName" = "vm"; "DefaultValue" = "1";
-          "Description" = ""},
+          "Description" = "The number of CPU cores assigned to the VM used to generate the image."},
         @{"Name" = "ram_size"; "GroupName" = "vm"; "DefaultValue" = "2147483648";
-          "Description" = ""},
+          "Description" = "RAM (in bytes) assigned to the VM used to generate the image."},
         @{"Name" = "disk_size"; "GroupName" = "vm"; "DefaultValue" = "42949672960";
-          "Description" = ""},
+          "Description" = "Disk space (in bytes) assigned to the VM used to generate the image."},
         @{"Name" = "virtio_iso_path"; "GroupName" = "drivers";
-          "Description" = ""},
+          "Description" = "The path to the ISO file containing the VirtIO drivers."},
         @{"Name" = "virtio_base_path"; "GroupName" = "drivers";
-          "Description" = ""},
+          "Description" = "The location where the VirtIO drivers are found.
+                           For example, the location of a mounted VirtIO ISO. VirtIO versions supported >=0.1.6.x"},
         @{"Name" = "drivers_path"; "GroupName" = "drivers";
-          "Description" = ""},
+          "Description" = "The location where additional drivers that are needed for the image are located."},
         @{"Name" = "install_updates"; "GroupName" = "updates"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = ""},
+          "Description" = "If set to true, the latest updates will be downloaded and installed."},
         @{"Name" = "purge_updates"; "GroupName" = "updates"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = ""},
+          "Description" = "If set to true, will run DISM with /resetbase option. This will reduce the size of
+                           WinSXS folder, but after that Windows updates cannot be uninstalled."},
         @{"Name" = "run_sysprep"; "GroupName" = "sysprep"; "DefaultValue" = $true; "AsBoolean" = $true;
-          "Description" = ""},
+          "Description" = "Used to clean the OS on the VM, and to prepare it for a first-time use."},
         @{"Name" = "unattend_xml_path"; "GroupName" = "sysprep"; "DefaultValue" = "UnattendTemplate.xml";
-          "Description" = ""},
+          "Description" = "The path to the Unattend XML template file used for sysprep."},
         @{"Name" = "disable_swap"; "GroupName" = "sysprep"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = ""},
+          "Description" = "DisableSwap option will disable the swap when the image is generated and will add a setting
+                           in the Unattend.xml file which will enable swap at boot time during specialize step.
+                           This is required, as by default, the amount of swap space on Windows machine is directly
+                           proportional to the RAM size and if the image has in the initial stage low disk space,
+                           the first boot will fail due to not enough disk space. The swap is set to the default
+                           automatic setting right after the resize of the partitions is performed by cloudbase-init."},
         @{"Name" = "persist_drivers_install"; "GroupName" = "sysprep"; "DefaultValue" = $true; "AsBoolean" = $true;
-          "Description" = ""},
+          "Description" = "In case the hardware on which the image is generated will also be the hardware on
+                           which the image will be deployed this can be set to true, otherwise the spawned
+                           instance is prone to BSOD."},
         @{"Name" = "beta_release"; "GroupName" = "cloudbase_init"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = ""}
+          "Description" = "This is a switch that allows the selection of Cloudbase-Init branches. If set to true, the
+                           beta branch will be used:
+                           https://cloudbase.it/downloads/CloudbaseInitSetup_<arch>.msi, where arch can be x86 or x64
+                           otherwise the stable branch will be used:
+                           https://cloudbase.it/downloads/CloudbaseInitSetup_Stable_<arch>.msi, where arch can be x86 or x64"}
     )
 }
 
@@ -121,10 +149,16 @@ function Set-IniComment {
 
     $content = Get-Content $Path
     $index = 0
-    $descriptionContent = "# $Description"
+    $lines = @()
+    $descriptionSplited = $Description -split '["\n\r"|"\r\n"|\n|\r]'
+    foreach ($line in $descriptionSplited) {
+        if ($line.trim()) {
+            $lines += "# " + $line.trim()
+        }
+    }
     foreach ($line in $content) {
-        if ($Description -and $line.StartsWith($Key) -and ($content[$index -1] -ne $descriptionContent)) {
-            $content = $content[0..($index -1)], $descriptionContent, $content[$index..($content.Length -1)]
+        if ($Description -and $line.StartsWith($Key) -and ($content[$index -1] -ne $lines)) {
+            $content = $content[0..($index -1)], $lines, $content[$index..($content.Length -1)]
             break
         }
         $index += 1
