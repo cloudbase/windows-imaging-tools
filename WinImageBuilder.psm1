@@ -1019,7 +1019,7 @@ function New-WindowsCloudImage {
 
     if ($vhdPath -ne $windowsImageConfig.image_path) {
         Convert-VirtualDisk $vhdPath $windowsImageConfig.image_path $windowsImageConfig.virtual_disk_format
-        if ($ZipPassword) {
+        if ($windowsImageConfig.zip_password) {
             New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password -virtualDiskPath $windowsImageConfig.image_path
         }
         Remove-Item -Force $vhdPath
