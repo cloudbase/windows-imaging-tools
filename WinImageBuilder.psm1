@@ -907,7 +907,18 @@ function New-WindowsOnlineImage {
     try {
         $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
         $virtualDiskPath = $barePath + ".vhdx"
-        New-WindowsCloudImage -ConfigFilePath $ConfigFilePath
+
+        # We need different config files for New-WindowsCloudImage and New-WindowsOnlineImage
+        $offlineConfigFilePath = $ConfigFilePath + ".offline"
+        Copy-Item -Path $ConfigFilePath -Destination $offlineConfigFilePath
+        Set-IniFileValue -Path $offlineConfigFilePath -Key 'image_path' `
+                -Value $virtualDiskPath -Section 'DEFAULT'
+        if ($windowsImageConfig.zip_password) {
+            Remove-IniFileValue -Path $offlineConfigFilePath `
+                -Key 'zip_password' -Section 'DEFAULT'
+        }
+        New-WindowsCloudImage -ConfigFilePath $offlineConfigFilePath
+
         if ($windowsImageConfig.run_sysprep) {
             if($windowsImageConfig.disk_layout -eq "UEFI") {
                 $generation = "2"
