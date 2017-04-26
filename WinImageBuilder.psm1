@@ -17,6 +17,7 @@ Import-Module Dism
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $localResourcesDir = "$scriptPath\UnattendResources"
 Import-Module "$scriptPath\Config.psm1"
+Import-Module "$scriptPath\UnattendResources\ini.psm1"
 
 $noHypervWarning = @"
 The Hyper-V role is missing from this machine. In order to be able to finish
@@ -911,8 +912,10 @@ function New-WindowsOnlineImage {
         # We need different config files for New-WindowsCloudImage and New-WindowsOnlineImage
         $offlineConfigFilePath = $ConfigFilePath + ".offline"
         Copy-Item -Path $ConfigFilePath -Destination $offlineConfigFilePath
-        Set-IniFileValue -Path $offlineConfigFilePath -Key 'image_path' `
-                -Value $virtualDiskPath -Section 'DEFAULT'
+        Set-IniFileValue -Path $offlineConfigFilePath -Section 'DEFAULT' -Key 'image_path' `
+                -Value $virtualDiskPath
+        Set-IniFileValue -Path $offlineConfigFilePath -Section 'DEFAULT' -Key 'virtual_disk_format' `
+                -Value 'VHDX'
         if ($windowsImageConfig.zip_password) {
             Remove-IniFileValue -Path $offlineConfigFilePath `
                 -Key 'zip_password' -Section 'DEFAULT'
