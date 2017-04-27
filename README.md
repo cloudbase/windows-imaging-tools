@@ -58,8 +58,15 @@ $wimFilePath = "D:\Sources\install.wim"
 # Usually, the first image version is the Core one
 $image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[0]
 
+$virtIOISOPath = "C:\images\virtio.iso"
+# Note(avladu): Do not use stable 0.1.126 version because of this bug https://github.com/crobinso/virtio-win-pkg-scripts/issues/10
+$virtIODownloadLink = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.133-2/virtio-win.iso"
+
+# Download the VirtIO drivers ISO from Fedora
+(New-Object System.Net.WebClient).DownloadFile($virtIODownloadLink, $VirtIOISOPath)
+
 New-WindowsOnlineImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
-    -WindowsImagePath $windowsImagePath -Type 'KVM' `
+    -WindowsImagePath $windowsImagePath -Type 'KVM' -VirtioISOPath $virtIOISOPath `
     -SizeBytes 30GB -CpuCores 4 -Memory 4GB -SwitchName 'external'
 
 popd
