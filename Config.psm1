@@ -55,6 +55,9 @@ function Get-availableConfigOptionOptions {
                            a password protected zip archive with the image will be created."},
         @{"Name" = "gold_image"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "It will stop the image generation after the updates are installed and cleaned."},
+        @{"Name" = "gold_image_path";
+          "Description" = "This is the full path of the already generated golden image.
+                           It should be a valid VHDX path."},
         @{"Name" = "administrator_password"; "GroupName" = "vm"; "DefaultValue" = "Pa`$`$w0rd";
           "Description" = "This will be the Administrator user's, so that AutoLogin can be performed on the instance,
                            in order to install the required products,
