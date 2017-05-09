@@ -189,6 +189,7 @@ try
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "persist_drivers_install" -Default $true -AsBoolean
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
+    $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
 
     if ($installUpdates) {
         Install-WindowsUpdates
@@ -196,6 +197,12 @@ try
 
     ExecRetry {
         Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
+    }
+
+    if ($goldImage) {
+        # Cleanup and shutting down the instance
+        Remove-Item -Recurse -Force $resourcesDir
+        shutdown -s -t 0 -f
     }
 
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
