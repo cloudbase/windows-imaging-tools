@@ -53,6 +53,8 @@ function Get-availableConfigOptionOptions {
         @{"Name" = "zip_password";
           "Description" = "If this parameter is set, after the image is generated,
                            a password protected zip archive with the image will be created."},
+        @{"Name" = "gold_image"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "It will stop the image generation after the updates are installed and cleaned."},
         @{"Name" = "administrator_password"; "GroupName" = "vm"; "DefaultValue" = "Pa`$`$w0rd";
           "Description" = "This will be the Administrator user's, so that AutoLogin can be performed on the instance,
                            in order to install the required products,
