@@ -874,12 +874,61 @@ function Run-Sysprep {
     Remove-VM $Name -Confirm:$false -Force
 }
 
+function Get-ImageInformation {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$DriveLetter,
+        [Parameter(Mandatory=$true)]
+        [string]$ImageName
+    )
+
+    $ntDll = "$driveLetter\Windows\system32\ntdll.dll"
+    if (Test-Path $ntDll) {
+        $versionString = (Get-Item $ntDll).VersionInfo.ProductVersion
+        $osVersion = $versionString.split('.')
+        $imageVersion = @{
+            "Major" = $osVersion[0];
+            "Minor" = $osVersion[1];
+        }
+    } else {
+        throw "Unable to determine OS Version"
+    }
+
+    if ((Get-Item $ntDll).Target -like "*amd64_microsoft-windows-ntdll*") {
+        $imageArchitecture = "AMD64"
+    } else {
+        $imageArchitecture = "i386"
+    }
+
+    if ($imageName -like '*Core') {
+        $imageInstallationType = "Server Core"
+    } else {
+        $imageInstallationType = "Server"
+    }
+
+    return $image = @{
+        "imageVersion" = $imageVersion;
+        "imageArchitecture" = $imageArchitecture;
+        "imageInstallationType" = $imageInstallationType;
+    }
+}
+
 function New-WindowsOnlineImage {
     Param(
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
         [string]$ConfigFilePath
     )
     $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
+
+    if ($windowsImageConfig.gold_image) {
+        if  (($windowsImageConfig.image_type -ne 'HYPER-V') -or `
+            (!$windowsImageConfig.virtual_disk_format -in @("VHD","VHDX")) -or `
+            (![System.IO.Path]::GetExtension($windowsImageConfig.image_path) -in @(".vhd",".vhdx"))) {
+            throw "A golden image file should have a vhd(x) extension/disk`
+                   format and the image_type should be HYPER-V."
+        }
+    }
+
     Write-Host ("Windows online image generation started at: {0}" -f @(Get-Date))
     Is-Administrator
     if (!$windowsImageConfig.run_sysprep -and !$windowsImageConfig.force) {
@@ -1041,5 +1090,106 @@ function New-WindowsCloudImage {
     Write-Host ("Image generation finished at: {0}" -f @(Get-Date))
 }
 
+function New-WindowsFromGoldenImage {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$ConfigFilePath
+    )
+
+    $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
+    Write-Host ("Windows online image generation started at: {0}" -f @(Get-Date))
+    Is-Administrator
+    if (!$windowsImageConfig.run_sysprep -and !$windowsImageConfig.force) {
+        throw "You chose not to run sysprep.
+            This will build an unusable Windows image.
+            If you really want to continue use the `force = true` config option."
+    }
+
+    Check-Prerequisites
+    if ($windowsImageConfig.external_switch) {
+        $switch = Get-VMSwitch -Name $windowsImageConfig.external_switch -ErrorAction SilentlyContinue
+        if (!$switch) {
+            throw "Selected vmswitch {0} does not exist" -f $windowsImageConfig.external_switch
+        }
+        if ($switch.SwitchType -ne "External" -and !$windowsImageConfig.force) {
+            throw "Selected switch {0} is not an external
+                switch. If you really want to continue use the `force = true` flag." `
+                -f $windowsImageConfig.external_switch
+        }
+    }
+    if ($windowsImageConfig.cpu_count -gt `
+        (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors) {
+        throw "CpuCores larger than available (logical) CPU cores."
+    }
+
+    try {
+        Execute-Retry {
+            Resize-VHD -Path $windowsImageConfig.gold_image_path -SizeBytes $windowsImageConfig.disk_size
+        }
+
+        Mount-VHD -Path $windowsImageConfig.gold_image_path -Passthru | Out-Null
+        Get-PSDrive | Out-Null
+
+        $driveLetterGold = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk | Get-Partition |`
+            Get-Volume).DriveLetter + ":"
+
+        $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
+        $maxPartitionSize = (Get-PartitionSupportedSize -DiskNumber $driveNumber -PartitionNumber 1).SizeMax
+        Resize-Partition -DiskNumber $driveNumber -PartitionNumber 1 -Size $maxPartitionSize
+
+        $imageInfo = Get-ImageInformation $driveLetterGold -ImageName $windowsImageConfig.image_name
+        if ($windowsImageConfig.virtio_iso_path) {
+            Add-VirtIODriversFromISO $driveLetterGold $imageInfo $windowsImageConfig.virtio_iso_path
+        }
+
+        if ($windowsImageConfig.drivers_path) {
+            Dism /Image:$driveLetterGold /Add-Driver /Driver:$windowsImageConfig.drivers_path `
+                /ForceUnsigned /Recurse
+        }
+
+        $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
+        Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $windowsImageConfig.image_name
+        Copy-Item $ConfigFilePath $resourcesDir
+        Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release
+        Dismount-VHD -Path $windowsImageConfig.gold_image_path
+
+        $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
+
+        New-VM -Name $Name -MemoryStartupBytes $windowsImageConfig.ram_size -SwitchName $switch.Name `
+            -VHDPath $windowsImageConfig.gold_image_path
+        Set-VMProcessor -VMname $Name -count $windowsImageConfig.cpu_count
+
+        Start-VM $Name
+        Start-Sleep 10
+        Wait-ForVMShutdown $Name
+        Remove-VM $Name -Confirm:$False -Force
+
+        Resize-VHDImage $windowsImageConfig.gold_image_path
+
+        $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
+
+        if ($windowsImageConfig.image_type -eq "MAAS") {
+            $RawImagePath = $barePath + ".img"
+            Write-Output "Converting VHD to RAW"
+            Convert-VirtualDisk $windowsImageConfig.gold_image_path $RawImagePath "RAW"
+            Remove-Item -Force $windowsImageConfig.gold_image_path
+            Compress-Image $RawImagePath $windowsImageConfig.image_path
+        }
+        if ($windowsImageConfig.image_type -eq "KVM") {
+            $Qcow2ImagePath = $barePath + ".qcow2"
+            Write-Output "Converting VHD to QCow2"
+            Convert-VirtualDisk $windowsImageConfig.gold_image_path $Qcow2ImagePath "qcow2"
+            Remove-Item -Force $windowsImageConfig.gold_image_path
+        }
+    } catch {
+        Write-Host $_
+        try {
+            Get-VHD $windowsImageConfig.gold_image_path | Dismount-VHD
+        }
+        catch {}
+    }
+}
+
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
-    New-WindowsOnlineImage, Add-VirtIODriversFromISO
+    New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage
