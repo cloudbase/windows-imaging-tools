@@ -186,16 +186,21 @@ function New-WindowsImageConfig {
     foreach($availableConfigOption in $availableConfigOptionOptions) {
         try {
             $groupName = "DEFAULT"
+            $value = $availableConfigOption['DefaultValue']
             $asBoolean = $false
             if ($availableConfigOption['GroupName']) {
                 $groupName = $availableConfigOption['GroupName']
             }
             if ($availableConfigOption['AsBoolean']) {
                 $asBoolean = $availableConfigOption['AsBoolean']
+            } else {
+                if (!$value) {
+                    $value = '""'
+                }
             }
             $value = Set-IniFileValue -Path $fullConfigFilePath -Section $groupName `
                                       -Key $availableConfigOption['Name'] `
-                                      -Value $availableConfigOption['DefaultValue']
+                                      -Value $value
             Set-IniComment -Path $fullConfigFilePath -Key $availableConfigOption['Name'] `
                            -Description $availableConfigOption['Description']
         } catch {
