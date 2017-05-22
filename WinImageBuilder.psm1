@@ -1003,7 +1003,7 @@ function New-WindowsOnlineImage {
             Remove-Item -Force $virtualDiskPath
         }
     } catch {
-        if ($windowsImageConfig.image_path -and (Test-Path windowsImageConfig.image_path)) {
+        if ($windowsImageConfig.image_path -and (Test-Path $windowsImageConfig.image_path)) {
             Remove-Item -Force ${windowsImageConfig.image_path} -ErrorAction SilentlyContinue
         }
         Throw
