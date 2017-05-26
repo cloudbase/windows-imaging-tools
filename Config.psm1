@@ -18,7 +18,7 @@ $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $localResourcesDir = "$scriptPath\UnattendResources"
 Import-Module "$localResourcesDir\ini.psm1"
 
-function Get-availableConfigOptionOptions {
+function Get-AvailableConfigOptionOptions {
     return @(
         @{"Name" = "wim_file_path"; "DefaultValue" = "D:\Sources\install.wim";
           "Description" = "The location of the WIM file from the mounted Windows ISO."},
@@ -104,7 +104,10 @@ function Get-availableConfigOptionOptions {
                            beta branch will be used:
                            https://cloudbase.it/downloads/CloudbaseInitSetup_<arch>.msi, where arch can be x86 or x64
                            otherwise the stable branch will be used:
-                           https://cloudbase.it/downloads/CloudbaseInitSetup_Stable_<arch>.msi, where arch can be x86 or x64"}
+                           https://cloudbase.it/downloads/CloudbaseInitSetup_Stable_<arch>.msi, where arch can be x86 or x64"},
+        @{"Name" = "serial_logging_port"; "GroupName" = "cloudbase_init"; "DefaultValue" = "COM1";
+          "Description" = "Serial log port for Cloudbase-Init.
+	                   If set to null, the first serial port (if any) from the generation VM will be used"}
     )
 }
 

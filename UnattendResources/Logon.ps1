@@ -190,6 +190,7 @@ try
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
+    $serialPortName = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "serial_logging_port"
 
     if ($installUpdates) {
         Install-WindowsUpdates
@@ -212,9 +213,19 @@ try
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
     $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
 
-    $serialPortName = @(Get-WmiObject Win32_SerialPort)[0].DeviceId
+    if (!$serialPortName) {
+        $serialPorts = Get-WmiObject Win32_SerialPort
+        if ($serialPorts) {
+            $serialPortName = $serialPorts[0].DeviceID
+        }
+    }
 
-    $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog LOGGINGSERIALPORTNAME=$serialPortName"
+    $msiexecArgumentList = "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog"
+    if ($serialPortName) {
+        $msiexecArgumentList += " LOGGINGSERIALPORTNAME=$serialPortName"
+    }
+
+    $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList $msiexecArgumentList
     if ($p.ExitCode -ne 0) {
         throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
     }
