@@ -120,7 +120,7 @@ function Get-WimFileImagesInfo {
     [CmdletBinding()]
     Param(
         [parameter(Mandatory=$true)]
-        [string]$WimFilePath = "D:\Sources\install.wim"
+        [string]$WimFilePath
     )
     PROCESS
     {
@@ -650,7 +650,7 @@ function Compress-Image {
     $pigz = Get-PigzPath
     try {
         Write-Host "Archiving $VirtualDiskPath to tarfile $tmpName"
-        pushd ([System.IO.Path]::GetDirectoryName((Resolve-path $VirtualDiskPath).Path))
+        Push-Location ([System.IO.Path]::GetDirectoryName((Resolve-path $VirtualDiskPath).Path))
         try {
             # Avoid storing the full path in the archive
             $imageFileName = (Get-Item $VirtualDiskPath).Name
@@ -663,12 +663,12 @@ function Compress-Image {
                 throw "7za.exe failed while creating tar file for image: $tmpName"
             }
         } finally {
-            popd
+            Pop-Location
         }
 
         Remove-Item -Force $VirtualDiskPath
         Write-Host "Compressing $tmpName to gzip"
-        pushd ([System.IO.Path]::GetDirectoryName((Resolve-path $tmpName).Path))
+        Push-Location ([System.IO.Path]::GetDirectoryName((Resolve-path $tmpName).Path))
         try {
             $tmpPathName = (Get-Item $tmpName).Name
             Write-Host "Creating gzip..."
@@ -681,7 +681,7 @@ function Compress-Image {
                 throw "pigz.exe failed while creating gzip file for : $tmpName"
             }
         } finally {
-            popd
+            Pop-Location
         }
     } catch {
         Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
@@ -914,6 +914,19 @@ function Get-ImageInformation {
 }
 
 function New-WindowsOnlineImage {
+    <#
+    .SYNOPSIS
+     This function generates a Windows image using Hyper-V  to instantiate the image in
+     order to apply the updates and install cloudbase-init.
+    .DESCRIPTION
+     This command requires Hyper-V to be enabled, a VMSwitch to be configured for external
+     network connectivity if the updates are to be installed, which is highly recommended.
+     This command uses internally the New-WindowsCloudImage to generate the base image and
+     start a Hyper-V instance using the base image. After the Hyper-V instance shuts down,
+     the resulting VHDX is shrunk to a minimum size and converted to the required format.
+
+     The list of parameters can be found in the Config.psm1 file.
+    #>
     Param(
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
         [string]$ConfigFilePath
@@ -1012,6 +1025,22 @@ function New-WindowsOnlineImage {
 }
 
 function New-WindowsCloudImage {
+    <#
+    .SYNOPSIS
+     This function creates a Windows Image, starting from an ISO file, without the need
+     of Hyper-V to be enabled. The image, to become ready for cloud usage, needs to be
+     started on a hypervisor and it will automatically shut down when it finishes all the
+     operations needed to become cloud ready: cloudbase-init installation, updates and sysprep.
+    .DESCRIPTION
+     This script can generate a Windows Image in one of the following formats: VHD,
+     VHDX, QCow2, VMDK or RAW. It takes the Windows flavor indicated by the ImageName
+     from the WIM file and based on the parameters given, it will generate an image.
+     This function does not require Hyper-V to be enabled, but the generated image
+     is not ready to be deployed, as it needs to be started manually on another hypervisor.
+     The image is ready to be used when it shuts down.
+
+     The list of parameters can be found in the Config.psm1 file.
+    #>
     param
     (
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
@@ -1023,7 +1052,7 @@ function New-WindowsCloudImage {
     Set-DotNetCWD
     Is-Administrator
     $image = Get-WimFileImagesInfo -WimFilePath $windowsImageConfig.wim_file_path | `
-        Where { $_.ImageName -eq $windowsImageConfig.image_name }
+        Where-Object { $_.ImageName -eq $windowsImageConfig.image_name }
     if (!$image) {
         throw ("Image {0} not found in WIM file {1}" -f @($windowsImageConfig.image_name, $windowsImageConfig.wim_file_path))
     }
@@ -1091,6 +1120,23 @@ function New-WindowsCloudImage {
 }
 
 function New-WindowsFromGoldenImage {
+    <#
+    .SYNOPSIS
+     This function creates a functional Windows Image, starting from an already
+     generated golden image. It will be started on Hyper-V and it will automatically
+     shut down when it finishes all the operations needed to become cloud ready:
+     cloudbase-init installation, updates and sysprep.
+    .DESCRIPTION
+     This function can generated a cloud ready Windows image starting from a golden
+     image. The resulting image can have the following formats: VHD,VHDX, QCow2,
+     VMDK or RAW.
+
+     This command requires Hyper-V to be enabled, a VMSwitch to be configured for external
+     network connectivity if the updates are to be installed, which is highly recommended.
+     This command uses internally the New-WindowsOnlineImage to start a Hyper-V instance using
+     the golden image provided as a parameter. After the Hyper-V instance shuts down,
+     the resulting VHDX is shrunk to a minimum size and converted to the required format.
+     #>
     [CmdletBinding()]
     Param(
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
@@ -1183,11 +1229,12 @@ function New-WindowsFromGoldenImage {
             Remove-Item -Force $windowsImageConfig.gold_image_path
         }
     } catch {
+      Write-Host $_
+      try {
+        Get-VHD $windowsImageConfig.gold_image_path | Dismount-VHD
+      } catch {
         Write-Host $_
-        try {
-            Get-VHD $windowsImageConfig.gold_image_path | Dismount-VHD
-        }
-        catch {}
+      }
     }
 }
 
