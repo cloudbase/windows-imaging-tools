@@ -112,6 +112,12 @@ function Get-AvailableConfigOptions {
 }
 
 function Get-WindowsImageConfig {
+     <#
+    .SYNOPSIS
+     This function reads the ini file given as a parameter and returns a dictionary of config options for the Windows
+     image to be generated. If there are no values for a set of keys defined in Get-AvailableConfigOptions, the
+     default values will be used instead.
+     #>
     param([parameter(Mandatory=$true)]
         [string]$ConfigFilePath
     )
@@ -175,6 +181,10 @@ function Set-IniComment {
 }
 
 function New-WindowsImageConfig {
+    <#
+    .SYNOPSIS
+     This function creates a ini type config file with the options taken from the Get-WindowsImageConfig function.
+     #>
     param([parameter(Mandatory=$true)]
         [string]$ConfigFilePath
     )

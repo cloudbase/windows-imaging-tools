@@ -15,7 +15,7 @@ try
             mkdir $wallpaper_dir
         }
 
-        copy "$wallpaper" "$wallpaper_dir\Wallpaper-Cloudbase-2013.jpg"
+        Copy-Item "$wallpaper" "$wallpaper_dir\Wallpaper-Cloudbase-2013.jpg"
         $gpoZipPath = "$resourcesDir\GPO.zip"
         foreach($item in (New-Object -com shell.application).NameSpace($gpoZipPath).Items())
         {
