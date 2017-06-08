@@ -18,7 +18,7 @@ $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $localResourcesDir = "$scriptPath\UnattendResources"
 Import-Module "$localResourcesDir\ini.psm1"
 
-function Get-AvailableConfigOptionOptions {
+function Get-AvailableConfigOptions {
     return @(
         @{"Name" = "wim_file_path"; "DefaultValue" = "D:\Sources\install.wim";
           "Description" = "The location of the WIM file from the mounted Windows ISO."},
@@ -120,8 +120,8 @@ function Get-WindowsImageConfig {
         Write-Warning ("Config file {0} does not exist." -f $configFilePath)
     }
     $winImageConfig = @{}
-    $availableConfigOptionOptions = Get-availableConfigOptionOptions
-    foreach($availableConfigOption in $availableConfigOptionOptions) {
+    $availableConfigOptions = Get-AvailableConfigOptions
+    foreach($availableConfigOption in $availableConfigOptions) {
         try {
             $groupName = "DEFAULT"
             $asBoolean = $false
@@ -185,8 +185,8 @@ function New-WindowsImageConfig {
     }
 
     $fullConfigFilePath = Resolve-Path $ConfigFilePath -ErrorAction SilentlyContinue
-    $availableConfigOptionOptions = Get-AvailableConfigOptionOptions
-    foreach($availableConfigOption in $availableConfigOptionOptions) {
+    $availableConfigOptions = Get-AvailableConfigOptions
+    foreach($availableConfigOption in $availableConfigOptions) {
         try {
             $groupName = "DEFAULT"
             $value = $availableConfigOption['DefaultValue']
