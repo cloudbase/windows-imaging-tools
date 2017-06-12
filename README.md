@@ -6,8 +6,8 @@ Windows OpenStack Imaging Tools automates the generation of Windows images.<br/>
 The tools are a bundle of PowerShell modules and scripts.
 
 The supported target environments for the Windows images are:
-* OpenStack with KVM, Hyper-V, VMware and baremetal hypervisor types
-* MAAS with KVM, Hyper-V, VMware and baremetal
+* [OpenStack](https://www.openstack.org/) with KVM, Hyper-V, VMware and baremetal hypervisor types
+* [MAAS](https://maas.io/) with KVM, Hyper-V, VMware and baremetal
 
 The generation environment needs to be a Windows one, with Hyper-V virtualization enabled.<br/>
 If you plan to run the online Windows setup step on another system / hypervisor, the Hyper-V virtualization is not required.
