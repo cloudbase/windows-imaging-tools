@@ -1196,7 +1196,7 @@ function New-WindowsFromGoldenImage {
 
         $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
         Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $windowsImageConfig.image_name
-        Copy-Item $ConfigFilePath $resourcesDir
+        Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release
         Dismount-VHD -Path $windowsImageConfig.gold_image_path
 
