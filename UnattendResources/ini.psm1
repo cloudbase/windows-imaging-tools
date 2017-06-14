@@ -49,7 +49,10 @@ namespace PSCloudbase
 Add-Type -TypeDefinition $Source -Language CSharp
 
 function Get-IniFileValue
-{
+{   <#
+    .SYNOPSIS
+     This function returns the value of the key specified as a parameter.
+    #>
     [CmdletBinding()]
     param
     (
@@ -98,7 +101,10 @@ function Get-IniFileValue
 }
 
 function Set-IniFileValue
-{
+{   <#
+    .SYNOPSIS
+     This function sets a value to the key within the file specified as a parameter.
+    #>
     [CmdletBinding()]
     param
     (
@@ -125,7 +131,10 @@ function Set-IniFileValue
 }
 
 function Remove-IniFileValue
-{
+{   <#
+    .SYNOPSIS
+     This function removes a value from the ini file specified as a parameter.
+    #>
     [CmdletBinding()]
     param
     (

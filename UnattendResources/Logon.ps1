@@ -6,7 +6,7 @@ function Set-PersistDrivers {
     Param(
     [parameter(Mandatory=$true)]
     [string]$Path,
-    [switch]$Persist=$true
+    [switch]$Persist
     )
     if (!(Test-Path $Path)) {
         return $false
