@@ -65,6 +65,10 @@ function Compare-HashTables ($tab1, $tab2) {
     return $true
 }
 
+function Get-VMSwitch {
+
+}
+
 Import-Module $modulePath
 
 Describe "Test New-WindowsCloudImage" {
@@ -174,6 +178,7 @@ Describe "Test New-WindowsOnlineImage" {
     Mock Get-Random -Verifiable -ModuleName $moduleName { return 1 }
     Mock Remove-Item -Verifiable -ModuleName $moduleName { return 0 }
     Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Get-VMSwitch -Verifiable -ModuleName $moduleName { return @{"Name"="external";"SwitchType"="External"} }
 
     It "Should create an online image" {
         New-WindowsOnlineImage -ConfigFilePath $fakeConfigPath | Should Be 0
