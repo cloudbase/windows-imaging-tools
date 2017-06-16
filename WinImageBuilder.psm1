@@ -355,6 +355,34 @@ function Convert-VirtualDisk {
     }
 }
 
+function Copy-CustomResources {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$ResourcesDir,
+        [string]$CustomResources,
+        [string]$CustomScripts
+        )
+
+    if (!(Test-Path "$resourcesDir")) {
+        $d = New-Item -Type Directory $resourcesDir
+    }
+    if ($CustomResources) {
+        if (!(Test-Path "$resourcesDir\CustomResources")) {
+            $d = New-Item -Type Directory "$resourcesDir\CustomResources"
+        }
+        Write-Host "Copying: $CustomResources $resourcesDir"
+        Copy-Item -Recurse "$CustomResources\*" "$resourcesDir\CustomResources"
+    }
+    if ($CustomScripts) {
+        if (!(Test-Path "$resourcesDir\CustomScripts")) {
+            $d = New-Item -Type Directory "$resourcesDir\CustomScripts"
+        }
+        Write-Host "Copying: $CustomScripts $resourcesDir"
+        Copy-Item -Recurse "$CustomScripts\*" "$resourcesDir\CustomScripts"
+    }
+}
+
+
 function Copy-UnattendResources {
     Param(
         [Parameter(Mandatory=$true)]
@@ -1140,6 +1168,8 @@ function New-WindowsCloudImage {
         }
         Generate-UnattendXml @xmlParams
         Copy-UnattendResources $resourcesDir $image.ImageInstallationType $windowsImageConfig.install_maas_hooks
+        Copy-CustomResources -ResourcesDir $resourcesDir -CustomResources $windowsImageConfig.custom_resources_path `
+                             -CustomScripts $windowsImageConfig.custom_scripts_path
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper $winImagePath $windowsImageConfig.wallpaper_path
         Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release
@@ -1252,6 +1282,8 @@ function New-WindowsFromGoldenImage {
 
         $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
         Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $windowsImageConfig.image_name
+        Copy-CustomResources -ResourcesDir $resourcesDir -CustomResources $windowsImageConfig.custom_resources_path `
+                             -CustomScripts $windowsImageConfig.custom_scripts_path
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper $driveLetterGold $windowsImageConfig.wallpaper_path
         Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release

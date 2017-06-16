@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 $resourcesDir = "$ENV:SystemDrive\UnattendResources"
 $configIniPath = "$resourcesDir\config.ini"
+$customScriptsDir = "$resourcesDir\CustomScripts"
 
 function Set-PersistDrivers {
     Param(
@@ -213,7 +214,35 @@ function License-Windows {
     }
 }
 
-try {
+function Run-CustomScript {
+    Param($ScriptFileName)
+    $fullScriptFilePath = Join-Path $customScriptsDir $ScriptFileName
+    if (Test-Path $fullScriptFilePath) {
+        Write-Host "Executing script $fullScriptFilePath"
+        & $fullScriptFilePath
+	if ($LastExitCode -eq 1004) {
+	    # exit this script
+	    exit 0
+	}
+	if ($LastExitCode -eq 1005) {
+	    # exit this script and reboot
+	    shutdown -r -t 0 -f
+	    exit 0
+	}
+	if ($LastExitCode -eq 1006) {
+	    # exit this script and shutdown
+	    shutdown -s -t 0 -f
+	    exit 0
+	}
+	if ($LastExitCode -eq 1) {
+	    throw "Script $ScriptFileName executed unsuccessfuly"
+	}
+
+    }
+}
+
+try
+{
     Import-Module "$resourcesDir\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "install_updates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "persist_drivers_install" -Default $true -AsBoolean
@@ -229,6 +258,7 @@ try {
         License-Windows $productKey
     }
 
+    Run-CustomScript "RunBeforeWindowsUpdates.ps1"
     if ($installUpdates) {
         Install-WindowsUpdates
     }
@@ -236,6 +266,7 @@ try {
     ExecRetry {
         Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
     }
+    Run-CustomScript "RunAfterWindowsUpdates.ps1"
 
     if ($goldImage) {
         # Cleanup and shutting down the instance
@@ -243,6 +274,7 @@ try {
         shutdown -s -t 0 -f
     }
 
+    Run-CustomScript "RunBeforeCloudbaseInitInstall.ps1"
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
     $programFilesDir = $ENV:ProgramFiles
@@ -269,10 +301,9 @@ try {
 
     $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
     & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
+    Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
 
     Run-Defragment
-
-    Clean-UpdateResources
 
     Release-IP
 
@@ -286,8 +317,10 @@ try {
         }
         Set-UnattendEnableSwap -Path $unattendedXmlPath
     }
-
+    Run-CustomScript "RunBeforeSysprep.ps1"
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
+    Run-CustomScript "RunAfterSysprep.ps1"
+    Clean-UpdateResources
 } catch {
     $host.ui.WriteErrorLine($_.Exception.ToString())
     $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
