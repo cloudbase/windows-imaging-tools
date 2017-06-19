@@ -383,10 +383,10 @@ function Download-CloudbaseInit {
         [switch]$BetaRelease
     )
     Write-Host "Downloading Cloudbase-Init..."
-
     $msiBuildArchMap = @{
         "amd64" = "x64"
         "i386" = "x86"
+        "x86" = "x86"
     }
     $msiBuildSuffix = ""
     if (-not $BetaRelease) {
