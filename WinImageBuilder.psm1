@@ -54,7 +54,343 @@ $VirtIODriverMappings = @{
     "w10" = @(100, 0);
 }
 
+$MaaSWindowsSeriesMap = @{
+    "Hyper-V Server 2012 R2" = "win2012hvr2";
+    "Hyper-V Server 2012" = "win2012hv";
+    "Windows Server 2008 R2" = "win2008r2";
+    "Windows Server 2012 R2" = "win2012r2";
+    "Windows Server 2012" = "win2012";
+    "Hyper-V Server 2016" = "win2016hv";
+    "Windows Server 2016" = "win2016";
+    "Windows Storage Server 2012 R2" = "win2012r2";
+    "Windows Storage Server 2012" = "win2012";
+    "Windows Storage Server 2016" = "win2016";
+    "Windows 7" = "win7";
+    "Windows 8.1" = "win81";
+    "Windows 8" = "win8";
+    "Windows 10"= "win10";
+}
+
+$WindowsClients = @(
+    "win7", "win81", "win8",
+    "win10"
+)
+
+$WindowsServers = @(
+    "win2012hvr2", "win2012hv", "win2008r2",
+    "win2012r2", "win2012", "win2016hv",
+    "win2016"
+)
+
+$ImageArchitectureMap = @{
+    "amd64" = "amd64";
+    "x86_64" = "amd64";
+    "x64" = "amd64";
+    "x86" = "i386";
+    "i386" = "i386";
+}
+
 . "$scriptPath\Interop.ps1"
+
+
+function Confirm-GPGKey {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$KeyID
+    )
+    BEGIN {
+        $gpgBin = (Get-Command -CommandType Application "gpg.exe").Source
+    }
+    PROCESS {
+        $cmdArgs = @(
+            "--list-keys",
+            $KeyID
+        )
+        $output = & $gpgBin $cmdArgs 2>$null
+        if ($LASTEXITCODE) {
+            Throw ("Failed to validate KeyID: {0}" -f $KeyID)
+        }
+    }
+}
+
+function Export-GPGKey {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$KeyID,
+        [parameter(Mandatory=$true)]
+        [string]$OutFile
+    )
+    BEGIN {
+        $gpgBin = (Get-Command -CommandType Application "gpg.exe").Source
+    }
+    PROCESS {
+        Confirm-GPGKey -KeyID $KeyID
+        $cmdArgs = @(
+            "--output",
+            $OutFile,
+            "--export",
+            "--batch",
+            "--yes",
+            $KeyID
+        )
+        & $gpgBin $cmdArgs | Out-Null
+        if ($LASTEXITCODE) {
+            Throw "gpg export failed with exit code: $LASTEXITCODE"
+        }
+    }
+}
+
+function Invoke-GPGClearSign {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$KeyID,
+        [parameter(Mandatory=$false)]
+        [string]$Passphrase,
+        [parameter(Mandatory=$true)]
+        [string]$FilePath,
+        [parameter(Mandatory=$true)]
+        [string]$OutFile
+    )
+    BEGIN {
+        $gpgBin = (Get-Command -CommandType Application "gpg.exe").Source
+    }
+    PROCESS {
+        Confirm-GPGKey -KeyID $KeyID
+        if (!(Test-Path $FilePath)) {
+            Throw "Could not find $FilePath"
+        }
+
+        $parentDir = Split-Path -Parent $OutFile
+        if (!(Test-Path $parentDir)) {
+            mkdir $parentDir | Out-Null
+        }
+        $cmdArgs = @(
+            "--clearsign",
+            "--yes",
+            "--batch",
+            "--default-key",
+            $KeyID,
+            "--output",
+            $OutFile
+        )
+        if (![string]::IsNullOrEmpty($Passphrase)){
+            $cmdArgs += "--passphrase=$Passphrase"
+        }
+        & $gpgBin $cmdArgs $FilePath
+        if ($LASTEXITCODE) {
+            Throw "GPG returned error code $LASTEXITCODE"
+        }
+        if (!(Test-Path $outFile)) {
+            Throw "Failed to generate signed file for $FilePath"
+        }
+        return $outFile
+    }
+}
+
+function New-SimpleStreamsFolderLayout {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$Series,
+        [parameter(Mandatory=$true)]
+        [ValidateSet("i386", "amd64")]
+        [string]$Architecture,
+        [parameter(Mandatory=$true)]
+        [string]$Location
+    )
+    PROCESS {
+        $date = Get-Date -Format yyyyMMdd
+        if (!(Test-Path $Location)) {
+            mkdir $Location | Out-Null
+        }
+        $streamsLocation = "{0}/streams/v1" -f $Location
+        if(!(Test-Path $streamsLocation)) {
+            mkdir $streamsLocation | Out-Null
+        }
+        $imgLocation = "{0}\{1}\{2}\{3}" -f @($Location, $series, $Architecture, $date)
+        $imgLocation = [System.IO.Path]::GetFullPath($imgLocation)
+        if (!(Test-Path $imgLocation)) {
+            mkdir $imgLocation | Out-Null
+        }
+        return $imgLocation
+    }
+}
+
+function Get-Series {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$VersionName
+    )
+    PROCESS {
+        foreach($ver in $MaaSWindowsSeriesMap.GetEnumerator()){
+            if($VersionName.StartsWith($ver.Key)) {
+                return $ver.Value
+            }
+        }
+        Throw "Could not determine series fir version $VersionName"
+    }
+}
+
+function Invoke-GenerateSimplestreams {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$Location
+    )
+    PROCESS{
+        $streams = Join-Path $Location "streams/v1"
+        if(!(Test-Path $streams)) {
+            mkdir $streams
+        }
+        $indexPath = Join-Path $streams "index.json"
+        $productIndexPath = Join-Path $streams "it.cloudbase.maas-release-windows-images-download.json"
+        $indexName = "it.cloudbase.maas:release:windows-images-download"
+        $index = @{
+            "index" = @{
+                $indexName = @{
+                    "datatype" = "image-ids";
+                    "path" =  "streams/v1/it.cloudbase.maas-release-windows-images-download.json"
+                    "updated" = (Get-Date -Format r).ToString();
+                    "format" = "products:1.0";
+                }
+            }
+        }
+        $downloadSource = @{
+            "content_id" = "it.cloudbase.maas:release:windows-images-download";
+            "datatype" = "image-ids";
+            "format" = "products:1.0";
+        }
+        $productNames = @()
+        $products = @{}
+        $folders = Get-ChildItem -Directory -Path $Location
+        foreach($folder in $folders) {
+            if($folder.Name -in $MaaSWindowsSeriesMap.Values){
+                $architectures = Get-ChildItem -Directory -Path $folder.FullName
+                if(!$architectures) {
+                    continue
+                }
+                foreach($arch in $architectures) {
+                    $versions = Get-ChildItem -Directory -Path $arch.FullName
+
+                    if (!$versions) {
+                        continue
+                    }
+                    $productType = "windows-client"
+                    if ($folder.Name -in $WindowsServers) {
+                        $productType = "windows-server"
+                    }
+                    $productName = "it.cloudbase.maas:release:{0}:{1}:{2}" -f @(
+                            $productType, $folder.Name, $arch.Name
+                        )
+                    $productNames += $productName
+                    $products[$productName] = @{
+                        "arch" = $arch.Name.ToLower();
+                        "label" = "release";
+                        "os" = "windows";
+                        "release" = $folder.Name;
+                        "subarch" = "generic";
+                        "subarches" = "generic";
+                        "version" = $folder.Name;
+                        "versions" = @{};
+                    }
+                    foreach($version in $versions) {
+                        $rootDisk = Join-Path $version.FullName "root-dd"
+                        if(!(Test-Path $rootDisk)) {
+                            continue
+                        }
+                        $rootDiskDetails = Get-Item $rootDisk
+                        $diskHash = (Get-FileHash -Path $rootDisk -Algorithm SHA256).Hash.ToLower()
+                        $diskPath = "{0}/{1}/{2}/root-dd" -f @($folder.Name, $arch.Name, $version.Name)
+
+                        $ver = @{
+                            "items" = @{
+                                "root-image.gz" = @{
+                                    "ftype" = "root-dd";
+                                    "path" = $diskPath;
+                                    "sha256" = $diskHash;
+                                    "size" = $rootDiskDetails.Length;
+                                }
+                            }
+                        }
+                        $products[$productName]["versions"][$version.Name] = $ver
+                    }
+                }
+            }
+        }
+        $downloadSource["products"] = $products
+        $index["index"][$indexName]["products"] = $productNames
+        Set-Content -NoNewline -Encoding String `
+                    -Path $productIndexPath `
+                    -Value ((ConvertTo-Json -Compress -Depth 100 $downloadSource) -replace "`r`n","`n")
+        Set-Content -NoNewline -Encoding String `
+                    -Path $indexPath `
+                    -Value ((ConvertTo-Json -Compress -Depth 100 $index) -replace "`r`n","`n")
+    }
+}
+
+function Invoke-SignSimpleStreams {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$Location,
+        [parameter(Mandatory=$true)]
+        [string]$GPGKey,
+        [parameter(Mandatory=$false)]
+        [string]$GPGKeyPassPhrase
+    )
+    PROCESS {
+        $streams = Join-Path $Location "streams/v1"
+        $files = Get-ChildItem -Path $streams -Filter "*.json"
+        $index = $null
+        $indexPath = $null
+        $signMap = @{}
+        if ($files.Length -gt 0) {
+            foreach($i in $files.FullName) {
+                if ($i.EndsWith("index.json")) {
+                    $index = ConvertFrom-Json (Get-Content -Raw $i)
+                    $indexPath = $i
+                    continue
+                }
+                $signedPath = (Get-PathWithoutExtension $i) + ".sjson"
+                $gpgKeychain = (Get-PathWithoutExtension $i) + ".gpg"
+
+                $relativeUnsignedPath = ($i.Replace($Location,"")).TrimStart("\").Replace("\","/")
+                $relativeSignedPath = ($signedPath.Replace($Location,"")).TrimStart("\").Replace("\","/")
+                $signMap[$relativeUnsignedPath] = $relativeSignedPath
+                Invoke-GPGClearSign -KeyID $GPGKey `
+                                    -Passphrase $GPGKeyPassPhrase `
+                                    -FilePath $i `
+                                    -OutFile $signedPath | Out-Null
+                Export-GPGKey -KeyID $GPGKey `
+                              -OutFile $gpgKeychain
+            }
+        }
+        if($index -and $indexPath) {
+            foreach ($i in ($index.index| Get-Member -MemberType "*Property").Name) {
+                $product = $($index.index.$i)
+                if ($signMap[$product.path]) {
+                    $product.Path = $signMap[$product.path]
+                }
+            }
+            $tmpIndex = [System.IO.Path]::GetTempFileName()
+            $signedPath = (Get-PathWithoutExtension $indexPath) + ".sjson"
+            $gpgKeychain = (Get-PathWithoutExtension $indexPath) + ".gpg"
+            Set-Content -NoNewline -Encoding String `
+                        -Path $tmpIndex `
+                        -Value ((ConvertTo-Json -Compress -Depth 100 $index) -replace "`r`n","`n")
+            Invoke-GPGClearSign -KeyID $GPGKey `
+                                -Passphrase $GPGKeyPassPhrase `
+                                -FilePath $tmpIndex `
+                                -OutFile $signedPath | Out-Null
+            Export-GPGKey -KeyID $GPGKey `
+                          -OutFile $gpgKeychain
+        }
+    }
+}
 
 function Execute-Retry {
     Param(
@@ -369,7 +705,8 @@ function Copy-UnattendResources {
             Copy-Item -Recurse $src $dst
         } else {
             throw "The Windows curtin hooks module is not present.
-                Please run git submodule update --init " }
+                Please run git submodule update --init "
+        }
     }
 }
 
@@ -998,12 +1335,30 @@ function New-WindowsOnlineImage {
         }
         Resize-VHDImage $virtualDiskPath
 
+        $image = Get-WimImage -Config $windowsImageConfig
         if ($windowsImageConfig.image_type -eq "MAAS") {
             $rawImagePath = $barePath + ".img"
             Write-Host "Converting VHD to RAW"
             Convert-VirtualDisk $virtualDiskPath $rawImagePath "raw"
             Remove-Item -Force $virtualDiskPath
             Compress-Image $rawImagePath $windowsImageConfig['image_path']
+            $parentDir = Split-Path -Parent $windowsImageConfig['image_path']
+            if($windowsImageConfig.generate_simplestreams) {
+                $arch = $ImageArchitectureMap[$image.ImageArchitecture.ToString()]
+                $series = Get-Series -VersionName $windowsImageConfig.image_name
+                $imgLocation = New-SimpleStreamsFolderLayout -Series $series `
+                                                             -Architecture $arch `
+                                                             -Location $parentDir
+                $dstFileName = Join-Path $imgLocation "root-dd"
+                Write-Host $windowsImageConfig.image_path $dstFileName
+                Move-Item -Force $windowsImageConfig.image_path $dstFileName
+                Invoke-GenerateSimplestreams -Location $parentDir
+                if($windowsImageConfig.sign_simplestreams) {
+                    Invoke-SignSimpleStreams -Location $parentDir `
+                                             -GPGKey $windowsImageConfig.gpg_signing_key `
+                                             -GPGKeyPassPhrase $windowsImageConfig.gpg_passphrase
+                }
+            }
         }
 
         if ($windowsImageConfig.image_type -eq "KVM") {
@@ -1016,12 +1371,28 @@ function New-WindowsOnlineImage {
             Remove-Item -Force $virtualDiskPath
         }
     } catch {
-        if ($windowsImageConfig.image_path -and (Test-Path $windowsImageConfig.image_path)) {
+        if ($windowsImageConfig -and $windowsImageConfig.image_path -and (Test-Path $windowsImageConfig.image_path)) {
             Remove-Item -Force ${windowsImageConfig.image_path} -ErrorAction SilentlyContinue
         }
         Throw
     }
     Write-Host ("Windows online image generation finished at: {0}" -f @((Get-Date)))
+}
+
+function Get-WimImage {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [object]$Config
+    )
+    PROCESS {
+        $image = Get-WimFileImagesInfo -WimFilePath $Config.wim_file_path | `
+            Where-Object { $_.ImageName -eq $Config.image_name }
+        if (!$image) {
+            throw ("Image {0} not found in WIM file {1}" -f @($Config.image_name, $Config.wim_file_path))
+        }
+        return $image
+    }
 }
 
 function New-WindowsCloudImage {
@@ -1051,14 +1422,13 @@ function New-WindowsCloudImage {
     $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
     Set-DotNetCWD
     Is-Administrator
-    $image = Get-WimFileImagesInfo -WimFilePath $windowsImageConfig.wim_file_path | `
-        Where-Object { $_.ImageName -eq $windowsImageConfig.image_name }
-    if (!$image) {
-        throw ("Image {0} not found in WIM file {1}" -f @($windowsImageConfig.image_name, $windowsImageConfig.wim_file_path))
-    }
+    $image = Get-WimImage -Config $windowsImageConfig
+
     Check-DismVersionForImage $image
 
+    Write-Host $windowsImageConfig.image_path
     if (Test-Path $windowsImageConfig.image_path) {
+        Write-Host ("Removing {0}" -f $windowsImageConfig.image_path)
         Remove-Item -Force $windowsImageConfig.image_path
     }
 
