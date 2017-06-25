@@ -20,6 +20,22 @@ Import-Module "$localResourcesDir\ini.psm1"
 
 function Get-AvailableConfigOptions {
     return @(
+        @{"Name" = "generate_simplestreams"; "DefaultValue" = "False"; "GroupName" = "MAAS";
+          "Description" = "Whether or not we should generate a simplestreams folder layout and associated
+                           index files, suitable for usage in MAAS image import"};
+        @{"Name" = "sign_simplestreams"; "DefaultValue" = "False"; "GroupName" = "MAAS";
+          "Description" = "Sign the generated index files using GPG. This is needed if you are to use these
+                           files as an image source in MAAS. You can however disable this if you plan on
+                           manually signing these files on another machine"};
+        @{"Name" = "gpg_signing_key"; "DefaultValue" = ""; "GroupName" = "MAAS";
+          "Description" = "The GPG key to use when signing the files. The machine that this script is running on,
+                           must have gpg installed and available in `$PATH. The specified key  must also be in the GPG db
+                           on the local machine.
+                           run: gpg --list-keys
+                           to find the ID of the key you want to use"};
+        @{"Name" = "gpg_passphrase"; "DefaultValue" = ""; "GroupName" = "MAAS";
+          "Description" = "If the key is protected by a passphrase, use this option allows you to pass the passphrase to
+                           the gpg binary that will attempt to sign the files"};
         @{"Name" = "wim_file_path"; "DefaultValue" = "D:\Sources\install.wim";
           "Description" = "The location of the WIM file from the mounted Windows ISO."},
         @{"Name" = "image_name"; "DefaultValue" = "Windows Server 2012 R2 SERVERSTANDARD";
