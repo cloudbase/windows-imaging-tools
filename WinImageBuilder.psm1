@@ -56,6 +56,14 @@ $VirtIODriverMappings = @{
 
 . "$scriptPath\Interop.ps1"
 
+class PathShouldExistAttribute : System.Management.Automation.ValidateArgumentsAttribute {
+    [void] Validate([object]$arguments, [System.Management.Automation.EngineIntrinsics]$engineIntrinsics) {
+        if (!(Test-Path -Path $arguments)) {
+            throw "Path ``$arguments`` not found."
+        }
+    }
+}
+
 function Execute-Retry {
     Param(
         [parameter(Mandatory=$true)]
@@ -357,11 +365,6 @@ function Copy-UnattendResources {
     Write-Host "Copying: $localResourcesDir $resourcesDir"
     Copy-Item -Recurse "$localResourcesDir\*" $resourcesDir
 
-    if ($imageInstallationType -eq "Server Core") {
-        # Skip the wallpaper on server core
-        Remove-Item -Force "$resourcesDir\Wallpaper.jpg"
-        Remove-Item -Force "$resourcesDir\GPO.zip"
-    }
     if ($InstallMaaSHooks) {
         $src = Join-Path $localResourcesDir "windows-curtin-hooks\curtin"
         if ((Test-Path $src)) {
@@ -913,6 +916,48 @@ function Get-ImageInformation {
     }
 }
 
+function Set-WindowsWallpaper {
+    Param(
+        [Parameter(Mandatory=$true)][PathShouldExist()]
+        [string]$winDrive,
+        [Parameter(Mandatory=$false)]
+        [string]$WallpaperPath
+    )
+
+    if (!$WallpaperPath -or !(@('.jpg', '.jpeg') -contains `
+            (Get-Item $windowsImageConfig.wallpaper_path -ErrorAction SilentlyContinue).Extension)) {
+        $WallpaperPath = Join-Path $localResourcesDir "Wallpaper.jpg"
+    }
+    if (!(Test-Path $WallpaperPath)) {
+        throw "Walpaper path ``$WallpaperPath`` does not exist."
+    }
+    $wallpaperDestinationFolder = Join-Path $winDrive "\Windows\web\Wallpaper\Cloud"
+    if (!(Test-Path $wallpaperDestinationFolder)) {
+       New-Item -Type Directory $wallpaperDestinationFolder | Out-Null
+    }
+    Copy-Item -Force $WallpaperPath "$wallpaperDestinationFolder\Wallpaper.jpg"
+    Write-Host "Wallpaper copied to the image."
+
+    $wallpaperGPOPath = Join-Path $localResourcesDir "GPO"
+    $windowsLocalGPOPath = Join-Path $winDrive "\Windows\System32\GroupPolicy"
+    if (!(Test-Path $windowsLocalGPOPath)) {
+       New-Item -Type Directory $windowsLocalGPOPath | Out-Null
+    }
+    Copy-Item -Recurse -Force "$wallpaperGPOPath\*" "$windowsLocalGPOPath\"
+    Write-Host "Wallpaper GPO copied to the image."
+
+    # Note(avladu) if the image already has been booted and has a wallpaper, the
+    # GPO will not be applied for the users who have already logged in.
+    # The wallpaper can still be changed by replacing the cached one.
+    $cachedWallpaperPartPath = "\Users\Administrator\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper*"
+    $cachedWallpaperPath = Join-Path -ErrorAction SilentlyContinue $winDrive $cachedWallpaperPartPath
+    if (Test-Path $cachedWallpaperPath) {
+        Remove-Item -Recurse -Force ((Get-Item $cachedWallpaperPartPath).DirectoryName + "\*")
+        Copy-Item -Force $WallpaperPath (Get-Item $cachedWallpaperPath).FullName
+        Write-Host "Cached wallpaper for user Administrator has been replaced."
+    }
+}
+
 function New-WindowsOnlineImage {
     <#
     .SYNOPSIS
@@ -1016,6 +1061,7 @@ function New-WindowsOnlineImage {
             Remove-Item -Force $virtualDiskPath
         }
     } catch {
+        Write-host $_
         if ($windowsImageConfig.image_path -and (Test-Path $windowsImageConfig.image_path)) {
             Remove-Item -Force ${windowsImageConfig.image_path} -ErrorAction SilentlyContinue
         }
@@ -1086,6 +1132,7 @@ function New-WindowsCloudImage {
         Generate-UnattendXml @xmlParams
         Copy-UnattendResources $resourcesDir $image.ImageInstallationType $windowsImageConfig.install_maas_hooks
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
+        Set-WindowsWallpaper $winImagePath $windowsImageConfig.wallpaper_path
         Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release
         Apply-Image $winImagePath $windowsImageConfig.wim_file_path $image.ImageIndex
         Create-BCDBootConfig $drives[0] $drives[1] $windowsImageConfig.disk_layout $image
@@ -1197,6 +1244,7 @@ function New-WindowsFromGoldenImage {
         $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
         Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $windowsImageConfig.image_name
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
+        Set-WindowsWallpaper $driveLetterGold $windowsImageConfig.wallpaper_path
         Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release
         Dismount-VHD -Path $windowsImageConfig.gold_image_path
 
