@@ -5,6 +5,11 @@ $moduleHome = Split-Path -Parent $here
 $fakeConfigPath = Join-Path $here "fake-config.ini"
 $modulePath = Join-Path $moduleHome "${moduleName}.psm1"
 
+class PathShouldExist : System.Management.Automation.ValidateArgumentsAttribute {
+    [void] Validate([object]$arguments, [System.Management.Automation.EngineIntrinsics]$engineIntrinsics) {
+    }
+}
+
 if (Get-Module $moduleName -ErrorAction SilentlyContinue) {
     Remove-Module $moduleName
 }
@@ -97,6 +102,7 @@ Describe "Test New-WindowsCloudImage" {
     Mock Apply-Image -Verifiable -ModuleName $moduleName { return 0 }
     Mock Create-BCDBootConfig -Verifiable -ModuleName $moduleName { return 0 }
     Mock Check-EnablePowerShellInImage -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Set-WindowsWallpaper -Verifiable -ModuleName $moduleName { return 0 }
     Mock Enable-FeaturesInImage -Verifiable -ModuleName $moduleName { return 0 }
 
     It "Should create a windows image" {
