@@ -182,15 +182,50 @@ function Disable-Swap {
     }
 }
 
-try
-{
+function License-Windows {
+    Param(
+         [parameter(Mandatory=$true)]
+         [string]$ProductKey
+    )
+    $licenseWindows = $false
+    $slmgrOutput = cscript.exe "$env:windir\system32\slmgr.vbs" /dli
+    if ($lastExitCode) {
+        throw "Windows license details could not be retrieved."
+    }
+    if ($slmgrOutput -like "*License Status: Licensed*") {
+       $partialKey = ($slmgrOutput -like "Partial Product Key*").Replace("Partial Product Key:","").Trim()
+       Write-Host "Windows is already licensed with partial key: $partialKey"
+       if (!(($ProductKey -split "-") -contains $partialKey)) {
+           $licenseWindows = $true
+       }
+    } else {
+        $licenseWindows = $true
+    }
+    if ($licenseWindows) {
+       $licensingOutput = cscript.exe "$env:windir\system32\slmgr.vbs" /ipk $ProductKey
+       if ($lastExitCode) {
+           throw $licensingOutput
+       } else {
+           Write-Host "Windows has been succesfully licensed."
+       }
+    } else {
+       Write-Host "Windows will not be licensed."
+    }
+}
+
+try {
     Import-Module "$resourcesDir\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "install_updates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "persist_drivers_install" -Default $true -AsBoolean
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
+    $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "product_key"
     $serialPortName = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "serial_logging_port"
+
+    if ($productKey) {
+        License-Windows $productKey
+    }
 
     if ($installUpdates) {
         Install-WindowsUpdates
