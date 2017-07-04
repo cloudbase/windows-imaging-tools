@@ -791,9 +791,12 @@ function Resize-VHDImage {
                 Resize-Partition -DriveLetter $Drive -Size $sizeIncreased -ErrorAction "Stop"
             }
         }
-    }
-    finally
-    {
+        try {
+            Run-SecureDelete $Drive
+        } catch {
+           Write-Host $_
+        }
+    } finally {
         Dismount-VHD -Path $VirtualDiskPath
     }
 
@@ -848,6 +851,28 @@ function Wait-ForVMShutdown {
         Start-Sleep 1
         $isOff = (Get-VM -Name $Name).State -eq "Off"
     }
+}
+
+function Run-SecureDelete {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$DriveLetter,
+        [PathShouldExistAttribute()]
+        [string]$ddPath="${env:ProgramFiles}\Git\usr\bin\dd.exe"
+     )
+   $sdeleteTempFile = "${DriveLetter}:\sdelete-cache"
+   if (Test-Path $sdeleteTempFile) {
+       Remove-Item $sdeleteTempFile -Force
+   }
+   $cmd = "if=/dev/zero of='${sdeleteTempFile}'"
+   $p = Start-Process -FilePath $ddPath -ArgumentList $cmd -NoNewWindow -PassThru -Wait
+   $exitCode= $p.ExitCode
+   if (($exitCode -eq 1) -and (Test-Path $sdeleteTempFile)) {
+       Remove-Item $sdeleteTempFile -Force
+       Write-Host "Executed secure delete successfully"
+   } else {
+       throw "Failed to run secure delete using ``dd.exe $cmd`` with $exitCode"
+   }
 }
 
 function Run-Sysprep {
@@ -1287,4 +1312,4 @@ function New-WindowsFromGoldenImage {
 }
 
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
-    New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage
+    New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage, Run-SecureDelete
