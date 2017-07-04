@@ -952,8 +952,9 @@ function Set-WindowsWallpaper {
     $cachedWallpaperPartPath = "\Users\Administrator\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper*"
     $cachedWallpaperPath = Join-Path -ErrorAction SilentlyContinue $winDrive $cachedWallpaperPartPath
     if (Test-Path $cachedWallpaperPath) {
-        Remove-Item -Recurse -Force ((Get-Item $cachedWallpaperPartPath).DirectoryName + "\*")
-        Copy-Item -Force $WallpaperPath (Get-Item $cachedWallpaperPath).FullName
+        $wallpaperPathFullName = (Get-Item $cachedWallpaperPath).FullName
+        Remove-Item -Recurse -Force ((Get-Item $cachedWallpaperPath).DirectoryName + "\*")
+        Copy-Item -Force $WallpaperPath $wallpaperPathFullName
         Write-Host "Cached wallpaper for user Administrator has been replaced."
     }
 }
