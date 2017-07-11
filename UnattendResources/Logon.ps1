@@ -220,8 +220,8 @@ try {
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
-    $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "product_key"
-    $serialPortName = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "serial_logging_port"
+    $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "product_key" -ErrorAction SilentlyContinue
+    $serialPortName = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "serial_logging_port" -ErrorAction SilentlyContinue
 
     if ($productKey) {
         License-Windows $productKey
