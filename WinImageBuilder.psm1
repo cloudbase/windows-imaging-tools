@@ -338,11 +338,19 @@ function Convert-VirtualDisk {
         [Parameter(Mandatory=$true)]
         [string]$outPath,
         [Parameter(Mandatory=$true)]
-        [string]$format
+        [string]$format,
+        [Parameter(Mandatory=$false)]
+        [boolean]$CompressQcow2
     )
+
+    $compressParam = ""
+    if ($format -eq "qcow2" -and $CompressQcow2) {
+        Write-Host "Qcow2 compression has been enabled."
+        $compressParam = "-c"
+    }
     Write-Host "Converting virtual disk image from $vhdPath to $outPath..."
     Execute-Retry {
-        & "$scriptPath\bin\qemu-img.exe" convert -O $format.ToLower() $vhdPath $outPath
+        & "$scriptPath\bin\qemu-img.exe" convert $compressParam -O $format.ToLower() $vhdPath $outPath
         if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
     }
 }
@@ -1054,8 +1062,8 @@ function New-WindowsOnlineImage {
 
         if ($windowsImageConfig.image_type -eq "KVM") {
             $qcow2ImagePath = $barePath + ".qcow2"
-            Write-Host "Converting VHD to QCow2"
-            Convert-VirtualDisk $virtualDiskPath $qcow2ImagePath "qcow2"
+            Write-Host "Converting VHD to Qcow2"
+            Convert-VirtualDisk $virtualDiskPath $qcow2ImagePath "qcow2" $windowsImageConfig.compress_qcow2
             if ($windowsImageConfig.zip_password) {
                 New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password -VirtualDiskPath $qcow2ImagePath
             }

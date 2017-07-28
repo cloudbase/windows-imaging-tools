@@ -66,6 +66,7 @@ Set-IniFileValue -Path $fCfgPath -Section "drivers" -Key "drivers_path" -Value $
 Set-IniFileValue -Path $fCfgPath -Section "updates" -Key "install_updates" -Value "True"
 Set-IniFileValue -Path $fCfgPath -Section "updates" -Key "purge_updates" -Value "True"
 Set-IniFileValue -Path $fCfgPath -Section "sysprep" -Key "disable_swap" -Value "True"
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "compress_qcow2" -Value "False"
 
 # This scripts generates a raw tar.gz-ed image file, that can be used with MAAS
 New-WindowsOnlineImage -ConfigFilePath $configFilePath
