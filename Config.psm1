@@ -111,6 +111,10 @@ function Get-AvailableConfigOptions {
         @{"Name" = "wallpaper_path";
           "Description" = "If set, it will replace the Cloudbase Solutions wallpaper to the one specified.
 	                   The wallpaper needs to be a valid .jpg/.jpeg image."}
+        @{"Name" = "compress_qcow2"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true and the target image format is QCOW2, the image conversion will
+                           use qemu-img built-in compression. The compressed qcow2 image will be smaller, but the conversion
+                           will take longer time."}
     )
 }
 
