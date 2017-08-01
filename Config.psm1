@@ -58,6 +58,23 @@ function Get-AvailableConfigOptions {
         @{"Name" = "gold_image_path";
           "Description" = "This is the full path of the already generated golden image.
                            It should be a valid VHDX path."},
+        @{"Name" = "custom_resources_path";
+          "Description" = "This is the full path of a folder with custom resources which will be used by
+                           the custom scripts.
+                           The resources found at this path will be copied recursively to the image
+                           UnattendResources\CustomResources folder."},
+        @{"Name" = "custom_scripts_path";
+          "Description" = "This is the full path of the folder which can contain a set of PS scripts,
+                           that will be executed during the online generation part on the VM. The PowerShell scripts,
+                           if existent, will be started by Logon.ps1 script, at different momments during image generation.
+                           The purpose of these scripts is to offer to the user a fully
+                           customizable way of defining aditional logic for tweaking the final image.
+                           The scripts files can have the following names: RunBeforeWindowsUpdates.ps1,
+                           RunAfterWindowsUpdates.ps1, RunBeforeCloudbaseInitInstall.ps1, RunAfterCloudbaseInitInstall.ps1,
+                           RunBeforeSysprep.ps1, RunAfterSysprep.ps1.
+                           The script names contain the information on when the script will be executed.
+                           One can define only some of the hook scripts and it is not mandatory to define all of them.
+                           If a script does not exist, it will not be executed."},
         @{"Name" = "administrator_password"; "GroupName" = "vm"; "DefaultValue" = "Pa`$`$w0rd";
           "Description" = "This will be the Administrator user's, so that AutoLogin can be performed on the instance,
                            in order to install the required products,
