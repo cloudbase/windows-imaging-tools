@@ -356,6 +356,32 @@ function Copy-UnattendResources {
     }
 }
 
+function Copy-VMwareTools {
+  Param(
+      [Parameter(Mandatory=$true)]
+      [string]$resourcesDir,
+      [Parameter(Mandatory=$true)]
+      [string]$imageInstallationType,
+      [Parameter(Mandatory=$true)]
+      [boolean]$VMwareToolsPath
+  )
+  # Workaround to recognize the $resourcesDir drive. This seems a PowerShell bug
+  Get-PSDrive | Out-Null
+
+  if (!(Test-Path "$resourcesDir")) {
+      $d = New-Item -Type Directory $resourcesDir
+  }
+
+  if((Test-Path $VMwareToolsPath)){
+    $dst = Join-Path $resourcesDir "VMware-tools.exe"
+    Copy-Item $VMwareToolsPath $dst
+  } else {
+      throw "The VMware Tools is not present.
+      Please retrive VMware Tools from https://packages.vmware.com/tools/esx/index.html"
+  }
+
+}
+
 function Download-CloudbaseInit {
     Param(
         [Parameter(Mandatory=$true)]
@@ -555,9 +581,9 @@ function Add-VirtIODriversFromISO {
     <#
     .SYNOPSIS
      This function adds VirtIO drivers from a given ISO path to a mounted Windows VHD image.
-     The VirtIO ISO contains all the synthetic drivers for the KVM hypervisor. 
+     The VirtIO ISO contains all the synthetic drivers for the KVM hypervisor.
     .DESCRIPTION
-     This function takes the VirtIO drivers from a specified ISO file and installs them into the 
+     This function takes the VirtIO drivers from a specified ISO file and installs them into the
      given VHD, based on the characteristics given by the image parameter (which contains the
      image version, image architecture and installation type).
      More info can be found here: https://fedoraproject.org/wiki/Windows_Virtio_Drivers
@@ -926,11 +952,11 @@ function New-MaaSImage {
      Used to specify the virtual switch the VM will be using to connect to the internet.
      If none is specified, one will be created.
     .PARAMETER Force
-     It will force the image generation when $RunSysprep is $False or the selected $SwitchName 
+     It will force the image generation when $RunSysprep is $False or the selected $SwitchName
      is not an external one. Use this parameter with caution because it can easily generate
      unstable images.
     .PARAMETER PurgeUpdates
-     If set to true, will run DISM with /resetbase option. This will reduce the size of 
+     If set to true, will run DISM with /resetbase option. This will reduce the size of
      WinSXS folder, but after that Windows updates cannot be uninstalled.
     .PARAMETER DisableSwap
      DisableSwap option will disable the swap when the image is generated and will add a setting
@@ -1011,7 +1037,7 @@ function New-WindowsOnlineImage {
      This command requires Hyper-V to be enabled, a VMSwitch to be configured for external
      network connectivity if the updates are to be installed, which is highly recommended.
      This command uses internally the New-WindowsCloudImage to generate the base image and
-     start a Hyper-V instance using the base image. After the Hyper-V instance shuts down, 
+     start a Hyper-V instance using the base image. After the Hyper-V instance shuts down,
      the resulting VHDX is shrunk to a minimum size and converted to the required format.
     .PARAMETER WimFilePath
      The location of the WIM file from the Windows ISO.
@@ -1028,6 +1054,8 @@ function New-WindowsOnlineImage {
      The product key for the OS selected.
     .PARAMETER VirtIOISOPath
      The path to the ISO file containing the VirtIO drivers.
+    .PARAMETER VMwareToolsPath
+     The path to VMwareTools Install exe file.
     .PARAMETER InstallUpdates
      If set to true, the latest updates will be downloaded and installed.
     .PARAMETER AdministratorPassword
@@ -1051,13 +1079,13 @@ function New-WindowsOnlineImage {
      Used to specify the virtual switch the VM will be using to connect to the internet.
      If none is specified, one will be created.
     .PARAMETER Force
-     It will force the image generation when $RunSysprep is $False or the selected $SwitchName 
+     It will force the image generation when $RunSysprep is $False or the selected $SwitchName
      is not an external one. Use this parameter with caution because it can easily generate
      unstable images.
     .PARAMETER Type
      This parameter allows to choose between MAAS, KVM and Hyper-V specific images.
     .PARAMETER PurgeUpdates
-     If set to true, will run DISM with /resetbase option. This will reduce the size of 
+     If set to true, will run DISM with /resetbase option. This will reduce the size of
      WinSXS folder, but after that Windows updates cannot be uninstalled.
     .PARAMETER DisableSwap
      DisableSwap option will disable the swap when the image is generated and will add a setting
@@ -1088,6 +1116,8 @@ function New-WindowsOnlineImage {
         [parameter(Mandatory=$false)]
         [string]$VirtIOISOPath,
         [parameter(Mandatory=$false)]
+        [string]$VMwareToolsPath,
+        [parameter(Mandatory=$false)]
         [switch]$InstallUpdates,
         [parameter(Mandatory=$false)]
         [string]$AdministratorPassword = "Pa`$`$w0rd",
@@ -1106,7 +1136,7 @@ function New-WindowsOnlineImage {
         [string]$SwitchName,
         [parameter(Mandatory=$false)]
         [switch]$Force=$false,
-        [ValidateSet("MAAS", "KVM", "HYPER-V", ignorecase=$false)]
+        [ValidateSet("MAAS", "KVM", "HYPER-V", "VMWARE" ignorecase=$false)]
         [string]$Type = "MAAS",
         [parameter(Mandatory=$false)]
         [switch]$PurgeUpdates,
@@ -1164,11 +1194,18 @@ function New-WindowsOnlineImage {
             if ($Type -eq "KVM") {
                 $PersistDriverInstall = $false
             }
+            if ($Type -eq "VMWARE") {
+                $InstallVMwareTools = $true
+                if (-Not $VMwareToolsPath){
+                  throw "VMwareToolsPath hasn't been set. Please specify VMwareToolsPath."
+                }
+            }
             New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
                 -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
-                -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
+                -VirtIOISOPath $VirtIOISOPath -VMwareToolsPath $VMwareToolsPath -InstallUpdates:$InstallUpdates `
                 -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-                -InstallMaaSHooks:$InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
+                -InstallMaaSHooks:$InstallMaaSHooks -InstallVMwareTools:$InstallVMwareTools `
+                -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
                 -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap `
                 -ZipPassword $ZipPassword -BetaRelease:$BetaRelease
 
@@ -1204,6 +1241,17 @@ function New-WindowsOnlineImage {
                 }
                 Remove-Item -Force $VirtualDiskPath
             }
+
+            if ($Type -eq "VMWARE") {
+                $Qcow2ImagePath = $barePath + ".vmdk"
+                Write-Host "Converting VHD to vmdk"
+                Convert-VirtualDisk $VirtualDiskPath $Qcow2ImagePath "vmdk"
+                if ($ZipPassword) {
+                    New-ProtectedZip -ZipPassword $ZipPassword -VirtualDiskPath $Qcow2ImagePath
+                }
+                Remove-Item -Force $VirtualDiskPath
+            }
+
         } catch {
             Remove-Item -Force $WindowsImagePath* -ErrorAction SilentlyContinue
             Throw
@@ -1224,7 +1272,7 @@ function New-WindowsCloudImage {
      from the WIM file and based on the parameters given, it will generate an image.
      This function does not require Hyper-V to be enabled, but the generated image
      is not ready to be deployed, as it needs to be started manually on another hypervisor.
-     The image is ready to be used when it shuts down. 
+     The image is ready to be used when it shuts down.
     .PARAMETER WimFilePath
      The location of the WIM file from the Windows ISO.
     .PARAMETER ImageName
@@ -1259,10 +1307,14 @@ function New-WindowsCloudImage {
      instance is prone to BSOD.
     .PARAMETER InstallMaaSHooks
      If set to true, MaaSHooks will be installed.
+    .PARAMETER InstallVMwareTools
+     If set to true, VMware Tools will be installed.
+    .PARAMETER VMwareToolsPath
+     The path to VMwareTools Install exe file.
     .PARAMETER VirtIOBasePath
      The drive letter of the mounted VirtIO drivers ISO file.
     .PARAMETER PurgeUpdates
-     If set to true, will run DISM with /resetbase option. This will reduce the size of 
+     If set to true, will run DISM with /resetbase option. This will reduce the size of
      WinSXS folder, but after that Windows updates cannot be uninstalled.
     .PARAMETER DisableSwap
      DisableSwap option will disable the swap when the image is generated and will add a setting
@@ -1310,6 +1362,10 @@ function New-WindowsCloudImage {
         [parameter(Mandatory=$false)]
         [switch]$InstallMaaSHooks,
         [parameter(Mandatory=$false)]
+        [switch]$InstallVMwareTools,
+        [parameter(Mandatory=$false)]
+        [switch]$VMwareToolsPath,
+        [parameter(Mandatory=$false)]
         [string]$VirtIOBasePath,
         [parameter(Mandatory=$false)]
         [switch]$PurgeUpdates,
@@ -1355,6 +1411,7 @@ function New-WindowsCloudImage {
                 "PersistDriverInstall"=$PersistDriverInstall;
                 "PurgeUpdates"=$PurgeUpdates;
                 "DisableSwap"=$DisableSwap;
+                "InstallVMwareTools"=$InstallVMwareTools;
             }
 
             $xmlParams = @{'InUnattendXmlPath' = $UnattendXmlPath;
@@ -1385,6 +1442,9 @@ function New-WindowsCloudImage {
             if ($ExtraFeatures) {
                 Enable-FeaturesInImage $winImagePath $ExtraFeatures
             }
+            if ($InstallVMwareTools) {
+                Copy-VMwareTools $resourcesDir $image.ImageInstallationType $VMwareToolsPath
+            }
         } finally {
             if (Test-Path $VHDPath) {
                 Detach-VirtualDisk $VHDPath
@@ -1404,4 +1464,3 @@ function New-WindowsCloudImage {
 
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
     New-WindowsOnlineImage, Add-VirtIODriversFromISO
-
