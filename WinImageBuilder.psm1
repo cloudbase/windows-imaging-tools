@@ -581,9 +581,9 @@ function Add-VirtIODriversFromISO {
     <#
     .SYNOPSIS
      This function adds VirtIO drivers from a given ISO path to a mounted Windows VHD image.
-     The VirtIO ISO contains all the synthetic drivers for the KVM hypervisor. 
+     The VirtIO ISO contains all the synthetic drivers for the KVM hypervisor.
     .DESCRIPTION
-     This function takes the VirtIO drivers from a specified ISO file and installs them into the 
+     This function takes the VirtIO drivers from a specified ISO file and installs them into the
      given VHD, based on the characteristics given by the image parameter (which contains the
      image version, image architecture and installation type).
      More info can be found here: https://fedoraproject.org/wiki/Windows_Virtio_Drivers
@@ -952,11 +952,11 @@ function New-MaaSImage {
      Used to specify the virtual switch the VM will be using to connect to the internet.
      If none is specified, one will be created.
     .PARAMETER Force
-     It will force the image generation when $RunSysprep is $False or the selected $SwitchName 
+     It will force the image generation when $RunSysprep is $False or the selected $SwitchName
      is not an external one. Use this parameter with caution because it can easily generate
      unstable images.
     .PARAMETER PurgeUpdates
-     If set to true, will run DISM with /resetbase option. This will reduce the size of 
+     If set to true, will run DISM with /resetbase option. This will reduce the size of
      WinSXS folder, but after that Windows updates cannot be uninstalled.
     .PARAMETER DisableSwap
      DisableSwap option will disable the swap when the image is generated and will add a setting
@@ -1037,7 +1037,7 @@ function New-WindowsOnlineImage {
      This command requires Hyper-V to be enabled, a VMSwitch to be configured for external
      network connectivity if the updates are to be installed, which is highly recommended.
      This command uses internally the New-WindowsCloudImage to generate the base image and
-     start a Hyper-V instance using the base image. After the Hyper-V instance shuts down, 
+     start a Hyper-V instance using the base image. After the Hyper-V instance shuts down,
      the resulting VHDX is shrunk to a minimum size and converted to the required format.
     .PARAMETER WimFilePath
      The location of the WIM file from the Windows ISO.
@@ -1079,13 +1079,13 @@ function New-WindowsOnlineImage {
      Used to specify the virtual switch the VM will be using to connect to the internet.
      If none is specified, one will be created.
     .PARAMETER Force
-     It will force the image generation when $RunSysprep is $False or the selected $SwitchName 
+     It will force the image generation when $RunSysprep is $False or the selected $SwitchName
      is not an external one. Use this parameter with caution because it can easily generate
      unstable images.
     .PARAMETER Type
      This parameter allows to choose between MAAS, KVM and Hyper-V specific images.
     .PARAMETER PurgeUpdates
-     If set to true, will run DISM with /resetbase option. This will reduce the size of 
+     If set to true, will run DISM with /resetbase option. This will reduce the size of
      WinSXS folder, but after that Windows updates cannot be uninstalled.
     .PARAMETER DisableSwap
      DisableSwap option will disable the swap when the image is generated and will add a setting
@@ -1272,7 +1272,7 @@ function New-WindowsCloudImage {
      from the WIM file and based on the parameters given, it will generate an image.
      This function does not require Hyper-V to be enabled, but the generated image
      is not ready to be deployed, as it needs to be started manually on another hypervisor.
-     The image is ready to be used when it shuts down. 
+     The image is ready to be used when it shuts down.
     .PARAMETER WimFilePath
      The location of the WIM file from the Windows ISO.
     .PARAMETER ImageName
@@ -1314,7 +1314,7 @@ function New-WindowsCloudImage {
     .PARAMETER VirtIOBasePath
      The drive letter of the mounted VirtIO drivers ISO file.
     .PARAMETER PurgeUpdates
-     If set to true, will run DISM with /resetbase option. This will reduce the size of 
+     If set to true, will run DISM with /resetbase option. This will reduce the size of
      WinSXS folder, but after that Windows updates cannot be uninstalled.
     .PARAMETER DisableSwap
      DisableSwap option will disable the swap when the image is generated and will add a setting
