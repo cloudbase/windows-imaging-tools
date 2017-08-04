@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 $resourcesDir = "$ENV:SystemDrive\UnattendResources"
+$configIniPath = "$resourcesDir\config.ini"
 
 function getHypervisor() {
     $hypervisor = & "$resourcesDir\checkhypervisor.exe"
@@ -11,20 +12,25 @@ function getHypervisor() {
     }
 }
 
+function installVMwareTools() {
+    $Host.UI.RawUI.WindowTitle = "Installing VMware tools..."
+    $vmwareToolsInstallArgs = "/s /v /qn REBOOT=R /l $ENV:Temp\vmware_tools_install.log"
+    $vmwareToolsPath = Join-Path $resourcesDir "VMware-tools.exe"
+    Start-Process -FilePath $vmwareToolsPath -ArgumentList $vmwareToolsInstallArgs -wait
+    if (!$?) { throw "VMware tools setup failed" }
+}
+
 try
 {
     $hypervisorStr = getHypervisor
     Write-Host "Hypervisor: $hypervisorStr"
     # TODO: Add XenServer / XCP
+
     switch($hypervisorStr)
     {
         "VMwareVMware"
         {
-            # Note: this command will generate a reboot.
-            # "/qn REBOOT=ReallySuppress" does not seem to work properly
-            $Host.UI.RawUI.WindowTitle = "Installing VMware tools..."
-            E:\setup64.exe `/s `/v `/qn `/l `"$ENV:Temp\vmware_tools_install.log`"
-            if (!$?) { throw "VMware tools setup failed" }
+            installVMwareTools
         }
         "KVMKVMKVM"
         {
@@ -32,7 +38,10 @@ try
         }
         "Microsoft Hv"
         {
-            # Nothing to do
+          $installVMwareTools_flag = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallVMwareTools" -Default $false -AsBoolean
+          if ($installVMwareTools_flag) {
+            installVMwareTools
+          }
         }
     }
 }

@@ -356,6 +356,32 @@ function Copy-UnattendResources {
     }
 }
 
+function Copy-VMwareTools {
+  Param(
+      [Parameter(Mandatory=$true)]
+      [string]$resourcesDir,
+      [Parameter(Mandatory=$true)]
+      [string]$imageInstallationType,
+      [Parameter(Mandatory=$true)]
+      [boolean]$VMwareToolsPath
+  )
+  # Workaround to recognize the $resourcesDir drive. This seems a PowerShell bug
+  Get-PSDrive | Out-Null
+
+  if (!(Test-Path "$resourcesDir")) {
+      $d = New-Item -Type Directory $resourcesDir
+  }
+
+  if((Test-Path $VMwareToolsPath)){
+    $dst = Join-Path $resourcesDir "VMware-tools.exe"
+    Copy-Item $VMwareToolsPath $dst
+  } else {
+      throw "The VMware Tools is not present.
+      Please retrive VMware Tools from https://packages.vmware.com/tools/esx/index.html"
+  }
+
+}
+
 function Download-CloudbaseInit {
     Param(
         [Parameter(Mandatory=$true)]
@@ -1028,6 +1054,8 @@ function New-WindowsOnlineImage {
      The product key for the OS selected.
     .PARAMETER VirtIOISOPath
      The path to the ISO file containing the VirtIO drivers.
+    .PARAMETER VMwareToolsPath
+     The path to VMwareTools Install exe file.
     .PARAMETER InstallUpdates
      If set to true, the latest updates will be downloaded and installed.
     .PARAMETER AdministratorPassword
@@ -1088,6 +1116,8 @@ function New-WindowsOnlineImage {
         [parameter(Mandatory=$false)]
         [string]$VirtIOISOPath,
         [parameter(Mandatory=$false)]
+        [string]$VMwareToolsPath,
+        [parameter(Mandatory=$false)]
         [switch]$InstallUpdates,
         [parameter(Mandatory=$false)]
         [string]$AdministratorPassword = "Pa`$`$w0rd",
@@ -1106,7 +1136,7 @@ function New-WindowsOnlineImage {
         [string]$SwitchName,
         [parameter(Mandatory=$false)]
         [switch]$Force=$false,
-        [ValidateSet("MAAS", "KVM", "HYPER-V", ignorecase=$false)]
+        [ValidateSet("MAAS", "KVM", "HYPER-V", "VMWARE" ignorecase=$false)]
         [string]$Type = "MAAS",
         [parameter(Mandatory=$false)]
         [switch]$PurgeUpdates,
@@ -1164,11 +1194,18 @@ function New-WindowsOnlineImage {
             if ($Type -eq "KVM") {
                 $PersistDriverInstall = $false
             }
+            if ($Type -eq "VMWARE") {
+                $InstallVMwareTools = $true
+                if (-Not $VMwareToolsPath){
+                  throw "VMwareToolsPath hasn't been set. Please specify VMwareToolsPath."
+                }
+            }
             New-WindowsCloudImage -WimFilePath $WimFilePath -ImageName $ImageName `
                 -VirtualDiskPath $VirtualDiskPath -SizeBytes $SizeBytes -ProductKey $ProductKey `
-                -VirtIOISOPath $VirtIOISOPath -InstallUpdates:$InstallUpdates `
+                -VirtIOISOPath $VirtIOISOPath -VMwareToolsPath $VMwareToolsPath -InstallUpdates:$InstallUpdates `
                 -AdministratorPassword $AdministratorPassword -PersistDriverInstall:$PersistDriverInstall `
-                -InstallMaaSHooks:$InstallMaaSHooks -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
+                -InstallMaaSHooks:$InstallMaaSHooks -InstallVMwareTools:$InstallVMwareTools `
+                -ExtraFeatures $ExtraFeatures -ExtraDriversPath $ExtraDriversPath `
                 -DiskLayout $DiskLayout -PurgeUpdates:$PurgeUpdates -DisableSwap:$DisableSwap `
                 -ZipPassword $ZipPassword -BetaRelease:$BetaRelease
 
@@ -1204,6 +1241,17 @@ function New-WindowsOnlineImage {
                 }
                 Remove-Item -Force $VirtualDiskPath
             }
+
+            if ($Type -eq "VMWARE") {
+                $Qcow2ImagePath = $barePath + ".vmdk"
+                Write-Host "Converting VHD to vmdk"
+                Convert-VirtualDisk $VirtualDiskPath $Qcow2ImagePath "vmdk"
+                if ($ZipPassword) {
+                    New-ProtectedZip -ZipPassword $ZipPassword -VirtualDiskPath $Qcow2ImagePath
+                }
+                Remove-Item -Force $VirtualDiskPath
+            }
+
         } catch {
             Remove-Item -Force $WindowsImagePath* -ErrorAction SilentlyContinue
             Throw
@@ -1259,6 +1307,10 @@ function New-WindowsCloudImage {
      instance is prone to BSOD.
     .PARAMETER InstallMaaSHooks
      If set to true, MaaSHooks will be installed.
+    .PARAMETER InstallVMwareTools
+     If set to true, VMware Tools will be installed.
+    .PARAMETER VMwareToolsPath
+     The path to VMwareTools Install exe file.
     .PARAMETER VirtIOBasePath
      The drive letter of the mounted VirtIO drivers ISO file.
     .PARAMETER PurgeUpdates
@@ -1310,6 +1362,10 @@ function New-WindowsCloudImage {
         [parameter(Mandatory=$false)]
         [switch]$InstallMaaSHooks,
         [parameter(Mandatory=$false)]
+        [switch]$InstallVMwareTools,
+        [parameter(Mandatory=$false)]
+        [switch]$VMwareToolsPath,
+        [parameter(Mandatory=$false)]
         [string]$VirtIOBasePath,
         [parameter(Mandatory=$false)]
         [switch]$PurgeUpdates,
@@ -1355,6 +1411,7 @@ function New-WindowsCloudImage {
                 "PersistDriverInstall"=$PersistDriverInstall;
                 "PurgeUpdates"=$PurgeUpdates;
                 "DisableSwap"=$DisableSwap;
+                "InstallVMwareTools"=$InstallVMwareTools;
             }
 
             $xmlParams = @{'InUnattendXmlPath' = $UnattendXmlPath;
@@ -1385,6 +1442,9 @@ function New-WindowsCloudImage {
             if ($ExtraFeatures) {
                 Enable-FeaturesInImage $winImagePath $ExtraFeatures
             }
+            if ($InstallVMwareTools) {
+                Copy-VMwareTools $resourcesDir $image.ImageInstallationType $VMwareToolsPath
+            }
         } finally {
             if (Test-Path $VHDPath) {
                 Detach-VirtualDisk $VHDPath
@@ -1404,4 +1464,3 @@ function New-WindowsCloudImage {
 
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
     New-WindowsOnlineImage, Add-VirtIODriversFromISO
-
