@@ -363,8 +363,9 @@ function Copy-VMwareTools {
       [Parameter(Mandatory=$true)]
       [string]$imageInstallationType,
       [Parameter(Mandatory=$true)]
-      [boolean]$VMwareToolsPath
+      [string]$VMwareToolsPath
   )
+  Write-Host "Copying VMwareTools..."
   # Workaround to recognize the $resourcesDir drive. This seems a PowerShell bug
   Get-PSDrive | Out-Null
 
@@ -1364,7 +1365,7 @@ function New-WindowsCloudImage {
         [parameter(Mandatory=$false)]
         [switch]$InstallVMwareTools,
         [parameter(Mandatory=$false)]
-        [switch]$VMwareToolsPath,
+        [string]$VMwareToolsPath,
         [parameter(Mandatory=$false)]
         [string]$VirtIOBasePath,
         [parameter(Mandatory=$false)]
