@@ -1136,7 +1136,7 @@ function New-WindowsOnlineImage {
         [string]$SwitchName,
         [parameter(Mandatory=$false)]
         [switch]$Force=$false,
-        [ValidateSet("MAAS", "KVM", "HYPER-V", "VMWARE" ignorecase=$false)]
+        [ValidateSet("MAAS", "KVM", "HYPER-V", "VMWARE", ignorecase=$false)]
         [string]$Type = "MAAS",
         [parameter(Mandatory=$false)]
         [switch]$PurgeUpdates,
