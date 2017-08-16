@@ -65,10 +65,11 @@ function Get-AvailableConfigOptions {
                            UnattendResources\CustomResources folder."},
         @{"Name" = "custom_scripts_path";
           "Description" = "This is the full path of the folder which can contain a set of PS scripts,
-                           that will be executed during the online generation part on the VM. The PowerShell scripts,
-                           if existent, will be started by Logon.ps1 script, at different momments during image generation.
+                           that will be copied and executed during the online generation part on the VM.
+                           The PowerShell scripts, if existent, will be started by Logon.ps1 script,
+                           at different moments during image generation.
                            The purpose of these scripts is to offer to the user a fully
-                           customizable way of defining aditional logic for tweaking the final image.
+                           customizable way of defining additional logic for tweaking the final image.
                            The scripts files can have the following names: RunBeforeWindowsUpdates.ps1,
                            RunAfterWindowsUpdates.ps1, RunBeforeCloudbaseInitInstall.ps1, RunAfterCloudbaseInitInstall.ps1,
                            RunBeforeSysprep.ps1, RunAfterSysprep.ps1.
