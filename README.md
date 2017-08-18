@@ -88,6 +88,31 @@ the resulting VHDX is shrinked to a minimum size and converted to the required f
 You can find a PowerShell example to generate a raw OpenStack Ironic image that also works on KVM<br/>
 in `Examples/create-windows-online-cloud-image.ps1`
 
+## Frequently Asked Questions (FAQ)
+
+### The image generation never stops
+  * Make sure that the Hyper-V VMSwitch is correctly configured and it allows Internet connectivity<br/>
+  if you have configured the image generation to install the Windows updates.
+  * Check in the associated Hyper-V VM that the Logon.ps1 script has not failed.<br/>
+  If the script failed, there should be a PowerShell window showing the error message.
+
+### I booted an instance with the image and I got a BSOD
+  * This is the most common scenario that one can encounter and it is easily fixable.
+  * If you boot on KVM hypervisor, make sure that you configure the correct path for the ISO/folder with VirtIO drivers.<br/>
+  The configuration options are `virtio_iso_path` and `virtio_base_path`.
+  * On the KVM hypervisor side, make sure you start the KVM vm process with the `--enable-kvm` flag.
+  * If you boot on a baremetal machine, make sure that either the basic Windows installation has the storage drivers builtin<br/>
+  or that you specify the proper path to drivers folder for the `drivers_path` configuration option.
+
+### I booted an instance with the image and I got a forever Windows loading screen
+  * This usually happens when the hypervisor does not expose the CPU flags required for that specific Windows version.
+  * For example, with Windows 10, you can check https://www.microsoft.com/en-us/windows/windows-10-specifications <br/>
+  and make sure that the CPU flags are exposed by your hypervisor of choice.
+
+### Useful links on ask.cloudbase.it
+  * https://ask.cloudbase.it/question/2365/windows-server-2016-standard-image-wont-boot-blue-windows-icon-hangs/
+  * https://ask.cloudbase.it/question/1227/nano-server-wont-boot/
+  * https://ask.cloudbase.it/question/1179/win2012-boot-error-on-openstack-in-vmware-env/
 
 ## For developers
 
