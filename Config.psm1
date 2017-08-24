@@ -125,10 +125,10 @@ function Get-AvailableConfigOptions {
                            https://cloudbase.it/downloads/CloudbaseInitSetup_Stable_<arch>.msi, where arch can be x86 or x64"},
         @{"Name" = "serial_logging_port"; "GroupName" = "cloudbase_init"; "DefaultValue" = "COM1";
           "Description" = "Serial log port for Cloudbase-Init.
-	                   If set to null, the first serial port (if any) from the generation VM will be used"},
+                           If set to null, the first serial port (if any) from the generation VM will be used"},
         @{"Name" = "wallpaper_path";
           "Description" = "If set, it will replace the Cloudbase Solutions wallpaper to the one specified.
-	                   The wallpaper needs to be a valid .jpg/.jpeg image."}
+                           The wallpaper needs to be a valid .jpg/.jpeg image."}
         @{"Name" = "compress_qcow2"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true and the target image format is QCOW2, the image conversion will
                            use qemu-img built-in compression. The compressed qcow2 image will be smaller, but the conversion
