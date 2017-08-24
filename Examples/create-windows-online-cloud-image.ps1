@@ -14,10 +14,11 @@
 
 $ErrorActionPreference = "Stop"
 
+$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 git submodule update --init
-Import-Module ..\WinImageBuilder.psm1
-Import-Module ..\Config.psm1
-Import-Module ..\UnattendResources\ini.psm1
+Import-Module $scriptPath\..\WinImageBuilder.psm1
+Import-Module $scriptPath\..\Config.psm1
+Import-Module $scriptPath\..\UnattendResources\ini.psm1
 
 # The Windows image file path that will be generated
 $windowsImagePath = "C:\images\my-windows-image.raw.tgz"

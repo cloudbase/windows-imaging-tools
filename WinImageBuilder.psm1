@@ -1288,11 +1288,15 @@ function New-WindowsFromGoldenImage {
         Set-WindowsWallpaper $driveLetterGold $windowsImageConfig.wallpaper_path
         Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release
         Dismount-VHD -Path $windowsImageConfig.gold_image_path
-
+                if($windowsImageConfig.disk_layout -eq "UEFI") {
+            $generation = "2"
+        } else {
+            $generation = "1"
+        }
         $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
 
         New-VM -Name $Name -MemoryStartupBytes $windowsImageConfig.ram_size -SwitchName $switch.Name `
-            -VHDPath $windowsImageConfig.gold_image_path
+            -VHDPath $windowsImageConfig.gold_image_path -Generation $generation
         Set-VMProcessor -VMname $Name -count $windowsImageConfig.cpu_count
 
         Start-VM $Name
