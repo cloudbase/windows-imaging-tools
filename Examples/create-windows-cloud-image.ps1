@@ -14,10 +14,11 @@
 
 $ErrorActionPreference = "Stop"
 
+$scriptPath =Split-Path -Parent $MyInvocation.MyCommand.Definition | Split-Path
 git submodule update --init
-Import-Module ..\WinImageBuilder.psm1
-Import-Module ..\Config.psm1
-Import-Module ..\UnattendResources\ini.psm1
+Join-Path -Path $scriptPath -ChildPath "\WinImageBuilder.psm1" | Import-Module
+Join-Path -Path $scriptPath -ChildPath "\Config.psm1" | Import-Module
+Join-Path -Path $scriptPath -ChildPath "\UnattendResources\ini.psm1" | Import-Module
 
 # The Windows image file path that will be generated
 $virtualDiskPath = "C:\images\my-windows-image.raw"
