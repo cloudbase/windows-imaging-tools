@@ -97,6 +97,7 @@ Describe "Test New-WindowsCloudImage" {
         }
     Mock Generate-UnattendXml -Verifiable -ModuleName $moduleName { return 0 }
     Mock Copy-UnattendResources -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Copy-CustomResources -Verifiable -ModuleName $moduleName { return 0 }
     Mock Copy-Item -Verifiable -ModuleName $moduleName { return 0 }
     Mock Download-CloudbaseInit -Verifiable -ModuleName $moduleName { return 0 }
     Mock Apply-Image -Verifiable -ModuleName $moduleName { return 0 }
@@ -104,6 +105,9 @@ Describe "Test New-WindowsCloudImage" {
     Mock Check-EnablePowerShellInImage -Verifiable -ModuleName $moduleName { return 0 }
     Mock Set-WindowsWallpaper -Verifiable -ModuleName $moduleName { return 0 }
     Mock Enable-FeaturesInImage -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Get-PathWithoutExtension -Verifiable -ModuleName $moduleName { return "test" }
+    Mock Move-Item -Verifiable -ModuleName $moduleName { return 0 }
+
 
     It "Should create a windows image" {
         New-WindowsCloudImage -ConfigFilePath $fakeConfigPath | Should Be 0

@@ -1052,6 +1052,12 @@ function New-WindowsOnlineImage {
         throw "CpuCores larger then available (logical) CPU cores."
     }
 
+    if (Test-Path $windowsImageConfig.image_path) {
+        Write-Host "Found already existing image file. Removing it..." -ForegroundColor Yellow
+        Remove-Item -Force $windowsImageConfig.image_path
+        Write-Host "Already existent image file has been removed." -ForegroundColor Yellow
+    }
+
     try {
         $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
         $virtualDiskPath = $barePath + ".vhdx"
@@ -1103,7 +1109,7 @@ function New-WindowsOnlineImage {
     } catch {
         Write-host $_
         if ($windowsImageConfig.image_path -and (Test-Path $windowsImageConfig.image_path)) {
-            Remove-Item -Force ${windowsImageConfig.image_path} -ErrorAction SilentlyContinue
+            Remove-Item -Force $windowsImageConfig.image_path -ErrorAction SilentlyContinue
         }
         Throw
     }
@@ -1145,14 +1151,14 @@ function New-WindowsCloudImage {
     Check-DismVersionForImage $image
 
     if (Test-Path $windowsImageConfig.image_path) {
+        Write-Host "Found already existing image file. Removing it..." -ForegroundColor Yellow
         Remove-Item -Force $windowsImageConfig.image_path
+        Write-Host "Already existent image file has been removed." -ForegroundColor Yellow
     }
 
-    if ($windowsImageConfig.virtual_disk_format -in @("VHD", "VHDX")) {
-        $vhdPath = $windowsImageConfig.image_path
-    } else {
-        $vhdPath = "{0}.vhd" -f (Get-PathWithoutExtension $windowsImageConfig.image_path)
-        if (Test-Path $vhdPath) { Remove-Item -Force $vhdPath }
+    $vhdPath = "{0}.vhdx" -f (Get-PathWithoutExtension $windowsImageConfig.image_path)
+    if (Test-Path $vhdPath) {
+        Remove-Item -Force $vhdPath
     }
 
     try {
@@ -1198,12 +1204,17 @@ function New-WindowsCloudImage {
         }
     }
 
-    if ($vhdPath -ne $windowsImageConfig.image_path) {
-        Convert-VirtualDisk $vhdPath $windowsImageConfig.image_path $windowsImageConfig.virtual_disk_format
-        if ($windowsImageConfig.zip_password) {
-            New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password -virtualDiskPath $windowsImageConfig.image_path
-        }
+    if (!($windowsImageConfig.virtual_disk_format -in @("VHD", "VHDX"))) {
+        Convert-VirtualDisk $vhdPath $windowsImageConfig.image_path `
+            $windowsImageConfig.virtual_disk_format
         Remove-Item -Force $vhdPath
+    } elseif ($vhdPath -ne $windowsImageConfig.image_path) {
+        Move-Item -Force $vhdPath $windowsImageConfig.image_path
+    }
+
+    if ($windowsImageConfig.zip_password) {
+        New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password `
+            -virtualDiskPath $windowsImageConfig.image_path
     }
     Write-Host ("Image generation finished at: {0}" -f @(Get-Date))
 }
