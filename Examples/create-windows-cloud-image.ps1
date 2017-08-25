@@ -16,9 +16,19 @@ $ErrorActionPreference = "Stop"
 
 $scriptPath =Split-Path -Parent $MyInvocation.MyCommand.Definition | Split-Path
 git submodule update --init
-Join-Path -Path $scriptPath -ChildPath "\WinImageBuilder.psm1" | Import-Module
-Join-Path -Path $scriptPath -ChildPath "\Config.psm1" | Import-Module
-Join-Path -Path $scriptPath -ChildPath "\UnattendResources\ini.psm1" | Import-Module
+if ($LASTEXITCODE) {
+    throw "Failed to update git modules."
+}
+
+try {
+    Join-Path -Path $scriptPath -ChildPath "\WinImageBuilder.psm1" | Remove-Module -ErrorAction SilentlyContinue
+    Join-Path -Path $scriptPath -ChildPath "\Config.psm1" | Remove-Module -ErrorAction SilentlyContinue
+    Join-Path -Path $scriptPath -ChildPath "\UnattendResources\ini.psm1" | Remove-Module -ErrorAction SilentlyContinue
+} finally {
+    Join-Path -Path $scriptPath -ChildPath "\WinImageBuilder.psm1" | Import-Module
+    Join-Path -Path $scriptPath -ChildPath "\Config.psm1" | Import-Module
+    Join-Path -Path $scriptPath -ChildPath "\UnattendResources\ini.psm1" | Import-Module
+}
 
 # The Windows image file path that will be generated
 $virtualDiskPath = "C:\images\my-windows-image.raw"
@@ -44,15 +54,15 @@ $extraDriversPath = "C:\drivers\"
 $image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[1]
 
 # The path were you want to create the config fille
-$configFilePath =".\config.ini"
+$configFilePath = Join-Path $scriptPath "Examples\config.ini
 New-WindowsImageConfig -ConfigFilePath $configFilePath
 $fCfgPath = Resolve-Path $configFilePath
 
 #This is an example how to automate the image configuration file according to your needs
-Set-IniFileValue -Path $fCfgPath -Key "wim_file_path" -Value $wimFilePath
-Set-IniFileValue -Path $fCfgPath -Key "image_name" -Value $image.ImageName
-Set-IniFileValue -Path $fCfgPath -Key "image_path" -Value $virtualDiskPath
-Set-IniFileValue -Path $fCfgPath -Key "virtual_disk_format" -Value "RAW"
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "wim_file_path" -Value $wimFilePath
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_name" -Value $image.ImageName
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_path" -Value $virtualDiskPath
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "virtual_disk_format" -Value "RAW"
 Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "disk_size" -Value (30GB)
 Set-IniFileValue -Path $fCfgPath -Section "drivers" -Key "virtio_iso_path" -Value $virtIOISOPath
 Set-IniFileValue -Path $fCfgPath -Section "drivers" -Key "drivers_path" -Value $extraDriversPath

@@ -15,10 +15,21 @@
 $ErrorActionPreference = "Stop"
 
 $scriptPath =Split-Path -Parent $MyInvocation.MyCommand.Definition | Split-Path
+
 git submodule update --init
-Join-Path -Path $scriptPath -ChildPath "\WinImageBuilder.psm1" | Import-Module
-Join-Path -Path $scriptPath -ChildPath "\Config.psm1" | Import-Module
-Join-Path -Path $scriptPath -ChildPath "\UnattendResources\ini.psm1" | Import-Module
+if ($LASTEXITCODE) {
+    throw "Failed to update git modules."
+}
+
+try {
+    Join-Path -Path $scriptPath -ChildPath "\WinImageBuilder.psm1" | Remove-Module -ErrorAction SilentlyContinue
+    Join-Path -Path $scriptPath -ChildPath "\Config.psm1" | Remove-Module -ErrorAction SilentlyContinue
+    Join-Path -Path $scriptPath -ChildPath "\UnattendResources\ini.psm1" | Remove-Module -ErrorAction SilentlyContinue
+} finally {
+    Join-Path -Path $scriptPath -ChildPath "\WinImageBuilder.psm1" | Import-Module
+    Join-Path -Path $scriptPath -ChildPath "\Config.psm1" | Import-Module
+    Join-Path -Path $scriptPath -ChildPath "\UnattendResources\ini.psm1" | Import-Module
+}
 
 # The Windows image file path that will be generated
 $windowsImagePath = "C:\images\my-windows-image.raw.tgz"
@@ -48,26 +59,25 @@ $image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[1]
 $switchName = 'external'
 
 # The path were you want to create the config fille
-$configFilePath =".\config.ini"
+$configFilePath = Join-Path $scriptPath "Examples\config.ini"
 New-WindowsImageConfig -ConfigFilePath $configFilePath
 $fCfgPath = Resolve-Path $configFilePath
 
 #This is an example how to automate the image configuration file according to your needs
-Set-IniFileValue -Path $fCfgPath -Key "wim_file_path" -Value $wimFilePath
-Set-IniFileValue -Path $fCfgPath -Key "image_name" -Value $image.ImageName
-Set-IniFileValue -Path $fCfgPath -Key "image_path" -Value $windowsImagePath
-Set-IniFileValue -Path $fCfgPath -Key "image_type" -Value "MAAS"
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "wim_file_path" -Value $wimFilePath
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_name" -Value $image.ImageName
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_path" -Value $windowsImagePath
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_type" -Value "MAAS"
+Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "install_maas_hooks" -Value "True"
 Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "cpu_count" -Value 4
 Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "ram_size" -Value (4GB)
 Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "disk_size" -Value (30GB)
-Set-IniFileValue -Path $fCfgPath -Key "install_maas_hooks" -Value "True"
 Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "external_switch" -Value $switchName
 Set-IniFileValue -Path $fCfgPath -Section "drivers" -Key "virtio_iso_path" -Value $virtIOISOPath
 Set-IniFileValue -Path $fCfgPath -Section "drivers" -Key "drivers_path" -Value $extraDriversPath
 Set-IniFileValue -Path $fCfgPath -Section "updates" -Key "install_updates" -Value "True"
 Set-IniFileValue -Path $fCfgPath -Section "updates" -Key "purge_updates" -Value "True"
 Set-IniFileValue -Path $fCfgPath -Section "sysprep" -Key "disable_swap" -Value "True"
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "compress_qcow2" -Value "False"
 
 # This scripts generates a raw tar.gz-ed image file, that can be used with MAAS
 New-WindowsOnlineImage -ConfigFilePath $configFilePath
