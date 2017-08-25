@@ -683,7 +683,8 @@ function Compress-Image {
     if (!(Test-Path $VirtualDiskPath)) {
         Throw "$VirtualDiskPath not found"
     }
-    $tmpName = $ImagePath + "." + (Get-Random)
+    $tmpName = '{0}{1}{2}{3}' -f (Get-PathWithoutExtension($ImagePath))`
+    ,".",(Get-Random),".tar"
 
     $7zip = Get-7zipPath
     $pigz = Get-PigzPath
@@ -726,6 +727,9 @@ function Compress-Image {
         Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
         Remove-Item -Force $VirtualDiskPath -ErrorAction SilentlyContinue
         throw
+    }
+    if (Test-Path $ImagePath){
+        throw "File $ImagePath already exists. The image has been created at $tmpName"
     }
     Move-Item ($tmpName + ".gz") $ImagePath
     Write-Output "MaaS image is ready and available at: $ImagePath"
