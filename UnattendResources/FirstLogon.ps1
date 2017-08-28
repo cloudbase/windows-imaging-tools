@@ -1,6 +1,5 @@
 $ErrorActionPreference = "Stop"
 $resourcesDir = "$ENV:SystemDrive\UnattendResources"
-$configIniPath = "$resourcesDir\config.ini"
 
 function getHypervisor() {
     $hypervisor = & "$resourcesDir\checkhypervisor.exe"
@@ -38,7 +37,7 @@ try
         }
         "Microsoft Hv"
         {
-          # Nothing to do
+            # Nothing to do
         }
     }
 }
