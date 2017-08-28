@@ -38,11 +38,7 @@ try
         }
         "Microsoft Hv"
         {
-          Import-Module "$resourcesDir\ini.psm1"
-          $installVMwareTools_flag = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallVMwareTools" -Default $false -AsBoolean
-          if ($installVMwareTools_flag) {
-            installVMwareTools
-          }
+          # Nothing to do
         }
     }
 }
