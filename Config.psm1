@@ -126,6 +126,9 @@ function Get-AvailableConfigOptions {
         @{"Name" = "serial_logging_port"; "GroupName" = "cloudbase_init"; "DefaultValue" = "COM1";
           "Description" = "Serial log port for Cloudbase-Init.
                            If set to null, the first serial port (if any) from the generation VM will be used"},
+        @{"Name" = "msi_path"; "GroupName" = "cloudbase_init";
+          "Description" = "If set, the Cloudbase-Init msi at this path will be used.
+                          The path needs to be a locally accesible file path."},
         @{"Name" = "wallpaper_path";
           "Description" = "If set, it will replace the Cloudbase Solutions wallpaper to the one specified.
                            The wallpaper needs to be a valid .jpg/.jpeg image."}

@@ -419,8 +419,19 @@ function Download-CloudbaseInit {
         [Parameter(Mandatory=$true)]
         [string]$osArch,
         [parameter(Mandatory=$false)]
-        [switch]$BetaRelease
+        [switch]$BetaRelease,
+        [parameter(Mandatory=$false)]
+        [string]$MsiPath
     )
+    $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
+    if ($MsiPath) {
+        if (!(Test-Path $MsiPath)) {
+            throw "Cloudbase-Init installer could not be copied. $MsiPath does not exist."
+        }
+        Write-Host "Copying Cloudbase-Init..."
+        Copy-Item $MsiPath $CloudbaseInitMsiPath
+        return
+    }
     Write-Host "Downloading Cloudbase-Init..."
     $msiBuildArchMap = @{
         "amd64" = "x64"
@@ -432,7 +443,6 @@ function Download-CloudbaseInit {
         $msiBuildSuffix = "_Stable"
     }
     $CloudbaseInitMsi = "CloudbaseInitSetup{0}_{1}.msi" -f @($msiBuildSuffix, $msiBuildArchMap[$osArch])
-    $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
     $CloudbaseInitMsiUrl = "https://www.cloudbase.it/downloads/$CloudbaseInitMsi"
 
     Execute-Retry {
@@ -1181,7 +1191,8 @@ function New-WindowsCloudImage {
                              -CustomScripts $windowsImageConfig.custom_scripts_path
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper $winImagePath $windowsImageConfig.wallpaper_path
-        Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release
+        Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release `
+                               $windowsImageConfig.msi_path
         Apply-Image $winImagePath $windowsImageConfig.wim_file_path $image.ImageIndex
         Create-BCDBootConfig $drives[0] $drives[1] $windowsImageConfig.disk_layout $image
         Check-EnablePowerShellInImage $winImagePath $image
@@ -1303,7 +1314,8 @@ function New-WindowsFromGoldenImage {
                              -CustomScripts $windowsImageConfig.custom_scripts_path
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper $driveLetterGold $windowsImageConfig.wallpaper_path
-        Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release
+        Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release `
+                               $windowsImageConfig.msi_path
         Dismount-VHD -Path $windowsImageConfig.gold_image_path
 
         $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
