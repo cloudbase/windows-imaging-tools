@@ -23,7 +23,7 @@ To generate Windows Nano Server 2016, please use the following repository:
 https://github.com/cloudbase/cloudbase-init-offline-install
 
 ## Workflow of Windows imaging tools
-<img src="https://user-images.githubusercontent.com/18463389/29818549-7d285d08-8cc5-11e7-8f0e-46215f0148f5.png" width="750" height="400">
+<img src="https://user-images.githubusercontent.com/1412442/29972658-8fd4d36a-8f35-11e7-80bd-cea90e48e8ba.png" width="750">
 
 
 
