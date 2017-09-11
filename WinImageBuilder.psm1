@@ -390,7 +390,9 @@ function Copy-UnattendResources {
         [Parameter(Mandatory=$true)]
         [string]$imageInstallationType,
         [Parameter(Mandatory=$false)]
-        [boolean]$InstallMaaSHooks
+        [boolean]$InstallMaaSHooks,
+        [Parameter(Mandatory=$false)]
+        [string]$VMwareToolsPath
     )
     # Workaround to recognize the $resourcesDir drive. This seems a PowerShell bug
     Get-PSDrive | Out-Null
@@ -410,8 +412,31 @@ function Copy-UnattendResources {
             throw "The Windows curtin hooks module is not present.
                 Please run git submodule update --init " }
     }
+
+    if ($VMwareToolsPath) {
+        Write-Host "Copying VMwareTools..."
+        $dst = Join-Path $resourcesDir "\VMware-tools.exe"
+        Write-Host "VMware tools path is: $VMwareToolsPath"
+        Copy-Item $VMwareToolsPath $dst
+    }
 }
 
+function Validate-WindowsImageConfig {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [array]$ImageConfig
+    )
+    switch ($windowsImageConfig.image_type) {
+            "VMware" {
+                if (!$windowsImageConfig.vmware_tools_path) {
+                    Write-Warning "VMware Tools path was not set.
+                    The image that you create might not be usable on VMware hypervisor type."
+                } elseif (!(Test-Path $windowsImageConfig.vmware_tools_path)) {
+                    throw "VMware Tools path does not exist."
+                }
+            }
+        }
+}
 function Download-CloudbaseInit {
     Param(
         [Parameter(Mandatory=$true)]
@@ -1107,6 +1132,17 @@ function New-WindowsOnlineImage {
             Compress-Image $rawImagePath $windowsImageConfig['image_path']
         }
 
+        if ($windowsImageConfig.image_type -ceq "VMware") {
+            $vmdkImagePath = $barePath + ".vmdk"
+            Write-Host "Converting VHD to VMDK"
+            Convert-VirtualDisk $virtualDiskPath $vmdkImagePath "vmdk"
+            if ($windowsImageConfig.zip_password) {
+                New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password `
+                    -VirtualDiskPath $vmdkImagePath
+            }
+            Remove-Item -Force $virtualDiskPath
+        }
+
         if ($windowsImageConfig.image_type -eq "KVM") {
             $qcow2ImagePath = $barePath + ".qcow2"
             Write-Host "Converting VHD to Qcow2"
@@ -1151,6 +1187,7 @@ function New-WindowsCloudImage {
     Write-Host ("Image generation started at: {0}" -f @(Get-Date))
 
     $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
+    Validate-WindowsImageConfig $windowsImageConfig
     Set-DotNetCWD
     Is-Administrator
     $image = Get-WimFileImagesInfo -WimFilePath $windowsImageConfig.wim_file_path | `
@@ -1186,7 +1223,8 @@ function New-WindowsCloudImage {
             $xmlParams.Add('productKey', $windowsImageConfig.product_key);
         }
         Generate-UnattendXml @xmlParams
-        Copy-UnattendResources $resourcesDir $image.ImageInstallationType $windowsImageConfig.install_maas_hooks
+        Copy-UnattendResources $resourcesDir $image.ImageInstallationType `
+            $windowsImageConfig.install_maas_hooks $windowsImageConfig.vmware_tools_path
         Copy-CustomResources -ResourcesDir $resourcesDir -CustomResources $windowsImageConfig.custom_resources_path `
                              -CustomScripts $windowsImageConfig.custom_scripts_path
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
