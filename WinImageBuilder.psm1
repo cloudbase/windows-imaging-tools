@@ -194,20 +194,56 @@ function Create-BCDBootConfig {
         [parameter(Mandatory=$true)]
         [object]$image
     )
-
-    $bcdbootPath = "${windowsDrive}\windows\system32\bcdboot.exe"
-    if (!(Test-Path $bcdbootPath)) {
-        Write-Warning ('"{0}" not found, using online version' -f $bcdbootPath)
-        $bcdbootPath = "bcdboot.exe"
+    $bcdBootPartPath = "{0}\Windows\system32\bcdboot.exe"
+    $localBcdbootPath = $bcdbootPartPath -f @($env:SystemDrive)
+    $imageBcdbootPath = $bcdbootPartPath -f @($windowsDrive)
+    $bcdbootSuccess = $false
+    foreach ($bcdbootPath in @($imageBcdbootPath, $localBcdbootPath)) {
+        if (!(Test-Path $bcdbootPath)) {
+            Write-Warning ('"{0}" not found.' -f @($bcdbootPath))
+            continue
+        }
+        $bcdBootVersion = (Get-Command $bcdbootPath).Version
+        if ($bcdBootVersion.Major -eq 6 -and $bcdBootVersion.Minor -lt 2) {
+            # Note: older versions of bcdboot.exe don't have a /f argument
+            try {
+                & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v
+                if ($LASTEXITCODE) {
+                    Write-Warning ("Legacy {0} failed" -f @($bcdbootPath))
+                } else {
+                    $bcdbootSuccess = $true
+                    break
+                }
+            } catch {
+                if ($LASTEXITCODE) {
+                    Write-Warning ("Legacy {0} failed" -f @($bcdbootPath))
+                } else {
+                    $bcdbootSuccess = $true
+                    break
+                }
+            }
+        } else {
+            try {
+                & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+                if ($LASTEXITCODE) {
+                    Write-Warning ("{0} failed" -f @($bcdbootPath))
+                } else {
+                    $bcdbootSuccess = $true
+                    break
+                }
+            } catch {
+                if ($LASTEXITCODE) {
+                    Write-Warning ("{0} failed" -f @($bcdbootPath))
+                } else {
+                    $bcdbootSuccess = $true
+                    break
+                }
+            }
+        }
     }
-
-    # Note: older versions of bcdboot.exe don't have a /f argument
-    if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -lt 2) {
-        & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v
-    } else {
-        & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+    if (!$bcdbootSuccess) {
+        throw "bcdboot.exe failed"
     }
-    if ($LASTEXITCODE) { throw "BCDBoot failed" }
 
     if ($diskLayout -eq "BIOS") {
         $bcdeditPath = "${windowsDrive}\windows\system32\bcdedit.exe"
