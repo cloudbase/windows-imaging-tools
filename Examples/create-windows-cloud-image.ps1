@@ -54,7 +54,7 @@ $extraDriversPath = "C:\drivers\"
 $image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[1]
 
 # The path were you want to create the config fille
-$configFilePath = Join-Path $scriptPath "Examples\config.ini
+$configFilePath = Join-Path $scriptPath "Examples\config.ini"
 New-WindowsImageConfig -ConfigFilePath $configFilePath
 $fCfgPath = Resolve-Path $configFilePath
 
