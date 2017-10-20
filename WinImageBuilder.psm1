@@ -228,11 +228,11 @@ function Create-BCDBootConfig {
 
     # Note: older versions of bcdboot.exe don't have a /f argument
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -lt 2) {
-        & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v
+       $bcdbootOutput = & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v
     } else {
-        & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+       $bcdbootOutput = & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
     }
-    if ($LASTEXITCODE) { throw "BCDBoot failed" }
+    if ($LASTEXITCODE) { throw "BCDBoot failed with error: $bcdbootOutput" }
 
     if ($diskLayout -eq "BIOS") {
         $bcdeditPath = "${windowsDrive}\windows\system32\bcdedit.exe"
