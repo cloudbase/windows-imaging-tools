@@ -64,6 +64,10 @@ class PathShouldExistAttribute : System.Management.Automation.ValidateArgumentsA
     }
 }
 
+function Write-Log($MessageToOut) {
+    Write-Host $MessageToOut -ForegroundColor Blue -BackgroundColor Green (Get-Date)`n
+}
+
 function Execute-Retry {
     Param(
         [parameter(Mandatory=$true)]
@@ -148,6 +152,7 @@ function Create-ImageVirtualDisk {
         [string]$DiskLayout
     )
 
+Write-Log "Create Virtual Disk Image"
     $v = [WIMInterop.VirtualDisk]::CreateVirtualDisk($VhdPath, $Size)
     try {
         $v.AttachVirtualDisk()
@@ -220,6 +225,7 @@ function Create-BCDBootConfig {
         [object]$image
     )
 
+    Write-Log "Create BCDBoot Config"
     $bcdbootPath = "${windowsDrive}\windows\system32\bcdboot.exe"
     if (!(Test-Path $bcdbootPath)) {
         Write-Warning ('"{0}" not found, using online version' -f $bcdbootPath)
@@ -291,6 +297,8 @@ function Generate-UnattendXml {
         [parameter(Mandatory=$false)]
         $administratorPassword
     )
+
+    Write-Log "Generate Unattend Xml"
     $xsltArgs = @{}
     $xsltArgs["processorArchitecture"] = ([string]$image.ImageArchitecture).ToLower()
     $xsltArgs["imageName"] = $image.ImageName
@@ -343,6 +351,7 @@ function Convert-VirtualDisk {
         [boolean]$CompressQcow2
     )
 
+    Write-Log "Convert Virtual Disk"
     $compressParam = ""
     if ($format -eq "qcow2" -and $CompressQcow2) {
         Write-Host "Qcow2 compression has been enabled."
@@ -363,6 +372,7 @@ function Copy-CustomResources {
         [string]$CustomScripts
         )
 
+    Write-Log "Copy Custom Resources"
     if (!(Test-Path "$resourcesDir")) {
         $d = New-Item -Type Directory $resourcesDir
     }
@@ -392,6 +402,8 @@ function Copy-UnattendResources {
         [Parameter(Mandatory=$false)]
         [boolean]$InstallMaaSHooks
     )
+
+    Write-Log "Copy Unattend Resources"
     # Workaround to recognize the $resourcesDir drive. This seems a PowerShell bug
     Get-PSDrive | Out-Null
 
@@ -457,7 +469,7 @@ function Generate-ConfigFile {
         [Parameter(Mandatory=$true)]
         [hashtable]$values
     )
-
+    Write-Log "Generate config file"
     $configIniPath = "$resourcesDir\config.ini"
     Import-Module "$localResourcesDir\ini.psm1"
     foreach ($i in $values.GetEnumerator()) {
@@ -553,7 +565,7 @@ function Get-VirtIODrivers {
         [parameter(Mandatory=$false)]
         [int]$RecursionDepth = 0
     )
-
+    Write-Log "Getting Virtual IO Drivers"
     $driverPaths = @()
     foreach ($driver in $VirtioDrivers) {
         foreach ($osVersion in $VirtIODriverMappings.Keys) {
@@ -587,6 +599,7 @@ function Add-VirtIODrivers {
         [parameter(Mandatory=$true)]
         [string]$driversBasePath
     )
+    Write-Log "Adding Virtual IO Drivers"
     # For VirtIO ISO with drivers version lower than 1.8.x
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0) {
         $virtioVer = "VISTA"
@@ -643,6 +656,7 @@ function Add-VirtIODriversFromISO {
         [parameter(Mandatory=$true)]
         [string]$isoPath
     )
+    Write-Log "Adding Virtual IO Drivers from ISO"
     $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($isoPath)
     try {
         if (Is-IsoFile $isoPath) {
@@ -690,6 +704,7 @@ function Compress-Image {
         [Parameter(Mandatory=$true)]
         [string]$ImagePath
     )
+    Write-Log "Compress Image"
     if (!(Test-Path $VirtualDiskPath)) {
         Throw "$VirtualDiskPath not found"
     }
@@ -751,6 +766,7 @@ function Start-Executable {
         [Alias("7za.exe")]
         [array]$Command
     )
+    Write-Log "Star Executable"
     PROCESS {
         $cmdType = (Get-Command $Command[0]).CommandType
         if ($cmdType -eq "Application") {
@@ -861,7 +877,7 @@ function Create-VirtualSwitch {
         [Parameter(Mandatory=$false)]
         [string]$Name="br100"
     )
-
+    Write-Log "Create Virtual Switch"
     if (!$NetAdapterName) {
         $defRoute = Get-NetRoute | Where-Object { $_.DestinationPrefix -eq "0.0.0.0/0" }
         if (!$defRoute) {
@@ -972,7 +988,7 @@ function Set-WindowsWallpaper {
         [Parameter(Mandatory=$false)]
         [string]$WallpaperPath
     )
-
+    Write-Log "Set Wallpaper"
     if (!$WallpaperPath -or !(@('.jpg', '.jpeg') -contains `
             (Get-Item $windowsImageConfig.wallpaper_path -ErrorAction SilentlyContinue).Extension)) {
         $WallpaperPath = Join-Path $localResourcesDir "Wallpaper.jpg"
