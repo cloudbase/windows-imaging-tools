@@ -241,6 +241,18 @@ function Run-CustomScript {
     }
 }
 
+function Install-VMwareTools {
+    $Host.UI.RawUI.WindowTitle = "Installing VMware tools..."
+    $vmwareToolsInstallArgs = "/s /v /qn REBOOT=R /l $ENV:Temp\vmware_tools_install.log"
+    if (Test-Path $resourcesDir) {
+        $vmwareToolsPath = Join-Path $resourcesDir "\VMware-tools.exe"
+    }
+    $p = Start-Process -FilePath $vmwareToolsPath -ArgumentList $vmwareToolsInstallArgs -Wait -verb runAS
+    if ($p.ExitCode) {
+        throw "VMware tools setup failed" 
+    }
+}
+
 try
 {
     Import-Module "$resourcesDir\ini.psm1"
@@ -249,6 +261,9 @@ try
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
+    try {
+        $vmwareToolsPath = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "vmware_tools_path"
+    } catch {}
     try {
         $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "product_key"
     } catch {}
@@ -273,7 +288,9 @@ try
         Remove-Item -Recurse -Force $resourcesDir
         shutdown -s -t 0 -f
     }
-
+    if ($vmwareToolsPath) {
+        Install-VMwareTools
+    }
     Run-CustomScript "RunBeforeCloudbaseInitInstall.ps1"
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
