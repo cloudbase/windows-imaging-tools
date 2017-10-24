@@ -214,6 +214,57 @@ function License-Windows {
     }
 }
 
+function Get-AdministratorAccount {
+    <#
+    .SYNOPSIS
+    Helper function to return the local Administrator account name.
+    This works with internationalized versions of Windows.
+    #>
+    PROCESS {
+        $version = $PSVersionTable.PSVersion.Major
+        if ($version -lt 4) {
+            # Get-CimInstance is not supported on powershell versions earlier then 4
+            New-Alias -Name Get-ManagementObject -Value Get-WmiObject
+        } else {
+            New-Alias -Name Get-ManagementObject -Value Get-CimInstance
+        }
+        $SID = "S-1-5-21-%-500"
+        $modifier = " LIKE "
+        $query = ("SID{0}'{1}'" -f @($modifier, $SID))
+        $s = Get-ManagementObject -Class Win32_UserAccount -Filter $query
+        if (!$s) {
+            throw "SID not found: $SID"
+        }
+        return $s.Name
+    }
+}
+
+function Enable-AdministratorAccount {
+    [string]$username = Get-AdministratorAccount
+    $setupCompletePath = "$env:windir\Setup\Scripts\SetupComplete.cmd"
+    $activate = "powershell -c net user {0} /active:yes" -f $username
+    $expiration = 'wmic path Win32_UserAccount WHERE Name="{0}" set PasswordExpires=true' -f $username
+    $logonReset = "net.exe user {0} /logonpasswordchg:yes" -f $username
+    Add-Content -Encoding Ascii -Value $activate -Path $setupCompletePath
+    Add-Content -Encoding Ascii -Value $expiration -Path $setupCompletePath
+    Add-Content -Encoding Ascii -Value $logonReset -Path $setupCompletePath
+    & cmd.exe /c "net.exe user $username """
+    # Note(atira): net.exe can set an empty password only if it is run from cmd.exe
+    if ($LASTEXITCODE) {
+        throw "Resetting $username password failed."
+    }
+}
+
+function Is-WindowsClient {
+        $Path = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\\'
+    try {
+        if ((Get-ItemProperty -Path $Path -Name InstallationType).InstallationType -eq "Client") {
+            return $true
+        }
+    } catch { }
+    return $false
+}
+
 function Run-CustomScript {
     Param($ScriptFileName)
     $fullScriptFilePath = Join-Path $customScriptsDir $ScriptFileName
@@ -248,6 +299,8 @@ try
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "persist_drivers_install" -Default $true -AsBoolean
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
+    $enableAdministrator = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" `
+                                            -Key "enable_administrator_account" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
     try {
         $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "product_key"
@@ -306,6 +359,10 @@ try
     Run-Defragment
 
     Release-IP
+
+    if (Is-WindowsClient -and $enableAdministrator) {
+        Enable-AdministratorAccount
+    }
 
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
     $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
