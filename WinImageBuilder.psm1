@@ -54,6 +54,8 @@ $VirtIODriverMappings = @{
     "w10" = @(100, 0);
 }
 
+$AvailableCompressionFormats = @("tar","gz","zip")
+
 . "$scriptPath\Interop.ps1"
 
 class PathShouldExistAttribute : System.Management.Automation.ValidateArgumentsAttribute {
@@ -436,7 +438,16 @@ function Validate-WindowsImageConfig {
                 }
             }
         }
+    if ($windowsImageConfig.compression_format) {
+        $compressionFormats = $windowsImageConfig.compression_format.split(".")
+        $invalidCompressionFormat = $compressionFormats | Where-Object `
+            {$AvailableCompressionFormats -notcontains $_}
+        if ($invalidCompressionFormat) {
+            throw "Compresion format $invalidCompressionFormat not available."
+        }
+    }
 }
+
 function Download-CloudbaseInit {
     Param(
         [Parameter(Mandatory=$true)]
@@ -713,60 +724,85 @@ function Compress-Image {
         [Parameter(Mandatory=$true)]
         [string]$VirtualDiskPath,
         [Parameter(Mandatory=$true)]
-        [string]$ImagePath
+        [string]$ImagePath,
+        [Parameter(Mandatory=$true)]
+        [string[]]$compressionFormats,
+        [parameter(Mandatory=$false)]
+        [string]$ZipPassword
     )
     if (!(Test-Path $VirtualDiskPath)) {
         Throw "$VirtualDiskPath not found"
     }
-    $tmpName = '{0}.tar' -f @((Get-PathWithoutExtension($ImagePath)))
-
     $7zip = Get-7zipPath
     $pigz = Get-PigzPath
+    $tmpName = (Get-Item $VirtualDiskPath).Name
+    $compressionFormats = $compressionFormats.split(".")
     try {
-        Write-Host "Archiving $VirtualDiskPath to tarfile $tmpName"
         Push-Location ([System.IO.Path]::GetDirectoryName((Resolve-path $VirtualDiskPath).Path))
-        try {
-            # Avoid storing the full path in the archive
-            $imageFileName = (Get-Item $VirtualDiskPath).Name
-            Write-Host "Creating tar archive..."
-            & $7zip a -ttar $tmpName $imageFileName
-            if ($LASTEXITCODE) {
-                if ((Test-Path $imageFileName)) {
-                    Remove-Item -Force $imageFileName
+        foreach ($compresionFormat in $compressionFormats) {
+            try {
+                if ($compresionFormat -eq "tar") {
+                    $tmpName = '{0}.tar' -f @((Get-PathWithoutExtension($ImagePath)))
+                    Write-Host "Archiving $VirtualDiskPath to tarfile $tmpName"
+                        # Avoid storing the full path in the archive
+                        $imageFileName = (Get-Item $VirtualDiskPath).Name
+                        Write-Host "Creating tar archive..."
+                        & $7zip a -ttar $tmpName $imageFileName
+                        if ($LASTEXITCODE) {
+                            if ((Test-Path $imageFileName)) {
+                                Remove-Item -Force $imageFileName
+                            }
+                            throw "7za.exe failed while creating tar file for image: $tmpName"
+                        }
+                        Remove-Item -Force $ImagePath
                 }
-                throw "7za.exe failed while creating tar file for image: $tmpName"
+            } finally {
+                    Pop-Location }
+            if ($compresionFormat -eq "gz") {
+                Write-Host "Compressing $tmpName to gzip"
+                    $tmpPathName = (Get-Item $tmpName).Name
+                    Write-Host "Creating gzip..."
+                    & $pigz -p12 $tmpPathName
+                    if ($LASTEXITCODE) {
+                        if ((Test-Path $tmpName)) {
+                            Remove-Item -Force $tmpName
+                        }
+                        throw "pigz.exe failed while creating gzip file for: $tmpName"
+                    }
+                $tmpName = ($tmpName + ".gz")
             }
-        } finally {
-            Pop-Location
-        }
-
-        Remove-Item -Force $VirtualDiskPath
-        Write-Host "Compressing $tmpName to gzip"
-        Push-Location ([System.IO.Path]::GetDirectoryName((Resolve-path $tmpName).Path))
-        try {
-            $tmpPathName = (Get-Item $tmpName).Name
-            Write-Host "Creating gzip..."
-            & $pigz -p12 $tmpPathName
-            if ($LASTEXITCODE) {
-                $gzipped = ($tmpPathName + ".gz")
-                if ((Test-Path $gzipped)) {
-                    Remove-Item -Force $gzipped
-                }
-                throw "pigz.exe failed while creating gzip file for : $tmpName"
+            if ($compresionFormat -eq "zip") {
+                Write-Host "Archiving $VirtualDiskPath to zip $tmpName"
+                    # Avoid storing the full path in the archive
+                    Write-Host "Creating zip archive..."
+                    $zipName = $tmpName + ".zip"
+                    & $7zip a -t7z $zipName $tmpName
+                    if ($LASTEXITCODE) {
+                        if ((Test-Path $tmpName)) {
+                            Remove-Item -Force $tmpName
+                        }
+                        throw "7za.exe failed while creating tar file for image: $tmpName"
+                    }
+                Remove-Item -Force $tmpName
             }
-        } finally {
-            Pop-Location
         }
     } catch {
         Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
         Remove-Item -Force $VirtualDiskPath -ErrorAction SilentlyContinue
         throw
     }
+    if ($ZipPassword) {
+        $zipPath = $tmpName + ".zip"
+        $7zip = Get-7zipPath
+        Write-Host "Creating protected zip..."
+        Write-Host "The zip password is: $ZipPassword"
+        Start-Executable -Command @("$7zip", "a", "-tzip", "$zipPath", `
+                                    "$tmpName", "-p$ZipPassword", "-mx1")
+        Remove-Item -Force $tmpName
+    }
     if (Test-Path $ImagePath) {
         throw "File $ImagePath already exists. The image has been created at $tmpName."
     }
-    Move-Item ($tmpName + ".gz") $ImagePath
-    Write-Output "MaaS image is ready and available at: $ImagePath"
 }
 
 function Start-Executable {
@@ -803,20 +839,6 @@ function Get-PigzPath {
     return Join-Path -Path "$localResourcesDir" -ChildPath "pigz.exe"
 }
 
-function New-ProtectedZip {
-    Param(
-        [parameter(Mandatory=$true)]
-        [string]$ZipPassword,
-        [Parameter(Mandatory=$true)]
-        [string]$VirtualDiskPath
-    )
-        $zipPath = (Get-PathWithoutExtension $VirtualDiskPath) + ".zip"
-        $7zip = Get-7zipPath
-        Write-Host "Creating protected zip"
-        Start-Executable -Command @("$7zip", "a" , "-tzip", "$zipPath", `
-                                    "$VirtualDiskPath", "-p$ZipPassword", "-mx1")
-        Write-Host "The zip password is: $ZipPassword"
-}
 function Resize-VHDImage {
     <#
     .SYNOPSIS
@@ -1096,6 +1118,7 @@ function New-WindowsOnlineImage {
     try {
         $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
         $virtualDiskPath = $barePath + ".vhdx"
+        $uncompressedImagePath = $virtualDiskPath
 
         # We need different config files for New-WindowsCloudImage and New-WindowsOnlineImage
         $offlineConfigFilePath = $ConfigFilePath + ".offline"
@@ -1125,32 +1148,28 @@ function New-WindowsOnlineImage {
         Resize-VHDImage $virtualDiskPath
 
         if ($windowsImageConfig.image_type -eq "MAAS") {
-            $rawImagePath = $barePath + ".img"
+            $uncompressedImagePath = $barePath + ".img"
             Write-Host "Converting VHD to RAW"
-            Convert-VirtualDisk $virtualDiskPath $rawImagePath "raw"
+            Convert-VirtualDisk $virtualDiskPath $uncompressedImagePath "raw"
             Remove-Item -Force $virtualDiskPath
-            Compress-Image $rawImagePath $windowsImageConfig['image_path']
         }
 
         if ($windowsImageConfig.image_type -ceq "VMware") {
-            $vmdkImagePath = $barePath + ".vmdk"
+            $uncompressedImagePath = $barePath + ".vmdk"
             Write-Host "Converting VHD to VMDK"
-            Convert-VirtualDisk $virtualDiskPath $vmdkImagePath "vmdk"
-            if ($windowsImageConfig.zip_password) {
-                New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password `
-                    -VirtualDiskPath $vmdkImagePath
-            }
+            Convert-VirtualDisk $virtualDiskPath $uncompressedImagePath "vmdk"
             Remove-Item -Force $virtualDiskPath
         }
 
         if ($windowsImageConfig.image_type -eq "KVM") {
-            $qcow2ImagePath = $barePath + ".qcow2"
+            $uncompressedImagePath = $barePath + ".qcow2"
             Write-Host "Converting VHD to Qcow2"
-            Convert-VirtualDisk $virtualDiskPath $qcow2ImagePath "qcow2" $windowsImageConfig.compress_qcow2
-            if ($windowsImageConfig.zip_password) {
-                New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password -VirtualDiskPath $qcow2ImagePath
-            }
+            Convert-VirtualDisk $virtualDiskPath $uncompressedImagePath "qcow2" $windowsImageConfig.compress_qcow2
             Remove-Item -Force $virtualDiskPath
+        }
+        if ($windowsImageConfig.compression_format) {
+            Compress-Image $uncompressedImagePath $windowsImageConfig['image_path'] `
+                $windowsImageConfig.compression_format $windowsImageConfig.zip_password
         }
     } catch {
         Write-host $_
@@ -1370,19 +1389,26 @@ function New-WindowsFromGoldenImage {
         Resize-VHDImage $windowsImageConfig.gold_image_path
 
         $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
-
+        $uncompressedImagePath = $windowsImageConfig.image_path
+        
         if ($windowsImageConfig.image_type -eq "MAAS") {
-            $RawImagePath = $barePath + ".img"
+            $uncompressedImagePath = $barePath + ".img"
             Write-Output "Converting VHD to RAW"
-            Convert-VirtualDisk $windowsImageConfig.gold_image_path $RawImagePath "RAW"
+            Convert-VirtualDisk $windowsImageConfig.gold_image_path $uncompressedImagePath "RAW"
             Remove-Item -Force $windowsImageConfig.gold_image_path
-            Compress-Image $RawImagePath $windowsImageConfig.image_path
+            if (!($windowsImageConfig.compression_format -match ".tar.gz")) {
+                $windowsImageConfig.compression_format = ".tar.gz" + $windowsImageConfig.compression_format
+            }
         }
         if ($windowsImageConfig.image_type -eq "KVM") {
-            $Qcow2ImagePath = $barePath + ".qcow2"
+            $uncompressedImagePath = $barePath + ".qcow2"
             Write-Output "Converting VHD to QCow2"
-            Convert-VirtualDisk $windowsImageConfig.gold_image_path $Qcow2ImagePath "qcow2"
+            Convert-VirtualDisk $windowsImageConfig.gold_image_path $uncompressedImagePath "qcow2"
             Remove-Item -Force $windowsImageConfig.gold_image_path
+        }
+        if (windowsImageConfig.compression_format) {
+            Compress-Image $uncompressedImagePath $windowsImageConfig.image_path `
+                $windowsImageConfig.compression_format $windowsImageConfig.zip_password
         }
     } catch {
       Write-Host $_

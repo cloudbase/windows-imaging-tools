@@ -50,6 +50,8 @@ function Get-AvailableConfigOptions {
                            unstable images."},
         @{"Name" = "install_maas_hooks"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true, MAAS Windows curtin hooks will be copied to the image root directory."},
+         @{"Name" = "compression_format";
+          "Description" = "Select between tar, gz, zip formats or any combination between these."},
         @{"Name" = "zip_password";
           "Description" = "If this parameter is set, after the image is generated,
                            a password protected zip archive with the image will be created."},
