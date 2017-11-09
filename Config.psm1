@@ -119,6 +119,8 @@ function Get-AvailableConfigOptions {
           "Description" = "In case the hardware on which the image is generated will also be the hardware on
                            which the image will be deployed this can be set to true, otherwise the spawned
                            instance is prone to BSOD."},
+        @{"Name" = "install_cloudbase_ini"; "GroupName" = "cloudbase_init"; "DefaultValue" = $true; "AsBoolean" = $true;
+          "Description" = "If you don't want to install Cloudbase-Init change value with false "},
         @{"Name" = "beta_release"; "GroupName" = "cloudbase_init"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "This is a switch that allows the selection of Cloudbase-Init branches. If set to true, the
                            beta branch will be used:
