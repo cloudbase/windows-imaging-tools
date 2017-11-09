@@ -64,6 +64,12 @@ class PathShouldExistAttribute : System.Management.Automation.ValidateArgumentsA
     }
 }
 
+function Write-Log {
+    Param($messageToOut)
+    Write-Host $messageToOut (Get-Date)
+}
+
+
 function Execute-Retry {
     Param(
         [parameter(Mandatory=$true)]
@@ -148,6 +154,7 @@ function Create-ImageVirtualDisk {
         [string]$DiskLayout
     )
 
+    Write-Log "Creating Virtual Disk Image: $VhdPath..."
     $v = [WIMInterop.VirtualDisk]::CreateVirtualDisk($VhdPath, $Size)
     try {
         $v.AttachVirtualDisk()
@@ -187,6 +194,7 @@ function Create-ImageVirtualDisk {
             -Force -Confirm:$false
         return @("$($systemPart.DriveLetter):", "$($windowsPart.DriveLetter):")
     } finally {
+        Write-Log "Successfuly created disk: $VhdPath"
         $v.Close()
     }
 }
@@ -220,6 +228,7 @@ function Create-BCDBootConfig {
         [object]$image
     )
 
+    Write-Log "Create BCDBoot Config: $image.ImageName..."
     $bcdbootPath = "${windowsDrive}\windows\system32\bcdboot.exe"
     if (!(Test-Path $bcdbootPath)) {
         Write-Warning ('"{0}" not found, using online version' -f $bcdbootPath)
@@ -250,6 +259,7 @@ function Create-BCDBootConfig {
         & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} osdevice locate
         if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default osdevice locate" }
     }
+    Write-Log "BCDBoot config has been created."
 }
 
 function Transform-Xml {
@@ -291,6 +301,8 @@ function Generate-UnattendXml {
         [parameter(Mandatory=$false)]
         $administratorPassword
     )
+
+    Write-Log "Generate Unattend Xml :$outUnattendXmlPath..."
     $xsltArgs = @{}
     $xsltArgs["processorArchitecture"] = ([string]$image.ImageArchitecture).ToLower()
     $xsltArgs["imageName"] = $image.ImageName
@@ -304,6 +316,7 @@ function Generate-UnattendXml {
     }
 
     Transform-Xml "$scriptPath\Unattend.xslt" $inUnattendXmlPath $outUnattendXmlPath $xsltArgs
+    Write-Log "Xml was generated."
 }
 
 function Detach-VirtualDisk {
@@ -343,6 +356,7 @@ function Convert-VirtualDisk {
         [boolean]$CompressQcow2
     )
 
+    Write-Log "Convert Virtual Disk: $vhdPath..."
     $compressParam = ""
     if ($format -eq "qcow2" -and $CompressQcow2) {
         Write-Host "Qcow2 compression has been enabled."
@@ -353,6 +367,7 @@ function Convert-VirtualDisk {
         & "$scriptPath\bin\qemu-img.exe" convert $compressParam -O $format.ToLower() $vhdPath $outPath
         if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
     }
+    Write-Log "Finish to convert virtual disk."
 }
 
 function Copy-CustomResources {
@@ -363,6 +378,7 @@ function Copy-CustomResources {
         [string]$CustomScripts
         )
 
+    Write-Log "Copy Custom Resources: $CustomResources..."
     if (!(Test-Path "$resourcesDir")) {
         $d = New-Item -Type Directory $resourcesDir
     }
@@ -380,6 +396,7 @@ function Copy-CustomResources {
         Write-Host "Copying: $CustomScripts $resourcesDir"
         Copy-Item -Recurse "$CustomScripts\*" "$resourcesDir\CustomScripts"
     }
+    Write-Log "Custom Resources at: $ResourcesDir."
 }
 
 
@@ -392,6 +409,8 @@ function Copy-UnattendResources {
         [Parameter(Mandatory=$false)]
         [boolean]$InstallMaaSHooks
     )
+
+    Write-Log "Copy Unattend Resources: $imageInstallationType..."
     # Workaround to recognize the $resourcesDir drive. This seems a PowerShell bug
     Get-PSDrive | Out-Null
 
@@ -410,6 +429,7 @@ function Copy-UnattendResources {
             throw "The Windows curtin hooks module is not present.
                 Please run git submodule update --init " }
     }
+    Write-Log "Resources has been copied."
 }
 
 function Download-CloudbaseInit {
@@ -448,11 +468,13 @@ function Generate-ConfigFile {
         [hashtable]$values
     )
 
+    Write-Log "Generate config file: $resourcesDir..."
     $configIniPath = "$resourcesDir\config.ini"
     Import-Module "$localResourcesDir\ini.psm1"
     foreach ($i in $values.GetEnumerator()) {
         Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key $i.Key -Value $i.Value
     }
+    Write-Log "Config file was generated."
 }
 
 function Add-DriversToImage {
@@ -544,6 +566,7 @@ function Get-VirtIODrivers {
         [int]$RecursionDepth = 0
     )
 
+    Write-Log "Getting Virtual IO Drivers: $BasePath..."
     $driverPaths = @()
     foreach ($driver in $VirtioDrivers) {
         foreach ($osVersion in $VirtIODriverMappings.Keys) {
@@ -566,6 +589,7 @@ function Get-VirtIODrivers {
         $driverPaths = Get-VirtIODrivers 63 $IsServer $BasePath $Architecture 1
     }
     return $driverPaths
+    Write-Log "Finished to get IO Drivers."
 }
 
 function Add-VirtIODrivers {
@@ -577,6 +601,8 @@ function Add-VirtIODrivers {
         [parameter(Mandatory=$true)]
         [string]$driversBasePath
     )
+
+    Write-Log "Adding Virtual IO Drivers: $driversBasePath..."
     # For VirtIO ISO with drivers version lower than 1.8.x
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 0) {
         $virtioVer = "VISTA"
@@ -593,6 +619,7 @@ function Add-VirtIODrivers {
     if (Test-Path $virtioDir) {
         Add-DriversToImage $vhdDriveLetter $virtioDir
         return
+    Write-Log "Virtual IO Drivers was added."
     }
 
     # For VirtIO ISO with drivers version higher than 1.8.x
@@ -633,6 +660,8 @@ function Add-VirtIODriversFromISO {
         [parameter(Mandatory=$true)]
         [string]$isoPath
     )
+
+    Write-Log "Adding Virtual IO Drivers from ISO: $isoPath..."
     $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($isoPath)
     try {
         if (Is-IsoFile $isoPath) {
@@ -657,6 +686,7 @@ function Add-VirtIODriversFromISO {
             $v.Close()
         }
     }
+    Write-Log "ISO Virtual Drivers has been adeed."
 }
 
 function Set-DotNetCWD {
@@ -680,6 +710,8 @@ function Compress-Image {
         [Parameter(Mandatory=$true)]
         [string]$ImagePath
     )
+
+    Write-Log "Compress Image: $ImagePath..."
     if (!(Test-Path $VirtualDiskPath)) {
         Throw "$VirtualDiskPath not found"
     }
@@ -849,6 +881,7 @@ function Create-VirtualSwitch {
         [string]$Name="br100"
     )
 
+    Write-Log "Create Virtual Switch: $Name"
     if (!$NetAdapterName) {
         $defRoute = Get-NetRoute | Where-Object { $_.DestinationPrefix -eq "0.0.0.0/0" }
         if (!$defRoute) {
@@ -863,6 +896,7 @@ function Create-VirtualSwitch {
     }
     $vSwitch = New-VMSwitch -Name $Name -NetAdapterName $NetAdapterName `
         -AllowManagementOS $true
+    Write-Log "Virtual Switch was created: $vSwitch."
     return $vSwitch
 }
 
@@ -960,6 +994,7 @@ function Set-WindowsWallpaper {
         [string]$WallpaperPath
     )
 
+    Write-Log "Set Wallpaper: $WallpaperPath..."
     if (!$WallpaperPath -or !(@('.jpg', '.jpeg') -contains `
             (Get-Item $windowsImageConfig.wallpaper_path -ErrorAction SilentlyContinue).Extension)) {
         $WallpaperPath = Join-Path $localResourcesDir "Wallpaper.jpg"
@@ -993,6 +1028,7 @@ function Set-WindowsWallpaper {
         Copy-Item -Force $WallpaperPath $wallpaperPathFullName
         Write-Host "Cached wallpaper for user Administrator has been replaced."
     }
+    Write-Log "Wallpaper was set."
 }
 
 function New-WindowsOnlineImage {
