@@ -261,7 +261,7 @@ try
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
-    $cloudbaseIniInstall = Get-IniFileValue -Path $configIniPath -Section "caludbase_init" -Key "cloudbase_install" -Default $false -AsBoolean 
+    $cloudbaseIniInstall = Get-IniFileValue -Path $configIniPath -Section "caludbase_init" -Key "cloudbase_install" -Default $true -AsBoolean 
     try {
         $vmwareToolsPath = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "vmware_tools_path"
     } catch {}
