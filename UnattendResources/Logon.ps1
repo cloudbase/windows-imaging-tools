@@ -261,6 +261,7 @@ try
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
+    $cloudbaseIniInstall = Get-IniFileValue -Path $configIniPath -Section "caludbase_init" -Key "cloudbase_install" -Default $true -AsBoolean 
     try {
         $vmwareToolsPath = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "vmware_tools_path"
     } catch {}
@@ -291,43 +292,44 @@ try
     if ($vmwareToolsPath) {
         Install-VMwareTools
     }
-    Run-CustomScript "RunBeforeCloudbaseInitInstall.ps1"
-    $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
+    if ($cloudbaseIniInstall){
+        Run-CustomScript "RunBeforeCloudbaseInitInstall.ps1"
+        $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
-    $programFilesDir = $ENV:ProgramFiles
+        $programFilesDir = $ENV:ProgramFiles
 
-    $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
-    $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
+        $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
+        $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
 
-    if (!$serialPortName) {
-        $serialPorts = Get-WmiObject Win32_SerialPort
-        if ($serialPorts) {
+        if (!$serialPortName) {
+            $serialPorts = Get-WmiObject Win32_SerialPort
+            if ($serialPorts) {
             $serialPortName = $serialPorts[0].DeviceID
+            }
         }
+
+        $msiexecArgumentList = "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog"
+        if ($serialPortName) {
+            $msiexecArgumentList += " LOGGINGSERIALPORTNAME=$serialPortName"
+        }
+
+        $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList $msiexecArgumentList
+        if ($p.ExitCode -ne 0) {
+            throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
+        }
+
+        $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
+        & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
+        Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
+
+        Run-Defragment
+
+        Release-IP
+
+        $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
+        $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
+        Set-PersistDrivers -Path $unattendedXmlPath -Persist:$persistDrivers
     }
-
-    $msiexecArgumentList = "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog"
-    if ($serialPortName) {
-        $msiexecArgumentList += " LOGGINGSERIALPORTNAME=$serialPortName"
-    }
-
-    $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList $msiexecArgumentList
-    if ($p.ExitCode -ne 0) {
-        throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
-    }
-
-    $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
-    & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
-    Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
-
-    Run-Defragment
-
-    Release-IP
-
-    $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
-    $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
-    Set-PersistDrivers -Path $unattendedXmlPath -Persist:$persistDrivers
-
     if ($disableSwap) {
         ExecRetry {
             Disable-Swap
