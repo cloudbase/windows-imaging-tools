@@ -78,6 +78,9 @@ function Get-AvailableConfigOptions {
                            The script names contain the information on when the script will be executed.
                            One can define only some of the hook scripts and it is not mandatory to define all of them.
                            If a script does not exist, it will not be executed."},
+        @{"Name" = "enable_administrator_account"; "DefaultValue" = $false; "AsBoolean" = $true
+          "Description" = "If set to true the Administrator account will be enabled on the client
+                           versions of Windows, which have the Administrator account disabled by default"},
         @{"Name" = "administrator_password"; "GroupName" = "vm"; "DefaultValue" = "Pa`$`$w0rd";
           "Description" = "This will be the Administrator user's, so that AutoLogin can be performed on the instance,
                            in order to install the required products,
