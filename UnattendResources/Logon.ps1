@@ -300,7 +300,7 @@ function Install-VMwareTools {
     }
     $p = Start-Process -FilePath $vmwareToolsPath -ArgumentList $vmwareToolsInstallArgs -Wait -verb runAS
     if ($p.ExitCode) {
-        throw "VMware tools setup failed" 
+        throw "VMware tools setup failed"
     }
 }
 
@@ -314,6 +314,8 @@ try
     $enableAdministrator = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" `
                                             -Key "enable_administrator_account" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
+    $installCloudbaseInit = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" `
+                                             -Key "install_cloudbase_init" -Default $true -AsBoolean
     try {
         $vmwareToolsPath = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "vmware_tools_path"
     } catch {}
@@ -344,45 +346,80 @@ try
     if ($vmwareToolsPath) {
         Install-VMwareTools
     }
+
     Run-CustomScript "RunBeforeCloudbaseInitInstall.ps1"
-    $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
-    $programFilesDir = $ENV:ProgramFiles
+    $unattendedXmlPath = $null
 
-    $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
-    $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
+    if ($installCloudbaseInit) {
+        Run-CustomScript "RunBeforeCloudbaseInitInstall.ps1"
+        $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
-    if (!$serialPortName) {
-        $serialPorts = Get-WmiObject Win32_SerialPort
-        if ($serialPorts) {
-            $serialPortName = $serialPorts[0].DeviceID
+        $programFilesDir = $ENV:ProgramFiles
+
+        $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
+        $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
+
+        if (!$serialPortName) {
+            $serialPorts = Get-WmiObject Win32_SerialPort
+            if ($serialPorts) {
+                $serialPortName = $serialPorts[0].DeviceID
+            }
         }
-    }
 
-    $msiexecArgumentList = "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog"
-    if ($serialPortName) {
-        $msiexecArgumentList += " LOGGINGSERIALPORTNAME=$serialPortName"
-    }
+        $msiexecArgumentList = "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog"
+        if ($serialPortName) {
+            $msiexecArgumentList += " LOGGINGSERIALPORTNAME=$serialPortName"
+        }
 
-    $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList $msiexecArgumentList
-    if ($p.ExitCode -ne 0) {
-        throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
-    }
+        $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList $msiexecArgumentList
+        if ($p.ExitCode -ne 0) {
+            throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
+        }
 
-    $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
-    & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
-    Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
+        $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
+        & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
+        $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
+        Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
+    } else {
+        $architecture = $null
+        $getArcht = (Get-WmiObject Win32_OperatingSystem -Computername $ENV:computername).OSArchitecture
+        if ($getArcht -eq "64-bit") {
+            $architecture = "amd64"
+        } elseif ($getArcht = "32-bit") {
+            $architecture = "i686"
+        } else {
+            Throw "Failed to get architecture"
+        }
+        $minimalUnattendPath = "$resourcesDir\Unattend.xml"
+        if (!(Test-Path $minimalUnattendPath)) {
+        return $false
+        } try {
+            $xml = [xml](Get-Content $minimalUnattendPath)
+        } catch {
+            Write-Error "Failed to load: $minimalUnattendPath"
+        return $false
+        }
+        foreach ( $i in $xml.unattend.settings.component) {
+            if ($i.processorArchitecture -eq "%ARCH%") {
+                $index = [array]::IndexOf($xml.unattend.settings.component, $i)
+                    if ($xml.unattend.settings.component[$index].processorArchitecture) {
+                        $xml.unattend.settings.component[$index].processorArchitecture = $architecture
+                    }
+                }
+        }
+        $xml.save($minimalUnattendPath)
+        Copy-Item "$resourcesDir\Unattend.xml" -Destination $env:Temp
+        $unattendedXmlPath =  Join-Path $env:Temp "Unattend.xml"
+    }
 
     Run-Defragment
-
     Release-IP
 
     if (Is-WindowsClient -and $enableAdministrator) {
         Enable-AdministratorAccount
     }
-
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
-    $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
     Set-PersistDrivers -Path $unattendedXmlPath -Persist:$persistDrivers
 
     if ($disableSwap) {
@@ -391,6 +428,7 @@ try
         }
         Set-UnattendEnableSwap -Path $unattendedXmlPath
     }
+
     Run-CustomScript "RunBeforeSysprep.ps1"
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
     Run-CustomScript "RunAfterSysprep.ps1"
