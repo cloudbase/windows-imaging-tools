@@ -122,7 +122,10 @@ function Get-AvailableConfigOptions {
           "Description" = "In case the hardware on which the image is generated will also be the hardware on
                            which the image will be deployed this can be set to true, otherwise the spawned
                            instance is prone to BSOD."},
-        @{"Name" = "beta_release"; "GroupName" = "cloudbase_init"; "DefaultValue" = $false; "AsBoolean" = $true;
+        @{"Name" = "install_cloudbase_init"; "GroupName" = "cloudbase_init"; "DefaultValue" = $true; "AsBoolean" = $true;
+          "Description" = "Set this value to false if cloudbase-init should not be installed.
+          In the case that cloudbase-init will not be installed, a minimal Unattend.xml value will be used for sysprep."},
+        @{"Name" = "beta_release"; "GroupName" = "cloudbase_init"; "DefaultValue" = $true; "AsBoolean" = $true;
           "Description" = "This is a switch that allows the selection of Cloudbase-Init branches. If set to true, the
                            beta branch will be used:
                            https://cloudbase.it/downloads/CloudbaseInitSetup_<arch>.msi, where arch can be x86 or x64
