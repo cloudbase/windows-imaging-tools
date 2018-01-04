@@ -162,6 +162,7 @@ Describe "Test Resize-VHDImage" {
     Mock Optimize-Volume -Verifiable -ModuleName $moduleName { return }
     Mock Get-PartitionSupportedSize -Verifiable -ModuleName $moduleName { return @{"SizeMin" = 100} }
     Mock Resize-Partition -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Run-SecureDelete -Verifiable -ModuleName $moduleName { return 0 }
     Mock Resize-VHD -Verifiable -ModuleName $moduleName { return 0 }
     Mock Dismount-VHD -Verifiable -ModuleName $moduleName { return 0 }
 
