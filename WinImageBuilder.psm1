@@ -785,35 +785,35 @@ function Compress-Image {
                         }
                         Remove-Item -Force $ImagePath
                 }
+                if ($compresionFormat -eq "gz") {
+                    Write-Host "Compressing $tmpName to gzip"
+                        $tmpPathName = (Get-Item $tmpName).Name
+                        Write-Host "Creating gzip..."
+                        & $pigz -p12 $tmpPathName
+                        if ($LASTEXITCODE) {
+                            if ((Test-Path $tmpName)) {
+                                Remove-Item -Force $tmpName
+                            }
+                            throw "pigz.exe failed while creating gzip file for: $tmpName"
+                        }
+                    $tmpName = ($tmpName + ".gz")
+                }
+                if ($compresionFormat -eq "zip") {
+                    Write-Host "Archiving $VirtualDiskPath to zip $tmpName"
+                        # Avoid storing the full path in the archive
+                        Write-Host "Creating zip archive..."
+                        $zipName = $tmpName + ".zip"
+                        & $7zip a -t7z $zipName $tmpName
+                        if ($LASTEXITCODE) {
+                            if ((Test-Path $tmpName)) {
+                                Remove-Item -Force $tmpName
+                            }
+                            throw "7za.exe failed while creating tar file for image: $tmpName"
+                        }
+                    Remove-Item -Force $tmpName
+                }
             } finally {
                     Pop-Location }
-            if ($compresionFormat -eq "gz") {
-                Write-Host "Compressing $tmpName to gzip"
-                    $tmpPathName = (Get-Item $tmpName).Name
-                    Write-Host "Creating gzip..."
-                    & $pigz -p12 $tmpPathName
-                    if ($LASTEXITCODE) {
-                        if ((Test-Path $tmpName)) {
-                            Remove-Item -Force $tmpName
-                        }
-                        throw "pigz.exe failed while creating gzip file for: $tmpName"
-                    }
-                $tmpName = ($tmpName + ".gz")
-            }
-            if ($compresionFormat -eq "zip") {
-                Write-Host "Archiving $VirtualDiskPath to zip $tmpName"
-                    # Avoid storing the full path in the archive
-                    Write-Host "Creating zip archive..."
-                    $zipName = $tmpName + ".zip"
-                    & $7zip a -t7z $zipName $tmpName
-                    if ($LASTEXITCODE) {
-                        if ((Test-Path $tmpName)) {
-                            Remove-Item -Force $tmpName
-                        }
-                        throw "7za.exe failed while creating tar file for image: $tmpName"
-                    }
-                Remove-Item -Force $tmpName
-            }
         }
     } catch {
         Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
