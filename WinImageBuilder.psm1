@@ -893,13 +893,13 @@ function Resize-VHDImage {
     Write-Host "Initial VHD size is: $vhdSizeGB GB"
 
     $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | Get-Partition | Get-Volume).DriveLetter
-    try
-    {
+    try {
         Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim -SlabConsolidate
 
-        $partitionInfo = Get-Partition -DriveLetter $Drive
         $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
-        $CurrSize = ((Get-Partition -DriveLetter $Drive).Size/1GB)
+        $partition = [array](Get-Partition -DriveLetter $Drive) | Sort-Object { $_.Size } | `
+             Select-Object -Last 1
+        $CurrSize = $partition.Size / 1GB
         Write-Host "Current partition size: $CurrSize GB"
         # Leave free space for making sure Sysprep finishes successfuly
         $newSizeGB = [int](($MinSize + $FreeSpace)/1GB) + 1
@@ -913,7 +913,9 @@ function Resize-VHDImage {
                 $sizeIncreased = ($NewSize + ($step * $global:i))
                 Write-Host "Size increased: $sizeIncreased"
                 $global:i = $global:i + 1
-                Resize-Partition -DriveLetter $Drive -Size $sizeIncreased -ErrorAction "Stop"
+                Resize-Partition -DiskNumber $partition.DiskNumber `
+                    -PartitionNumber $partition.PartitionNumber `
+                    -Size $sizeIncreased -ErrorAction "Stop"
             }
         }
     }
