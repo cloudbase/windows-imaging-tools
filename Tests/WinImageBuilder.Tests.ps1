@@ -156,6 +156,8 @@ Describe "Test Resize-VHDImage" {
         $b = New-Object System.Management.Automation.PSObject
         $b | Add-Member -MemberType NoteProperty -Name "DriveLetter" -Value "L" -Force
         $b | Add-Member -MemberType NoteProperty -Name "Size" -Value 90 -Force
+        $b | Add-Member -MemberType NoteProperty -Name "PartitionNumber" -Value 2 -Force
+        $b | Add-Member -MemberType NoteProperty -Name "DiskNumber" -Value 2 -Force
        return $b
     }
     Mock Get-Volume -Verifiable -ModuleName $moduleName { return @{"DriveLetter" = "F"} }
