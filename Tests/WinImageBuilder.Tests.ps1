@@ -78,6 +78,7 @@ Import-Module $modulePath
 
 Describe "Test New-WindowsCloudImage" {
     Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Validate-WindowsImageConfig -Verifiable -ModuleName $moduleName { return 0 }
     Mock Set-DotNetCWD -Verifiable -ModuleName $moduleName { return 0 }
     Mock Is-Administrator -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-WimFileImagesInfo -Verifiable -ModuleName $moduleName `
@@ -110,11 +111,11 @@ Describe "Test New-WindowsCloudImage" {
 
 
     It "Should create a windows image" {
-        New-WindowsCloudImage -ConfigFilePath $fakeConfigPath | Should Be 0
+        New-WindowsCloudImage -ConfigFilePath $fakeConfigPath | Should -Contain 0
     }
 
     It "should run all mocked commands" {
-        Assert-VerifiableMocks
+        Assert-VerifiableMock
     }
 }
 
@@ -167,11 +168,11 @@ Describe "Test Resize-VHDImage" {
 
     It "Should resize a vhd image" {
         Resize-VHDImage -VirtualDiskPath "fakePath" `
-            -FreeSpace 100 | Should Be 0
+            -FreeSpace 100 | Should -Contain 0
     }
 
     It "should run all mocked commands" {
-        Assert-VerifiableMocks
+        Assert-VerifiableMock
     }
 }
 
@@ -191,10 +192,10 @@ Describe "Test New-WindowsOnlineImage" {
     Mock Get-VMSwitch -Verifiable -ModuleName $moduleName { return @{"Name"="external";"SwitchType"="External"} }
 
     It "Should create an online image" {
-        New-WindowsOnlineImage -ConfigFilePath $fakeConfigPath | Should Be 0
+        New-WindowsOnlineImage -ConfigFilePath $fakeConfigPath | Should -Contain 0
     }
 
     It "should run all mocked commands" {
-        Assert-VerifiableMocks
+        Assert-VerifiableMock
     }
 }
