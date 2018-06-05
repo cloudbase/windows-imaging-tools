@@ -187,7 +187,6 @@ Describe "Test New-WindowsOnlineImage" {
     Mock Convert-VirtualDisk -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-Random -Verifiable -ModuleName $moduleName { return 1 }
     Mock Remove-Item -Verifiable -ModuleName $moduleName { return 0 }
-    Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-VMSwitch -Verifiable -ModuleName $moduleName { return @{"Name"="external";"SwitchType"="External"} }
 
     It "Should create an online image" {
