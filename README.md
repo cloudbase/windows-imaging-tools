@@ -1,6 +1,6 @@
 Windows Imaging Tools
 ===============================
-[![Master branch](https://ci.appveyor.com/api/projects/status/github/cloudbase/windows-openstack-imaging-tools?branch=experimental&svg=true)](https://ci.appveyor.com/project/ader1990/windows-openstack-imaging-tools-w885m)
+[![Master branch](https://ci.appveyor.com/api/projects/status/github/cloudbase/windows-openstack-imaging-tools?branch=master&svg=true)](https://ci.appveyor.com/project/ader1990/windows-openstack-imaging-tools-w885m)
 
 Windows OpenStack Imaging Tools automates the generation of Windows images.<br/>
 The tools are a bundle of PowerShell modules and scripts.
@@ -51,7 +51,6 @@ Run `git submodule update --init` to retrieve them
 ```powershell
 git clone https://github.com/cloudbase/windows-openstack-imaging-tools.git
 pushd windows-openstack-imaging-tools
-git checkout experimental
 Import-Module .\WinImageBuilder.psm1
 Import-Module .\Config.psm1
 Import-Module .\UnattendResources\ini.psm1
