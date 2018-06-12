@@ -1088,6 +1088,17 @@ function Set-WindowsWallpaper {
     Write-Log "Wallpaper was set."
 }
 
+function Get-TotalLogicalProcessors {
+    PROCESS {
+        $count = 0
+        $cpus = Get-WmiObject Win32_Processor
+        foreach ($cpu in $cpus) {
+            $count += $cpu.NumberOfLogicalProcessors
+        }
+        return $count
+    }
+}
+
 function New-WindowsOnlineImage {
     <#
     .SYNOPSIS
@@ -1137,8 +1148,8 @@ function New-WindowsOnlineImage {
                 -f $windowsImageConfig.external_switch
         }
     }
-    if ($windowsImageConfig.cpu_count -gt `
-        (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors) {
+
+    if ($windowsImageConfig.cpu_count -gt Get-TotalLogicalProcessors) {
         throw "CpuCores larger then available (logical) CPU cores."
     }
 
@@ -1365,8 +1376,7 @@ function New-WindowsFromGoldenImage {
                 -f $windowsImageConfig.external_switch
         }
     }
-    if ($windowsImageConfig.cpu_count -gt `
-        (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors) {
+    if ($windowsImageConfig.cpu_count -gt Get-TotalLogicalProcessors) {
         throw "CpuCores larger than available (logical) CPU cores."
     }
 
