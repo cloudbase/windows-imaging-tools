@@ -138,7 +138,12 @@ function Get-AvailableConfigOptions {
                           The path needs to be a locally accesible file path."},
         @{"Name" = "wallpaper_path";
           "Description" = "If set, it will replace the Cloudbase Solutions wallpaper to the one specified.
-                           The wallpaper needs to be a valid .jpg/.jpeg image."}
+                           The wallpaper needs to be a valid .jpg/.jpeg image."},
+        @{"Name" = "wallpaper_solid_color";
+          "Description" = "If set, it will replace the Cloudbase Solutions wallpaper to a solid color.
+                           Currently, the only allowed solid color is '0 0 0' (black).
+                           If both wallpaper_path and wallpaper_solid_color are set,
+                           the script will throw an error."},
         @{"Name" = "compress_qcow2"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true and the target image format is QCOW2, the image conversion will
                            use qemu-img built-in compression. The compressed qcow2 image will be smaller, but the conversion
