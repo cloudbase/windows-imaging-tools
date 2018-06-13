@@ -1046,27 +1046,55 @@ function Get-ImageInformation {
 function Set-WindowsWallpaper {
     Param(
         [Parameter(Mandatory=$true)][PathShouldExist()]
-        [string]$winDrive,
+        [string]$WinDrive,
         [Parameter(Mandatory=$false)]
-        [string]$WallpaperPath
+        [string]$WallpaperPath,
+        [Parameter(Mandatory=$false)]
+        [string]$WallpaperSolidColor
     )
 
     Write-Log "Set Wallpaper: $WallpaperPath..."
-    if (!$WallpaperPath -or !(@('.jpg', '.jpeg') -contains `
-            (Get-Item $windowsImageConfig.wallpaper_path -ErrorAction SilentlyContinue).Extension)) {
-        $WallpaperPath = Join-Path $localResourcesDir "Wallpaper.jpg"
-    }
-    if (!(Test-Path $WallpaperPath)) {
-        throw "Walpaper path ``$WallpaperPath`` does not exist."
-    }
-    $wallpaperDestinationFolder = Join-Path $winDrive "\Windows\web\Wallpaper\Cloud"
-    if (!(Test-Path $wallpaperDestinationFolder)) {
-       New-Item -Type Directory $wallpaperDestinationFolder | Out-Null
-    }
-    Copy-Item -Force $WallpaperPath "$wallpaperDestinationFolder\Wallpaper.jpg"
-    Write-Host "Wallpaper copied to the image."
-
     $wallpaperGPOPath = Join-Path $localResourcesDir "GPO"
+    $basePolicyRegistry = Join-Path $wallpaperGPOPath "User/Registry.pol"
+    $wallpaperPolicyRegistry = Join-Path $wallpaperGPOPath "User/Registry-wallpaper.pol"
+    $solidColorPolicyRegistry = Join-Path $wallpaperGPOPath "User/Registry-solid-color.pol"
+
+    if ($WallpaperPath -and $WallpaperSolidColor) {
+        throw "WallpaperPath and WallpaperSolidColor cannot be set at the same time."
+    }
+    if ($WallpaperPath -or !($WallpaperSolidColor)) {
+        if (!$WallpaperPath -or !(@('.jpg', '.jpeg') -contains `
+                (Get-Item $windowsImageConfig.wallpaper_path -ErrorAction SilentlyContinue).Extension)) {
+            $WallpaperPath = Join-Path $localResourcesDir "Wallpaper.jpg"
+        }
+        if (!(Test-Path $WallpaperPath)) {
+            throw "Walpaper path ``$WallpaperPath`` does not exist."
+        }
+        $wallpaperDestinationFolder = Join-Path $winDrive "\Windows\web\Wallpaper\Cloud"
+        if (!(Test-Path $wallpaperDestinationFolder)) {
+           New-Item -Type Directory $wallpaperDestinationFolder | Out-Null
+        }
+        Copy-Item -Force $WallpaperPath "$wallpaperDestinationFolder\Wallpaper.jpg"
+        Write-Host "Wallpaper copied to the image."
+
+        # Note(avladu) if the image already has been booted and has a wallpaper, the
+        # GPO will not be applied for the users who have already logged in.
+        # The wallpaper can still be changed by replacing the cached one.
+        $cachedWallpaperPartPath = "\Users\Administrator\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper*"
+        $cachedWallpaperPath = Join-Path -ErrorAction SilentlyContinue $winDrive $cachedWallpaperPartPath
+        if (Test-Path $cachedWallpaperPath) {
+            $wallpaperPathFullName = (Get-Item $cachedWallpaperPath).FullName
+            Remove-Item -Recurse -Force ((Get-Item $cachedWallpaperPath).DirectoryName + "\*")
+            Copy-Item -Force $WallpaperPath $wallpaperPathFullName
+            Write-Host "Cached wallpaper for user Administrator has been replaced."
+        }
+        Copy-Item -Force $wallpaperPolicyRegistry $basePolicyRegistry
+        Remove-Item -Force $solidColorPolicyRegistry -ErrorAction SilentlyContinue
+    } else {
+        Copy-Item -Force $solidColorPolicyRegistry $basePolicyRegistry
+        Remove-Item -Force $wallpaperPolicyRegistry -ErrorAction SilentlyContinue
+    }
+
     $windowsLocalGPOPath = Join-Path $winDrive "\Windows\System32\GroupPolicy"
     if (!(Test-Path $windowsLocalGPOPath)) {
        New-Item -Type Directory $windowsLocalGPOPath | Out-Null
@@ -1074,17 +1102,6 @@ function Set-WindowsWallpaper {
     Copy-Item -Recurse -Force "$wallpaperGPOPath\*" "$windowsLocalGPOPath\"
     Write-Host "Wallpaper GPO copied to the image."
 
-    # Note(avladu) if the image already has been booted and has a wallpaper, the
-    # GPO will not be applied for the users who have already logged in.
-    # The wallpaper can still be changed by replacing the cached one.
-    $cachedWallpaperPartPath = "\Users\Administrator\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper*"
-    $cachedWallpaperPath = Join-Path -ErrorAction SilentlyContinue $winDrive $cachedWallpaperPartPath
-    if (Test-Path $cachedWallpaperPath) {
-        $wallpaperPathFullName = (Get-Item $cachedWallpaperPath).FullName
-        Remove-Item -Recurse -Force ((Get-Item $cachedWallpaperPath).DirectoryName + "\*")
-        Copy-Item -Force $WallpaperPath $wallpaperPathFullName
-        Write-Host "Cached wallpaper for user Administrator has been replaced."
-    }
     Write-Log "Wallpaper was set."
 }
 
@@ -1288,7 +1305,8 @@ function New-WindowsCloudImage {
         Copy-CustomResources -ResourcesDir $resourcesDir -CustomResources $windowsImageConfig.custom_resources_path `
                              -CustomScripts $windowsImageConfig.custom_scripts_path
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
-        Set-WindowsWallpaper $winImagePath $windowsImageConfig.wallpaper_path
+        Set-WindowsWallpaper -WinDrive $winImagePath -WallpaperPath $windowsImageConfig.wallpaper_path `
+            -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
         Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
         Apply-Image $winImagePath $windowsImageConfig.wim_file_path $image.ImageIndex
@@ -1410,7 +1428,8 @@ function New-WindowsFromGoldenImage {
         Copy-CustomResources -ResourcesDir $resourcesDir -CustomResources $windowsImageConfig.custom_resources_path `
                              -CustomScripts $windowsImageConfig.custom_scripts_path
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
-        Set-WindowsWallpaper $driveLetterGold $windowsImageConfig.wallpaper_path
+        Set-WindowsWallpaper -WinDrive $driveLetterGold -WallpaperPath $windowsImageConfig.wallpaper_path `
+            -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
         Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
         Dismount-VHD -Path $windowsImageConfig.gold_image_path
