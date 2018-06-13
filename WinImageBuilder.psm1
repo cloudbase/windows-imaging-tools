@@ -1053,11 +1053,9 @@ function Set-WindowsWallpaper {
         [string]$WallpaperSolidColor
     )
 
+    $useWallpaperImage = $false
     Write-Log "Set Wallpaper: $WallpaperPath..."
     $wallpaperGPOPath = Join-Path $localResourcesDir "GPO"
-    $basePolicyRegistry = Join-Path $wallpaperGPOPath "User/Registry.pol"
-    $wallpaperPolicyRegistry = Join-Path $wallpaperGPOPath "User/Registry-wallpaper.pol"
-    $solidColorPolicyRegistry = Join-Path $wallpaperGPOPath "User/Registry-solid-color.pol"
 
     if ($WallpaperPath -and $WallpaperSolidColor) {
         throw "WallpaperPath and WallpaperSolidColor cannot be set at the same time."
@@ -1088,11 +1086,7 @@ function Set-WindowsWallpaper {
             Copy-Item -Force $WallpaperPath $wallpaperPathFullName
             Write-Host "Cached wallpaper for user Administrator has been replaced."
         }
-        Copy-Item -Force $wallpaperPolicyRegistry $basePolicyRegistry
-        Remove-Item -Force $solidColorPolicyRegistry -ErrorAction SilentlyContinue
-    } else {
-        Copy-Item -Force $solidColorPolicyRegistry $basePolicyRegistry
-        Remove-Item -Force $wallpaperPolicyRegistry -ErrorAction SilentlyContinue
+        $useWallpaperImage = $true
     }
 
     $windowsLocalGPOPath = Join-Path $winDrive "\Windows\System32\GroupPolicy"
@@ -1100,6 +1094,17 @@ function Set-WindowsWallpaper {
        New-Item -Type Directory $windowsLocalGPOPath | Out-Null
     }
     Copy-Item -Recurse -Force "$wallpaperGPOPath\*" "$windowsLocalGPOPath\"
+    $basePolicyRegistry = Join-Path $windowsLocalGPOPath "User/Registry.pol"
+    $wallpaperPolicyRegistry = Join-Path $windowsLocalGPOPath "User/Registry-wallpaper.pol"
+    $solidColorPolicyRegistry = Join-Path $windowsLocalGPOPath "User/Registry-solid-color.pol"
+
+    if ($useWallpaperImage) {
+        Copy-Item -Force $wallpaperPolicyRegistry $basePolicyRegistry
+        Remove-Item -Force $solidColorPolicyRegistry -ErrorAction SilentlyContinue
+    } else {
+        Copy-Item -Force $solidColorPolicyRegistry $basePolicyRegistry
+        Remove-Item -Force $wallpaperPolicyRegistry -ErrorAction SilentlyContinue
+    }
     Write-Host "Wallpaper GPO copied to the image."
 
     Write-Log "Wallpaper was set."
