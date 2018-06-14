@@ -1099,10 +1099,10 @@ function Set-WindowsWallpaper {
     $solidColorPolicyRegistry = Join-Path $windowsLocalGPOPath "User/Registry-solid-color.pol"
 
     if ($useWallpaperImage) {
-        Copy-Item -Force $wallpaperPolicyRegistry $basePolicyRegistry
+        Move-Item -Force $wallpaperPolicyRegistry $basePolicyRegistry
         Remove-Item -Force $solidColorPolicyRegistry -ErrorAction SilentlyContinue
     } else {
-        Copy-Item -Force $solidColorPolicyRegistry $basePolicyRegistry
+        Move-Item -Force $solidColorPolicyRegistry $basePolicyRegistry
         Remove-Item -Force $wallpaperPolicyRegistry -ErrorAction SilentlyContinue
     }
     Write-Log "Wallpaper GPO copied to the image."
