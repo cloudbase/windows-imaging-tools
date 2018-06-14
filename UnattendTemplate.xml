@@ -88,10 +88,10 @@
                 <ProtectYourPC>3</ProtectYourPC>
                 <NetworkLocation>Work</NetworkLocation>
                 <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
-                <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
-                <!-- Comment the following two options on Windows Vista / 7 and Windows Server 2008 / 2008 R2 -->
+                <!-- Comment the following three options on Windows Vista / 7 and Windows Server 2008 / 2008 R2 -->
                 <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
                 <HideLocalAccountScreen>true</HideLocalAccountScreen>
+                <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
                 <!--
                 <SkipMachineOOBE>true</SkipMachineOOBE>
                 <SkipUserOOBE>true</SkipUserOOBE>

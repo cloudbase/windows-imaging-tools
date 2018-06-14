@@ -29,7 +29,7 @@
     </xsl:copy>
   </xsl:template>
 
-  <xsl:template match='u:unattend/u:settings/u:component[@name="Microsoft-Windows-Shell-Setup"]/u:OOBE/u:HideOnlineAccountScreens | u:unattend/u:settings/u:component[@name="Microsoft-Windows-Shell-Setup"]/u:OOBE/u:HideLocalAccountScreen'>
+  <xsl:template match='u:unattend/u:settings/u:component[@name="Microsoft-Windows-Shell-Setup"]/u:OOBE/u:HideOnlineAccountScreens | u:unattend/u:settings/u:component[@name="Microsoft-Windows-Shell-Setup"]/u:OOBE/u:HideLocalAccountScreen | u:unattend/u:settings/u:component[@name="Microsoft-Windows-Shell-Setup"]/u:OOBE/u:HideOEMRegistrationScreen'>
       <xsl:if test="$versionMajor &gt;= 6 and $versionMinor &gt;= 2">
         <xsl:copy>
           <xsl:apply-templates select="@*|node()"/>
