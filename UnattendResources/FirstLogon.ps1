@@ -43,6 +43,6 @@ catch
     # Prevents the setup from proceeding
 
     $logonScriptPath = "$resourcesDir\Logon.ps1"
-    if ( Test-Path $logonScriptPath ) { del $logonScriptPath }
+    if ( Test-Path $logonScriptPath ) { Remove-Item $logonScriptPath }
     throw
 }

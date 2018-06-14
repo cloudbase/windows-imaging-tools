@@ -6,8 +6,8 @@ Windows OpenStack Imaging Tools automates the generation of Windows images.<br/>
 The tools are a bundle of PowerShell modules and scripts.
 
 The supported target environments for the Windows images are:
-* [OpenStack](https://www.openstack.org/) with KVM, Hyper-V, VMware and baremetal hypervisor types
-* [MAAS](https://maas.io/) with KVM, Hyper-V, VMware and baremetal
+* OpenStack with KVM, Hyper-V, VMware and baremetal hypervisor types
+* MAAS with KVM, Hyper-V, VMware and baremetal
 
 The generation environment needs to be a Windows one, with Hyper-V virtualization enabled.<br/>
 If you plan to run the online Windows setup step on another system / hypervisor, the Hyper-V virtualization is not required.
@@ -21,6 +21,11 @@ The following versions of Windows images (both x86 / x64, if existent) to be gen
 To generate Windows Nano Server 2016, please use the following repository:
 
 https://github.com/cloudbase/cloudbase-init-offline-install
+
+## Workflow of Windows imaging tools
+<img src="https://user-images.githubusercontent.com/1412442/29972658-8fd4d36a-8f35-11e7-80bd-cea90e48e8ba.png" width="750">
+
+
 
 ## Fast path to create a Windows image
 
@@ -40,34 +45,26 @@ and Windows Assessment and Deployment Kit (ADK)
 the windows-curtin-hooks and WindowsUpdates git submodules are required.<br/>
 Run `git submodule update --init` to retrieve them
 * Import the WinImageBuilder.psm1 module
-* Use the New-WindowsCloudImage or New-WindowsOnlineCloudImage methods with <br/> the appropriate configuration options
+* Use the New-WindowsCloudImage or New-WindowsOnlineCloudImage methods with <br/> the appropriate configuration file
 
 ### PowerShell image generation example for OpenStack KVM (host requires Hyper-V enabled)
 ```powershell
 git clone https://github.com/cloudbase/windows-openstack-imaging-tools.git
 pushd windows-openstack-imaging-tools
 Import-Module .\WinImageBuilder.psm1
+Import-Module .\Config.psm1
+Import-Module .\UnattendResources\ini.psm1
+# Create a config.ini file using the built in function, then set them accordingly to your needs
+$ConfigFilePath = ".\config.ini"
+New-WindowsImageConfig -ConfigFilePath $ConfigFilePath
 
-# The Windows image file path that will be generated
-$windowsImagePath = "C:\images\my-windows-image.qcow2"
+# To automate the config options setting:
+Set-IniFileValue -Path (Resolve-Path $ConfigFilePath) -Section "DEFAULT" `
+                                      -Key "wim_file_path" `
+                                      -Value "D:\Sources\install.wim"
+# Use the desired command with the config file you just created
 
-# The wim file path is the installation image on the Windows ISO
-$wimFilePath = "D:\Sources\install.wim"
-
-# Every Windows ISO can contain multiple Windows flavors like Core, Standard, Datacenter
-# Usually, the first image version is the Core one
-$image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[0]
-
-$virtIOISOPath = "C:\images\virtio.iso"
-# Note(avladu): Do not use stable 0.1.126 version because of this bug https://github.com/crobinso/virtio-win-pkg-scripts/issues/10
-$virtIODownloadLink = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.133-2/virtio-win.iso"
-
-# Download the VirtIO drivers ISO from Fedora
-(New-Object System.Net.WebClient).DownloadFile($virtIODownloadLink, $VirtIOISOPath)
-
-New-WindowsOnlineImage -WimFilePath $wimFilePath -ImageName $image.ImageName `
-    -WindowsImagePath $windowsImagePath -Type 'KVM' -VirtioISOPath $virtIOISOPath `
-    -SizeBytes 30GB -CpuCores 4 -Memory 4GB -SwitchName 'external'
+New-WindowsOnlineImage -ConfigFilePath $ConfigFilePath
 
 popd
 
@@ -95,6 +92,31 @@ the resulting VHDX is shrinked to a minimum size and converted to the required f
 You can find a PowerShell example to generate a raw OpenStack Ironic image that also works on KVM<br/>
 in `Examples/create-windows-online-cloud-image.ps1`
 
+## Frequently Asked Questions (FAQ)
+
+### The image generation never stops
+  * Make sure that the Hyper-V VMSwitch is correctly configured and it allows Internet connectivity<br/>
+  if you have configured the image generation to install the Windows updates.
+  * Check in the associated Hyper-V VM that the Logon.ps1 script has not failed.<br/>
+  If the script failed, there should be a PowerShell window showing the error message.
+
+### I booted an instance with the image and I got a BSOD
+  * This is the most common scenario that one can encounter and it is easily fixable.
+  * If you boot on KVM hypervisor, make sure that you configure the correct path for the ISO/folder with VirtIO drivers.<br/>
+  The configuration options are `virtio_iso_path` and `virtio_base_path`.
+  * On the KVM hypervisor side, make sure you start the KVM vm process with the `--enable-kvm` flag.
+  * If you boot on a baremetal machine, make sure that either the basic Windows installation has the storage drivers builtin<br/>
+  or that you specify the proper path to drivers folder for the `drivers_path` configuration option.
+
+### I booted an instance with the image and I got a forever Windows loading screen
+  * This usually happens when the hypervisor does not expose the CPU flags required for that specific Windows version.
+  * For example, with Windows 10, you can check https://www.microsoft.com/en-us/windows/windows-10-specifications <br/>
+  and make sure that the CPU flags are exposed by your hypervisor of choice.
+
+### Useful links on ask.cloudbase.it
+  * https://ask.cloudbase.it/question/2365/windows-server-2016-standard-image-wont-boot-blue-windows-icon-hangs/
+  * https://ask.cloudbase.it/question/1227/nano-server-wont-boot/
+  * https://ask.cloudbase.it/question/1179/win2012-boot-error-on-openstack-in-vmware-env/
 
 ## For developers
 
@@ -120,4 +142,3 @@ cmd /c 'powershell.exe -NonInteractive { Invoke-Pester }'
 
 This will run all tests without polluting your current shell environment. <br/>
 This is not needed if you run it in a Continuous Integration environment.
-

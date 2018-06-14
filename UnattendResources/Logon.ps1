@@ -1,12 +1,13 @@
 $ErrorActionPreference = "Stop"
 $resourcesDir = "$ENV:SystemDrive\UnattendResources"
 $configIniPath = "$resourcesDir\config.ini"
+$customScriptsDir = "$resourcesDir\CustomScripts"
 
 function Set-PersistDrivers {
     Param(
     [parameter(Mandatory=$true)]
     [string]$Path,
-    [switch]$Persist=$true
+    [switch]$Persist
     )
     if (!(Test-Path $Path)) {
         return $false
@@ -182,14 +183,150 @@ function Disable-Swap {
     }
 }
 
+function License-Windows {
+    Param(
+         [parameter(Mandatory=$true)]
+         [string]$ProductKey
+    )
+    $licenseWindows = $false
+    $slmgrOutput = cscript.exe "$env:windir\system32\slmgr.vbs" /dli
+    if ($lastExitCode) {
+        throw "Windows license details could not be retrieved."
+    }
+    if ($slmgrOutput -like "*License Status: Licensed*") {
+       $partialKey = ($slmgrOutput -like "Partial Product Key*").Replace("Partial Product Key:","").Trim()
+       Write-Host "Windows is already licensed with partial key: $partialKey"
+       if (!(($ProductKey -split "-") -contains $partialKey)) {
+           $licenseWindows = $true
+       }
+    } else {
+        $licenseWindows = $true
+    }
+    if ($licenseWindows) {
+       $licensingOutput = cscript.exe "$env:windir\system32\slmgr.vbs" /ipk $ProductKey
+       if ($lastExitCode) {
+           throw $licensingOutput
+       } else {
+           Write-Host "Windows has been succesfully licensed."
+       }
+    } else {
+       Write-Host "Windows will not be licensed."
+    }
+}
+
+function Get-AdministratorAccount {
+    <#
+    .SYNOPSIS
+    Helper function to return the local Administrator account name.
+    This works with internationalized versions of Windows.
+    #>
+    PROCESS {
+        $version = $PSVersionTable.PSVersion.Major
+        if ($version -lt 4) {
+            # Get-CimInstance is not supported on powershell versions earlier then 4
+            New-Alias -Name Get-ManagementObject -Value Get-WmiObject
+        } else {
+            New-Alias -Name Get-ManagementObject -Value Get-CimInstance
+        }
+        $SID = "S-1-5-21-%-500"
+        $modifier = " LIKE "
+        $query = ("SID{0}'{1}'" -f @($modifier, $SID))
+        $s = Get-ManagementObject -Class Win32_UserAccount -Filter $query
+        if (!$s) {
+            throw "SID not found: $SID"
+        }
+        return $s.Name
+    }
+}
+
+function Enable-AdministratorAccount {
+    [string]$username = Get-AdministratorAccount
+    $setupCompletePath = "$env:windir\Setup\Scripts\SetupComplete.cmd"
+    $activate = "powershell -c net user {0} /active:yes" -f $username
+    $expiration = 'wmic path Win32_UserAccount WHERE Name="{0}" set PasswordExpires=true' -f $username
+    $logonReset = "net.exe user {0} /logonpasswordchg:yes" -f $username
+    Add-Content -Encoding Ascii -Value $activate -Path $setupCompletePath
+    Add-Content -Encoding Ascii -Value $expiration -Path $setupCompletePath
+    Add-Content -Encoding Ascii -Value $logonReset -Path $setupCompletePath
+    & cmd.exe /c "net.exe user $username """
+    # Note(atira): net.exe can set an empty password only if it is run from cmd.exe
+    if ($LASTEXITCODE) {
+        throw "Resetting $username password failed."
+    }
+}
+
+function Is-WindowsClient {
+        $Path = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\\'
+    try {
+        if ((Get-ItemProperty -Path $Path -Name InstallationType).InstallationType -eq "Client") {
+            return $true
+        }
+    } catch { }
+    return $false
+}
+
+function Run-CustomScript {
+    Param($ScriptFileName)
+    $fullScriptFilePath = Join-Path $customScriptsDir $ScriptFileName
+    if (Test-Path $fullScriptFilePath) {
+        Write-Host "Executing script $fullScriptFilePath"
+        & $fullScriptFilePath
+	if ($LastExitCode -eq 1004) {
+	    # exit this script
+	    exit 0
+	}
+	if ($LastExitCode -eq 1005) {
+	    # exit this script and reboot
+	    shutdown -r -t 0 -f
+	    exit 0
+	}
+	if ($LastExitCode -eq 1006) {
+	    # exit this script and shutdown
+	    shutdown -s -t 0 -f
+	    exit 0
+	}
+	if ($LastExitCode -eq 1) {
+	    throw "Script $ScriptFileName executed unsuccessfuly"
+	}
+
+    }
+}
+
+function Install-VMwareTools {
+    $Host.UI.RawUI.WindowTitle = "Installing VMware tools..."
+    $vmwareToolsInstallArgs = "/s /v /qn REBOOT=R /l $ENV:Temp\vmware_tools_install.log"
+    if (Test-Path $resourcesDir) {
+        $vmwareToolsPath = Join-Path $resourcesDir "\VMware-tools.exe"
+    }
+    $p = Start-Process -FilePath $vmwareToolsPath -ArgumentList $vmwareToolsInstallArgs -Wait -verb runAS
+    if ($p.ExitCode) {
+        throw "VMware tools setup failed" 
+    }
+}
+
 try
 {
     Import-Module "$resourcesDir\ini.psm1"
-    $installUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "InstallUpdates" -Default $false -AsBoolean
-    $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PersistDriverInstall" -Default $true -AsBoolean
-    $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "PurgeUpdates" -Default $false -AsBoolean
-    $disableSwap = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "DisableSwap" -Default $false -AsBoolean
+    $installUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "install_updates" -Default $false -AsBoolean
+    $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "persist_drivers_install" -Default $true -AsBoolean
+    $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
+    $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
+    $enableAdministrator = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" `
+                                            -Key "enable_administrator_account" -Default $false -AsBoolean
+    $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
+    try {
+        $vmwareToolsPath = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "vmware_tools_path"
+    } catch {}
+    try {
+        $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "product_key"
+    } catch {}
+    $serialPortName = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "serial_logging_port"
 
+    if ($productKey) {
+        License-Windows $productKey
+    }
+
+    Run-CustomScript "RunBeforeWindowsUpdates.ps1"
     if ($installUpdates) {
         Install-WindowsUpdates
     }
@@ -197,7 +334,17 @@ try
     ExecRetry {
         Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
     }
+    Run-CustomScript "RunAfterWindowsUpdates.ps1"
 
+    if ($goldImage) {
+        # Cleanup and shutting down the instance
+        Remove-Item -Recurse -Force $resourcesDir
+        shutdown -s -t 0 -f
+    }
+    if ($vmwareToolsPath) {
+        Install-VMwareTools
+    }
+    Run-CustomScript "RunBeforeCloudbaseInitInstall.ps1"
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
     $programFilesDir = $ENV:ProgramFiles
@@ -205,21 +352,34 @@ try
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
     $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
 
-    $serialPortName = @(Get-WmiObject Win32_SerialPort)[0].DeviceId
+    if (!$serialPortName) {
+        $serialPorts = Get-WmiObject Win32_SerialPort
+        if ($serialPorts) {
+            $serialPortName = $serialPorts[0].DeviceID
+        }
+    }
 
-    $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog LOGGINGSERIALPORTNAME=$serialPortName"
+    $msiexecArgumentList = "/i $CloudbaseInitMsiPath /qn /l*v $CloudbaseInitMsiLog"
+    if ($serialPortName) {
+        $msiexecArgumentList += " LOGGINGSERIALPORTNAME=$serialPortName"
+    }
+
+    $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList $msiexecArgumentList
     if ($p.ExitCode -ne 0) {
         throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
     }
 
     $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
     & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
+    Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
 
     Run-Defragment
 
-    Clean-UpdateResources
-
     Release-IP
+
+    if (Is-WindowsClient -and $enableAdministrator) {
+        Enable-AdministratorAccount
+    }
 
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
     $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
@@ -231,8 +391,10 @@ try
         }
         Set-UnattendEnableSwap -Path $unattendedXmlPath
     }
-
+    Run-CustomScript "RunBeforeSysprep.ps1"
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
+    Run-CustomScript "RunAfterSysprep.ps1"
+    Clean-UpdateResources
 } catch {
     $host.ui.WriteErrorLine($_.Exception.ToString())
     $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
