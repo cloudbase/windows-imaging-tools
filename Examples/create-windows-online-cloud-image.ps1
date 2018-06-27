@@ -62,23 +62,22 @@ $switchName = 'external'
 # The path were you want to create the config fille
 $configFilePath = Join-Path $scriptPath "Examples\config.ini"
 New-WindowsImageConfig -ConfigFilePath $configFilePath
-$fCfgPath = Resolve-Path $configFilePath
 
 #This is an example how to automate the image configuration file according to your needs
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "wim_file_path" -Value $wimFilePath
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_name" -Value $image.ImageName
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_path" -Value $windowsImagePath
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_type" -Value "MAAS"
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "install_maas_hooks" -Value "True"
-Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "cpu_count" -Value 4
-Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "ram_size" -Value (4GB)
-Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "disk_size" -Value (30GB)
-Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "external_switch" -Value $switchName
-Set-IniFileValue -Path $fCfgPath -Section "drivers" -Key "virtio_iso_path" -Value $virtIOISOPath
-Set-IniFileValue -Path $fCfgPath -Section "drivers" -Key "drivers_path" -Value $extraDriversPath
-Set-IniFileValue -Path $fCfgPath -Section "updates" -Key "install_updates" -Value "True"
-Set-IniFileValue -Path $fCfgPath -Section "updates" -Key "purge_updates" -Value "True"
-Set-IniFileValue -Path $fCfgPath -Section "sysprep" -Key "disable_swap" -Value "True"
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "wim_file_path" -Value $wimFilePath
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "image_name" -Value $image.ImageName
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "image_path" -Value $windowsImagePath
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "image_type" -Value "MAAS"
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "install_maas_hooks" -Value "True"
+Set-IniFileValue -Path $configFilePath -Section "vm" -Key "cpu_count" -Value 4
+Set-IniFileValue -Path $configFilePath -Section "vm" -Key "ram_size" -Value (4GB)
+Set-IniFileValue -Path $configFilePath -Section "vm" -Key "disk_size" -Value (30GB)
+Set-IniFileValue -Path $configFilePath -Section "vm" -Key "external_switch" -Value $switchName
+Set-IniFileValue -Path $configFilePath -Section "drivers" -Key "virtio_iso_path" -Value $virtIOISOPath
+Set-IniFileValue -Path $configFilePath -Section "drivers" -Key "drivers_path" -Value $extraDriversPath
+Set-IniFileValue -Path $configFilePath -Section "updates" -Key "install_updates" -Value "True"
+Set-IniFileValue -Path $configFilePath -Section "updates" -Key "purge_updates" -Value "True"
+Set-IniFileValue -Path $configFilePath -Section "sysprep" -Key "disable_swap" -Value "True"
 
 # This scripts generates a raw tar.gz-ed image file, that can be used with MAAS
 New-WindowsOnlineImage -ConfigFilePath $configFilePath

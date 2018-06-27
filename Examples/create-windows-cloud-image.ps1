@@ -57,19 +57,18 @@ $image = (Get-WimFileImagesInfo -WimFilePath $wimFilePath)[1]
 # The path were you want to create the config fille
 $configFilePath = Join-Path $scriptPath "Examples\config.ini"
 New-WindowsImageConfig -ConfigFilePath $configFilePath
-$fCfgPath = Resolve-Path $configFilePath
 
 #This is an example how to automate the image configuration file according to your needs
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "wim_file_path" -Value $wimFilePath
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_name" -Value $image.ImageName
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "image_path" -Value $virtualDiskPath
-Set-IniFileValue -Path $fCfgPath -Section "Default" -Key "virtual_disk_format" -Value "RAW"
-Set-IniFileValue -Path $fCfgPath -Section "vm" -Key "disk_size" -Value (30GB)
-Set-IniFileValue -Path $fCfgPath -Section "drivers" -Key "virtio_iso_path" -Value $virtIOISOPath
-Set-IniFileValue -Path $fCfgPath -Section "drivers" -Key "drivers_path" -Value $extraDriversPath
-Set-IniFileValue -Path $fCfgPath -Section "updates" -Key "install_updates" -Value "True"
-Set-IniFileValue -Path $fCfgPath -Section "updates" -Key "purge_updates" -Value "True"
-Set-IniFileValue -Path $fCfgPath -Section "sysprep" -Key "disable_swap" -Value "True"
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "wim_file_path" -Value $wimFilePath
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "image_name" -Value $image.ImageName
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "image_path" -Value $virtualDiskPath
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "virtual_disk_format" -Value "RAW"
+Set-IniFileValue -Path $configFilePath -Section "vm" -Key "disk_size" -Value (30GB)
+Set-IniFileValue -Path $configFilePath -Section "drivers" -Key "virtio_iso_path" -Value $virtIOISOPath
+Set-IniFileValue -Path $configFilePath -Section "drivers" -Key "drivers_path" -Value $extraDriversPath
+Set-IniFileValue -Path $configFilePath -Section "updates" -Key "install_updates" -Value "True"
+Set-IniFileValue -Path $configFilePath -Section "updates" -Key "purge_updates" -Value "True"
+Set-IniFileValue -Path $configFilePath -Section "sysprep" -Key "disable_swap" -Value "True"
 
 # This scripts generates a raw image file that, after being started as an instance and
 # after it shuts down, it can be used with Ironic or KVM hypervisor in OpenStack.
