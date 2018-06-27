@@ -304,6 +304,142 @@ function Install-VMwareTools {
     }
 }
 
+function Disable-NetBIOS {
+    <#
+    .SYNOPSIS
+    Disables NetBIOS over TCP at the network interface level
+    .DESCRIPTION
+    This cmdlet disables NetBIOS over TCP by configuring the network interfaces
+    and by disabling all associated firewall rules.  Additionally, the ports
+    used by NetBIOS over TCP are explicitly blocked.
+    #>
+
+    $NoInstances=$false
+    WMIC.exe NICCONFIG WHERE '(TcpipNetbiosOptions=0 OR TcpipNetbiosOptions=1)' GET Caption,Index,TcpipNetbiosOptions 2>&1 | foreach {
+        $NoInstances = $NoInstances -or $_ -like '*No Instance(s) Available*'
+    }
+    if ($NoInstances) {
+         Write-Host "NetBIOS over TCP is not enabled on any network interfaces"
+    } else {
+        # List Interfaces that will be changed
+        Write-Host "NetBIOS over TCP will be disabled on the following network interfaces:"
+        WMIC.exe NICCONFIG WHERE '(TcpipNetbiosOptions=0 OR TcpipNetbiosOptions=1)' GET Caption,Index,TcpipNetbiosOptions
+
+        # Disable NetBIOS over TCP
+        WMIC.exe NICCONFIG WHERE '(TcpipNetbiosOptions=0 OR TcpipNetbiosOptions=1)' CALL SetTcpipNetbios 2
+    }
+
+    # Disable NetBIOS firewall rules
+
+    $BuiltinNetBIOSRules=@(
+        "NETDIS-NB_Name-In-UDP",
+        "NETDIS-NB_Name-Out-UDP",
+        "NETDIS-NB_Datagram-In-UDP",
+        "NETDIS-NB_Datagram-Out-UDP",
+        "FPS-NB_Session-In-TCP",
+        "FPS-NB_Session-Out-TCP",
+        "FPS-NB_Name-In-UDP",
+        "FPS-NB_Name-Out-UDP",
+        "FPS-NB_Datagram-In-UDP",
+        "FPS-NB_Datagram-Out-UDP"
+    )
+    foreach ($name in $BuiltinNetBIOSRules) {
+         Write-Host "Disabling firewall rule: $name"
+        Disable-NetFirewallRule -Name $name
+    }
+
+    # Explicitly block NetBIOS Over TCP/IP:
+    #
+    # This blocks access to the below ports:
+    #
+    #   - UDP port 137 (name services)
+    #   - UDP port 138 (datagram services)
+    #   - TCP port 139 (session services)
+    #
+    # source: https://technet.microsoft.com/en-us/library/cc940063.aspx
+
+    if (-Not ((Get-NetFirewallRule).Name -contains "NB_Name-Disable-In-UDP")) {
+         Write-Host "Creating firewall rule: NB_Name-Disable-In-UDP"
+        New-NetFirewallRule `
+            -Name "NB_Name-Disable-In-UDP" `
+            -DisplayName "Disable File and Printer Sharing (NB-Session-In)" `
+            -Direction Inbound `
+            -Action Block `
+            -Protocol UDP `
+            -LocalPort 137
+    }
+
+    if (-Not ((Get-NetFirewallRule).Name -contains "NB_Name-Disable-Out-UDP")) {
+         Write-Host "Creating firewall rule: NB_Name-Disable-Out-UDP"
+        New-NetFirewallRule `
+            -Name "NB_Name-Disable-Out-UDP" `
+            -DisplayName "Disable File and Printer Sharing (NB-Session-Out)" `
+            -Direction Outbound `
+            -Action Block `
+            -Protocol UDP `
+            -RemotePort 137
+    }
+
+    if (-Not ((Get-NetFirewallRule).Name -contains "NB_Datagram-Disable-In-UDP")) {
+         Write-Host "Creating firewall rule: NB_Datagram-Disable-In-UDP"
+        New-NetFirewallRule `
+            -Name "NB_Datagram-Disable-In-UDP" `
+            -DisplayName "Disable File and Printer Sharing (NB-Session-In)" `
+            -Direction Inbound `
+            -Action Block `
+            -Protocol UDP `
+            -LocalPort 138
+    }
+
+    if (-Not ((Get-NetFirewallRule).Name -contains "NB_Datagram-Disable-Out-UDP")) {
+         Write-Host "Creating firewall rule: NB_Datagram-Disable-Out-UDP"
+        New-NetFirewallRule `
+            -Name "NB_Datagram-Disable-Out-UDP" `
+            -DisplayName "Disable File and Printer Sharing (NB-Session-Out)" `
+            -Direction Outbound `
+            -Action Block `
+            -Protocol UDP `
+            -RemotePort 138
+    }
+
+    if (-Not ((Get-NetFirewallRule).Name -contains "NB_Session-Disable-In-TCP")) {
+         Write-Host "Creating firewall rule: NB_Session-Disable-In-TCP"
+        New-NetFirewallRule `
+            -Name "NB_Session-Disable-In-TCP" `
+            -DisplayName "Disable File and Printer Sharing (NB-Session-In)" `
+            -Direction Inbound `
+            -Action Block `
+            -Protocol TCP `
+            -LocalPort 139
+    }
+
+    if (-Not ((Get-NetFirewallRule).Name -contains "NB_Session-Disable-Out-TCP")) {
+         Write-Host "Creating firewall rule: NB_Session-Disable-Out-TCP"
+        New-NetFirewallRule `
+            -Name "NB_Session-Disable-Out-TCP" `
+            -DisplayName "Disable File and Printer Sharing (NB-Session-Out)" `
+            -Direction Outbound `
+            -Action Block `
+            -Protocol TCP `
+            -RemotePort 139
+    }
+
+    $ExplicitBlockNetBIOSRules=@(
+        "NB_Name-Disable-In-UDP",
+        "NB_Name-Disable-Out-UDP",
+        "NB_Datagram-Disable-In-UDP",
+        "NB_Datagram-Disable-Out-UDP",
+        "NB_Session-Disable-In-TCP",
+        "NB_Session-Disable-Out-TCP"
+    )
+    foreach ($name in $ExplicitBlockNetBIOSRules) {
+         Write-Host "Enabling firewall rule: $name"
+        Enable-NetFirewallRule -Name $name
+    }
+
+     Write-Host "Disable-NetBIOS: Complete"
+}
+
 try
 {
     Import-Module "$resourcesDir\ini.psm1"
@@ -313,6 +449,8 @@ try
     $disableSwap = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "disable_swap" -Default $false -AsBoolean
     $enableAdministrator = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" `
                                             -Key "enable_administrator_account" -Default $false -AsBoolean
+    $enableAdvancedSecurity = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" `
+                                               -Key "enable_advanced_security" -Default $false -AsBoolean
     $goldImage = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "gold_image" -Default $false -AsBoolean
     try {
         $vmwareToolsPath = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "vmware_tools_path"
@@ -385,6 +523,9 @@ try
     $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
     Set-PersistDrivers -Path $unattendedXmlPath -Persist:$persistDrivers
 
+    if ($enableAdvancedSecurity) {
+        Disable-NetBIOS
+    }
     if ($disableSwap) {
         ExecRetry {
             Disable-Swap

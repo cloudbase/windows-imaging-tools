@@ -83,6 +83,8 @@ function Get-AvailableConfigOptions {
         @{"Name" = "enable_administrator_account"; "DefaultValue" = $false; "AsBoolean" = $true
           "Description" = "If set to true the Administrator account will be enabled on the client
                            versions of Windows, which have the Administrator account disabled by default"},
+        @{"Name" = "enable_advanced_security"; "DefaultValue" = $false; "AsBoolean" = $true
+          "Description" = "If set to true the NetBIOS over TCP will be disabled"},
         @{"Name" = "administrator_password"; "GroupName" = "vm"; "DefaultValue" = "Pa`$`$w0rd";
           "Description" = "This will be the Administrator user's, so that AutoLogin can be performed on the instance,
                            in order to install the required products,
