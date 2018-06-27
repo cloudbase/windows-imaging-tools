@@ -73,6 +73,7 @@ function Get-IniFileValue
     )
     process
     {
+        $Path = Resolve-Path $Path
         $sb = New-Object -TypeName "System.Text.StringBuilder" -ArgumentList 1000
         $retVal = [PSCloudbase.Win32IniApi]::GetPrivateProfileString($Section, $Key, $Default, $sb, $sb.Capacity, $Path)
         if (!$retVal)
@@ -122,6 +123,7 @@ function Set-IniFileValue
     )
     process
     {
+        $Path = Resolve-Path $Path
         $retVal = [PSCloudbase.Win32IniApi]::WritePrivateProfileString($Section, $Key, $Value, $Path)
         if (!$retVal -and [PSCloudbase.Win32IniApi]::GetLastError())
         {
@@ -149,6 +151,7 @@ function Remove-IniFileValue
     )
     process
     {
+        $Path = Resolve-Path $Path
         $retVal = [PSCloudbase.Win32IniApi]::WritePrivateProfileString($Section, $Key, $null, $Path)
         if (!$retVal -and [PSCloudbase.Win32IniApi]::GetLastError())
         {
