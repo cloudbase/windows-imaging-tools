@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $resourcesDir = "$ENV:SystemDrive\UnattendResources"
 $configIniPath = "$resourcesDir\config.ini"
-$customScriptsDir = "$resourcesDir\CustomScripts"
+$customScriptsDir = "$resourcesDir\CustomResources"
 
 function Set-PersistDrivers {
     Param(
