@@ -304,6 +304,18 @@ function Install-VMwareTools {
     }
 }
 
+function Copy-IPv6Scripts {
+    <#
+    .SYNOPSIS
+    Copies the following scripts: SetIPv6.ps1 and SetIPv6Task.ps1.
+    SetIPv6Task script will register a task in the instance that will execute the SetIPv6 script
+    SetIPv6 script contains a set of netsh commands that configure some IPv6 settings
+    #>
+    Write-Host "Copying IPv6 Scripts..."
+    Copy-Item "$resourcesDir\SetIPv6.ps1" -Destination "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\LocalScripts"
+    Copy-Item "$resourcesDir\SetIPv6Task.ps1" -Destination "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\LocalScripts"
+}
+
 try
 {
     Import-Module "$resourcesDir\ini.psm1"
