@@ -1175,7 +1175,7 @@ function New-WindowsOnlineImage {
                 -f $windowsImageConfig.external_switch
         }
     }
-    if ($windowsImageConfig.cpu_count -gt [int](Get-TotalLogicalProcessors)) {
+    if ([int]$windowsImageConfig.cpu_count -gt [int](Get-TotalLogicalProcessors)) {
         throw "CpuCores larger then available (logical) CPU cores."
     }
 
@@ -1403,7 +1403,7 @@ function New-WindowsFromGoldenImage {
                 -f $windowsImageConfig.external_switch
         }
     }
-    if ($windowsImageConfig.cpu_count -gt [int](Get-TotalLogicalProcessors)) {
+    if ([int]$windowsImageConfig.cpu_count -gt [int](Get-TotalLogicalProcessors)) {
         throw "CpuCores larger than available (logical) CPU cores."
     }
 
