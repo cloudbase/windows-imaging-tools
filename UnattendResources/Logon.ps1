@@ -3,6 +3,24 @@ $resourcesDir = "$ENV:SystemDrive\UnattendResources"
 $configIniPath = "$resourcesDir\config.ini"
 $customScriptsDir = "$resourcesDir\CustomScripts"
 
+function Install-KVMBalloonService {
+    $blnServiceBinary = "BLNSVR.EXE"
+    $blnServicePath = Join-Path $resourcesDir $blnServiceBinary
+    if (Test-Path $blnServicePath) {
+        New-Item -Type Directory "$ENV:SystemDrive\KVM" -ErrorAction "Continue" | Out-Null
+        $blnServiceLocalPath = Join-Path "$ENV:SystemDrive\KVM" $blnServiceBinary
+        Copy-Item -Force $blnServicePath $blnServiceLocalPath
+        & $blnServiceLocalPath -i
+        if ($LastExitCode) {
+            throw "Failed to install KVM Balloon Service"
+        } else {
+            Write-Host "KVM Balloon Service has been installed"
+        }
+    } else {
+        Write-Error "Failed to find KVM Balloon Service installer"
+    }
+}
+
 function Set-PersistDrivers {
     Param(
     [parameter(Mandatory=$true)]
@@ -321,6 +339,17 @@ try
         $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "product_key"
     } catch {}
     $serialPortName = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "serial_logging_port"
+
+    try {
+        $virtioISOPath = Get-IniFileValue -Path $configIniPath -Section "drivers" -Key "virtio_iso_path"
+    } catch {}
+    try {
+        $virtioBasePath = Get-IniFileValue -Path $configIniPath -Section "drivers" -Key "virtio_base_path"
+    } catch {}
+
+    if ($virtioISOPath -or $virtioBasePath) {
+        Install-KVMBalloonService
+    }
 
     if ($productKey) {
         License-Windows $productKey

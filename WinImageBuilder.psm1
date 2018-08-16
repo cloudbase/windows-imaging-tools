@@ -681,6 +681,12 @@ function Add-VirtIODrivers {
     foreach ($virtioDriversPath in $virtioDriversPaths) {
         if (Test-Path $virtioDriversPath) {
             Add-DriversToImage $vhdDriveLetter $virtioDriversPath
+            # Note(avladu): KVM Balloon Service needs to be installed during the online step
+            $blnServerPath = Join-Path $virtioDriversPath "BLNSVR.EXE"
+            if (Test-Path $blnServerPath) {
+                Copy-Item -Force $blnServerPath $localResourcesDir
+                Write-Log "KVM Balloon Service copied to UnattendResources"
+            }
         }
     }
     Write-Log "Virtual IO Drivers was added."
