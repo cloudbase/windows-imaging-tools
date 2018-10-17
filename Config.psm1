@@ -230,9 +230,9 @@ function New-WindowsImageConfig {
     )
     if (Test-Path $ConfigFilePath) {
         Write-Warning "$ConfigFilePath exists and it will be rewritten."
-    } else {
-        New-Item -ItemType File -Path $ConfigFilePath
+        Remove-Item -Force $ConfigFilePath
     }
+    New-Item -ItemType File -Path $ConfigFilePath | Out-Null
 
     $fullConfigFilePath = Resolve-Path $ConfigFilePath -ErrorAction SilentlyContinue
     $availableConfigOptions = Get-AvailableConfigOptions
@@ -240,26 +240,20 @@ function New-WindowsImageConfig {
         try {
             $groupName = "DEFAULT"
             $value = $availableConfigOption['DefaultValue']
-            $asBoolean = $false
             if ($availableConfigOption['GroupName']) {
                 $groupName = $availableConfigOption['GroupName']
             }
-            if ($availableConfigOption['AsBoolean']) {
-                $asBoolean = $availableConfigOption['AsBoolean']
-            } else {
-                if (!$value) {
-                    $value = '""'
-                }
+            if (!$availableConfigOption['AsBoolean'] -and !$value) {
+                $value = '""'
             }
-            $value = Set-IniFileValue -Path $fullConfigFilePath -Section $groupName `
-                                      -Key $availableConfigOption['Name'] `
-                                      -Value $value
+            Set-IniFileValue -Path $fullConfigFilePath -Section $groupName `
+                             -Key $availableConfigOption['Name'] `
+                             -Value $value | Out-Null
             Set-IniComment -Path $fullConfigFilePath -Key $availableConfigOption['Name'] `
                            -Description $availableConfigOption['Description']
         } catch {
             Write-Warning ("Config option {0} could not be written." -f @($availableConfigOption['Name']))
         }
-        $winImageConfig += @{$availableConfigOption['Name'] = $value}
     }
 }
 

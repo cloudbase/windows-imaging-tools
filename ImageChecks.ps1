@@ -29,19 +29,18 @@ function Extract-File {
     #>
     param($File)
 
-    $extension = [IO.Path]::GetExtension($File)
     $imageFilePath = Split-Path -Path $File
     $imageFilePath = Join-Path -Path $imageFilePath -ChildPath "extracted"
 
     Write-Host "Image is being extracted to $imageFilePath"
-    $tar = 7z.exe e $File "-o$imageFilePath"
+    & 7z.exe e $File "-o$imageFilePath" | Out-Null
     if ($LastExitCode -ne 0) {
         Write-Host "Something went wrong while extracting"
         exit
     }
     $tarPath = Join-Path -Path $imageFilePath -ChildPath "*.tar"
     $img = Get-ChildItem $tarPath
-    $gz = 7z.exe x -aoa -ttar $img "-o$imageFilePath"
+    & 7z.exe x -aoa -ttar $img "-o$imageFilePath" | Out-Null
     if ($LastExitCode -eq 0) {
         Write-Host "Done extracting"
     } else {
