@@ -119,7 +119,7 @@ function Check-ImageFormat {
         if ($extension -eq "raw") {
             $convertedMounted = Get-VHDXImage $Image $extension
             Write-Host "Checking for curtin..."
-            $curtin = ls $convertedMounted[1] | Select-String -Quiet "curtin"
+            $curtin = Get-ChildItem $convertedMounted[1] | Select-String -Quiet "curtin"
             if ($curtin) {
                 Write-Host "OK"
             } else {
