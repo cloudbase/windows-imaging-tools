@@ -4,8 +4,7 @@ branches:
   only:
   - master
 
-build:
-  verbosity: minimal
+build: false
 
 install:
   - cinst pester
