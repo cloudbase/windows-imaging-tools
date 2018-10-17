@@ -543,6 +543,20 @@ function Add-DriversToImage {
     }
 }
 
+function Add-PackageToImage {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$winImagePath,
+        [Parameter(Mandatory=$true)]
+        [string]$packagePath
+    )
+    Write-Log ('Adding packages from "{0}" to image "{1}"' -f $packagePath, $winImagePath)
+    & Dism.exe /image:${winImagePath} /Add-Package /Packagepath:${packagePath}
+    if ($LASTEXITCODE) {
+        throw "Dism failed to add packages from: $packagePath"
+    }
+}
+
 function Enable-FeaturesInImage {
     Param(
         [Parameter(Mandatory=$true)]
@@ -1336,6 +1350,12 @@ function New-WindowsCloudImage {
         }
         if ($windowsImageConfig.extra_features) {
             Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features
+        }
+
+        if($windowsImageConfig.extra_packages) {
+            foreach ($package in $windowsImageConfig.extra_packages.split(",")) {
+                Add-PackageToImage $winImagePath $package
+            }
         }
     } finally {
         if (Test-Path $vhdPath) {

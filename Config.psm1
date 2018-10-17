@@ -147,7 +147,12 @@ function Get-AvailableConfigOptions {
         @{"Name" = "compress_qcow2"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true and the target image format is QCOW2, the image conversion will
                            use qemu-img built-in compression. The compressed qcow2 image will be smaller, but the conversion
-                           will take longer time."}
+                           will take longer time."},
+        @{"Name" = "extra_packages";
+          "Description" = "A comma separated list of extra packages (referenced by filepath)
+                           to slipstream into the underlying image.
+                           This allows additional local packages, like security updates, to be added to the image."}
+
     )
 }
 
