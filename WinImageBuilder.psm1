@@ -31,14 +31,6 @@ Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-
 Don't forget to reboot after you install the Hyper-V role.
 "@
 
-$noSysprepWarning = @"
-You have chosen not to sysprep the image now. If you want to run sysprep now,
-use the -RunSysprep flag. If you do not run sysprep now, the resulting image
-will not be ready to deploy.
-The image is set to automatically sysprep on first boot.
-Please make sure you boot this image at least once before you use it.
-"@
-
 $VirtIODrivers = @("balloon", "netkvm", "pvpanic", "qemupciserial", "qxl",
              "qxldod", "vioinput", "viorng", "vioscsi", "vioserial", "viostor")
 
@@ -160,9 +152,9 @@ function Create-ImageVirtualDisk {
     try {
         $v.AttachVirtualDisk()
         $path = $v.GetVirtualDiskPhysicalPath()
-
-        $m = $path -match "\\\\.\\PHYSICALDRIVE(?<num>\d+)"
-        $diskNum = $matches["num"]
+        # -match creates an env variable called $Matches
+        $path -match "\\\\.\\PHYSICALDRIVE(?<num>\d+)" | Out-Null
+        $diskNum = $Matches["num"]
         $volumeLabel = "OS"
 
         if ($DiskLayout -eq "UEFI") {
@@ -176,8 +168,8 @@ function Create-ImageVirtualDisk {
                 throw "Format failed"
             }
             # MSR partition
-            $reservedPart = New-Partition -DiskNumber $diskNum -Size 128MB `
-                -GptType '{e3c9e316-0b5c-4db8-817d-f92df00215ae}'
+            New-Partition -DiskNumber $diskNum -Size 128MB `
+                -GptType '{e3c9e316-0b5c-4db8-817d-f92df00215ae}' | Out-Null
             # Windows partition
             $windowsPart = New-Partition -DiskNumber $diskNum -UseMaximumSize `
                 -GptType "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}" `
@@ -190,9 +182,9 @@ function Create-ImageVirtualDisk {
             $systemPart = $windowsPart
         }
 
-        $format = Format-Volume -DriveLetter $windowsPart.DriveLetter `
+        Format-Volume -DriveLetter $windowsPart.DriveLetter `
             -FileSystem NTFS -NewFileSystemLabel $volumeLabel `
-            -Force -Confirm:$false
+            -Force -Confirm:$false | Out-Null
         return @("$($systemPart.DriveLetter):", "$($windowsPart.DriveLetter):")
     } finally {
         Write-Log "Successfuly created disk: $VhdPath"
@@ -388,18 +380,18 @@ function Copy-CustomResources {
 
     Write-Log "Copy Custom Resources: $CustomResources..."
     if (!(Test-Path "$resourcesDir")) {
-        $d = New-Item -Type Directory $resourcesDir
+        New-Item -Type Directory $resourcesDir | Out-Null
     }
     if ($CustomResources) {
         if (!(Test-Path "$resourcesDir\CustomResources")) {
-            $d = New-Item -Type Directory "$resourcesDir\CustomResources"
+            New-Item -Type Directory "$resourcesDir\CustomResources" | Out-Null
         }
         Write-Log "Copying: $CustomResources $resourcesDir"
         Copy-Item -Recurse "$CustomResources\*" "$resourcesDir\CustomResources"
     }
     if ($CustomScripts) {
         if (!(Test-Path "$resourcesDir\CustomScripts")) {
-            $d = New-Item -Type Directory "$resourcesDir\CustomScripts"
+            New-Item -Type Directory "$resourcesDir\CustomScripts" | Out-Null
         }
         Write-Log "Copying: $CustomScripts $resourcesDir"
         Copy-Item -Recurse "$CustomScripts\*" "$resourcesDir\CustomScripts"
@@ -425,7 +417,7 @@ function Copy-UnattendResources {
     Get-PSDrive | Out-Null
 
     if (!(Test-Path "$resourcesDir")) {
-        $d = New-Item -Type Directory $resourcesDir
+        New-Item -Type Directory $resourcesDir | Out-Null
     }
     Write-Log "Copying: $localResourcesDir $resourcesDir"
     Copy-Item -Recurse "$localResourcesDir\*" $resourcesDir
@@ -920,7 +912,7 @@ function Resize-VHDImage {
 
         $partitionInfo = Get-Partition -DriveLetter $Drive
         $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
-        $CurrSize = ((Get-Partition -DriveLetter $Drive).Size/1GB)
+        $CurrSize = $partitionInfo.Size/1GB
         Write-Log "Current partition size: $CurrSize GB"
         # Leave free space for making sure Sysprep finishes successfuly
         $newSizeGB = [int](($MinSize + $FreeSpace)/1GB) + 1
@@ -1007,7 +999,7 @@ function Run-Sysprep {
         [Parameter(Mandatory=$true)]
         [Uint64]$Memory,
         [Parameter(Mandatory=$true)]
-        [int]$CpuCores=1,
+        [int]$CpuCores,
         [Parameter(Mandatory=$true)]
         [string]$VMSwitch,
         [ValidateSet("1", "2")]
@@ -1057,7 +1049,7 @@ function Get-ImageInformation {
         $imageInstallationType = "Server"
     }
 
-    return $image = @{
+    return @{
         "imageVersion" = $imageVersion;
         "imageArchitecture" = $imageArchitecture;
         "imageInstallationType" = $imageInstallationType;
@@ -1497,7 +1489,7 @@ function New-WindowsFromGoldenImage {
             Convert-VirtualDisk $windowsImageConfig.gold_image_path $uncompressedImagePath "qcow2"
             Remove-Item -Force $windowsImageConfig.gold_image_path
         }
-        if (windowsImageConfig.compression_format) {
+        if ($windowsImageConfig.compression_format) {
             Compress-Image $uncompressedImagePath $windowsImageConfig.image_path `
                 $windowsImageConfig.compression_format $windowsImageConfig.zip_password
         }
