@@ -943,33 +943,6 @@ function Resize-VHDImage {
     Write-Log "Final disk size: $FinalDiskSize GB"
 }
 
-function Create-VirtualSwitch {
-    Param(
-        [Parameter(Mandatory=$false)]
-        [string]$NetAdapterName,
-        [Parameter(Mandatory=$false)]
-        [string]$Name="br100"
-    )
-
-    Write-Log "Create Virtual Switch: $Name"
-    if (!$NetAdapterName) {
-        $defRoute = Get-NetRoute | Where-Object { $_.DestinationPrefix -eq "0.0.0.0/0" }
-        if (!$defRoute) {
-            Throw "Could not determine default route"
-        }
-        $details = $defRoute[0]
-        $netAdapter = Get-NetAdapter -ifIndex $details.ifIndex -Physical:$true
-        if (!$netAdapter) {
-            Throw "Could not get physical interface for switch"
-        }
-        $NetAdapterName = $netAdapter.Name
-    }
-    $vSwitch = New-VMSwitch -Name $Name -NetAdapterName $NetAdapterName `
-        -AllowManagementOS $true
-    Write-Log "Virtual Switch was created: $vSwitch."
-    return $vSwitch
-}
-
 function Check-Prerequisites {
     $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
     if ($needsHyperV.State -ne "Enabled") {
@@ -1008,10 +981,10 @@ function Run-Sysprep {
 
     Write-Log "Creating VM $Name attached to $VMSwitch"
     New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch `
-        -VhdPath $VhdPath -Generation $Generation
+        -VhdPath $VhdPath -Generation $Generation | Out-Null
     Set-VMProcessor -VMname $Name -count $CpuCores
     Write-Log "Starting $Name"
-    Start-VM $Name
+    Start-VM $Name | Out-Null
     Start-Sleep 5
     Wait-ForVMShutdown $Name
     Remove-VM $Name -Confirm:$false -Force
@@ -1461,10 +1434,10 @@ function New-WindowsFromGoldenImage {
         $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
 
         New-VM -Name $Name -MemoryStartupBytes $windowsImageConfig.ram_size -SwitchName $switch.Name `
-            -VHDPath $windowsImageConfig.gold_image_path
+            -VHDPath $windowsImageConfig.gold_image_path | Out-Null
         Set-VMProcessor -VMname $Name -count $windowsImageConfig.cpu_count
 
-        Start-VM $Name
+        Start-VM $Name | Out-Null
         Start-Sleep 10
         Wait-ForVMShutdown $Name
         Remove-VM $Name -Confirm:$False -Force
