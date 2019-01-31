@@ -190,7 +190,13 @@ function Get-AvailableConfigOptions {
           "Description" = "If set to true, it will set the High Performance mode and some power mode
                            and registry tweaks to prevent the machine from sleeping / hibernating."},
         @{"Name" = "disable_secure_boot"; "GroupName" = "vm"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = "If set to true and the disk layout is UEFI, the secure boot firmware option will be disabled."}
+          "Description" = "If set to true and the disk layout is UEFI, the secure boot firmware option will be disabled."},
+        @{"Name" = "clean_updates_offline"; "GroupName" = "updates"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "Clean up the updates / components by running a DISM Cleanup-Image command.
+                           This is useful when updates or capabilities are installed offline."},
+        @{"Name" = "clean_updates_online"; "GroupName" = "updates"; "DefaultValue" = $true; "AsBoolean" = $true;
+          "Description" = "Clean up the updates / components by running a DISM Cleanup-Image command.
+                           This is useful when updates or other packages are installed when the instance is running."}
     )
 }
 

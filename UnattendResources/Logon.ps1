@@ -445,6 +445,10 @@ try {
         $enableAlwaysActiveMode = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "enable_active_mode" `
             -Default $false -AsBoolean
     } catch{}
+    try {
+        $cleanUpdatesOnline = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "clean_updates_online" `
+            -Default $true -AsBoolean
+    } catch{}
 
     if ($productKey) {
         License-Windows $productKey
@@ -455,14 +459,16 @@ try {
         Install-WindowsUpdates
     }
 
-    try {
-        ExecRetry {
-            Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
+    if ($cleanUpdatesOnline) {
+        try {
+            ExecRetry {
+                Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
+            }
+        } catch {
+            Write-Log "DISM" "Failed to cleanup updates. Rebooting..."
+            Restart-Computer -Force
+            exit 0
         }
-    } catch {
-        Write-Log "DISM" "Failed to cleanup updates. Rebooting..."
-        Restart-Computer -Force
-        exit 0
     }
 
     Run-CustomScript "RunAfterWindowsUpdates.ps1"

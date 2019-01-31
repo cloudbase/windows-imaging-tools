@@ -1387,6 +1387,29 @@ function Map-KMSProductKey {
     }
 }
 
+function Clean-WindowsUpdates {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$winImagePath,
+        [Parameter(Mandatory=$false)]
+        [boolean]$PurgeUpdates
+    )
+    Write-Log "Running offline dism Cleanup-Image..."
+    if (([System.Environment]::OSVersion.Version.Major -gt 6) -or ([System.Environment]::OSVersion.Version.Minor -ge 2))
+    {
+        if (!$PurgeUpdates) {
+            Dism.exe /image:${winImagePath} /Cleanup-Image /StartComponentCleanup
+        } else {
+            Dism.exe /image:${winImagePath} /Cleanup-Image /StartComponentCleanup /ResetBase
+        }
+        if ($LASTEXITCODE) {
+            throw "Offline dism Cleanup-Image failed."
+        } else {
+            Write-Log "Offline dism Cleanup-Image completed."
+        }
+    }
+}
+
 function New-WindowsOnlineImage {
     <#
     .SYNOPSIS
@@ -1651,6 +1674,9 @@ function New-WindowsCloudImage {
             }
             if ($windowsImageConfig.extra_capabilities) {
                 Add-CapabilitiesToImage $winImagePath $windowsImageConfig.extra_capabilities
+            }
+            if ($windowsImageConfig.clean_updates_offline) {
+                Clean-WindowsUpdates $winImagePath -PurgeUpdates $windowsImageConfig.purge_updates
             }
         } finally {
             if (Test-Path $vhdPath) {
