@@ -1172,6 +1172,27 @@ function Get-TotalLogicalProcessors {
     return $count
 }
 
+function Clean-WindowsUpdates {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$winImagePath,
+        [Parameter(Mandatory=$false)]
+        [boolean]$PurgeUpdates
+    )
+    $HOST.UI.RawUI.WindowTitle = "Running Dism cleanup..."
+    if (([System.Environment]::OSVersion.Version.Major -gt 6) -and ([System.Environment]::OSVersion.Version.Minor -ge 2))
+    {
+        if (!$PurgeUpdates) {
+            Dism.exe /image:${winImagePath} /Cleanup-Image /StartComponentCleanup
+        } else {
+            Dism.exe /image:${winImagePath} /Cleanup-Image /StartComponentCleanup /ResetBase
+        }
+        if ($LASTEXITCODE) {
+            throw "Dism.exe clean failed"
+        }
+    }
+}
+
 function New-WindowsOnlineImage {
     <#
     .SYNOPSIS
@@ -1402,6 +1423,10 @@ function New-WindowsCloudImage {
         }
         if ($windowsImageConfig.extra_capabilities) {
             Add-CapabilitiesToImage $winImagePath $windowsImageConfig.extra_capabilities
+        }
+
+        if ($windowsImageConfig.extra_packages -and $windowsImageConfig.extra_packages_cleanup) {
+            Clean-WindowsUpdates $winImagePath -PurgeUpdates $windowsImageConfig.purge_updates
         }
     } finally {
         if (Test-Path $vhdPath) {

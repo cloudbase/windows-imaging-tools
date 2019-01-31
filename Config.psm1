@@ -159,6 +159,10 @@ function Get-AvailableConfigOptions {
           "Description" = "A comma separated list of extra packages (referenced by filepath)
                            to slipstream into the underlying image.
                            This allows additional local packages, like security updates, to be added to the image."}
+        @{"Name" = "extra_packages_cleanup"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "Clean up the image update package before packaging by running a
+                           DISM Cleanup-Image command. This is useful when updates are
+                           installed in extra_packages."}
 
     )
 }
