@@ -152,6 +152,8 @@ function Get-AvailableConfigOptions {
           "Description" = "A comma separated list of extra packages (referenced by filepath)
                            to slipstream into the underlying image.
                            This allows additional local packages, like security updates, to be added to the image."}
+        @{"Name" = "extra_packages_preventpending"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "Allow setting the DISM /PreventPending flag when installing extra_packages."}
 
     )
 }
