@@ -1016,7 +1016,9 @@ function Get-ImageInformation {
         $imageArchitecture = "i386"
     }
 
-    if ($imageName -like '*Core') {
+    if ($imageName -notlike "*server*") {
+        $imageInstallationType = "Client"
+    } elseif ($imageName -like '*Core') {
         $imageInstallationType = "Server Core"
     } else {
         $imageInstallationType = "Server"
