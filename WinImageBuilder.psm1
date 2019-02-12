@@ -666,9 +666,11 @@ function Add-VirtIODrivers {
         $virtioVer = "VISTA"
     } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -eq 1) {
         $virtioVer = "WIN7"
-    } elseif (($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 2) `
-        -or $image.ImageVersion.Major -gt 6) {
+    } elseif ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -ge 2) {
         $virtioVer = "WIN8"
+    } elseif (($image.ImageVersion.Major -eq 10 -and $image.ImageVersion.Minor -eq 0) `
+        -or $image.ImageVersion.Major -gt 10) {
+        $virtioVer = "w10"
     } else {
         throw "Unsupported Windows version for VirtIO drivers: {0}" `
             -f $image.ImageVersion
