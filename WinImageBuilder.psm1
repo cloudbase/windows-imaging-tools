@@ -1463,7 +1463,7 @@ function New-WindowsFromGoldenImage {
         if ($windowsImageConfig.image_type -eq "KVM") {
             $uncompressedImagePath = $barePath + ".qcow2"
             Write-Log "Converting VHD to QCow2"
-            Convert-VirtualDisk $windowsImageConfig.gold_image_path $uncompressedImagePath "qcow2"
+            Convert-VirtualDisk $windowsImageConfig.gold_image_path $uncompressedImagePath "qcow2" $windowsImageConfig.compress_qcow2
             Remove-Item -Force $windowsImageConfig.gold_image_path
         }
         if ($windowsImageConfig.compression_format) {
