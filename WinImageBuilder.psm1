@@ -698,9 +698,9 @@ function Add-VirtIODriversFromISO {
     <#
     .SYNOPSIS
      This function adds VirtIO drivers from a given ISO path to a mounted Windows VHD image.
-     The VirtIO ISO contains all the synthetic drivers for the KVM hypervisor. 
+     The VirtIO ISO contains all the synthetic drivers for the KVM hypervisor.
     .DESCRIPTION
-     This function takes the VirtIO drivers from a specified ISO file and installs them into the 
+     This function takes the VirtIO drivers from a specified ISO file and installs them into the
      given VHD, based on the characteristics given by the image parameter (which contains the
      image version, image architecture and installation type).
      More info can be found here: https://fedoraproject.org/wiki/Windows_Virtio_Drivers
@@ -907,7 +907,9 @@ function Resize-VHDImage {
     $vhdSizeGB = $vhdSize/1GB
     Write-Log "Initial VHD size is: $vhdSizeGB GB"
 
-    $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | Get-Disk | Get-Partition | Get-Volume).DriveLetter
+    $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | `
+        Get-Disk | Get-Partition | Get-Volume | `
+        Sort-Object -Property Size -Descending | Select-Object -First 1).DriveLetter
     try
     {
         Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim -SlabConsolidate
@@ -1450,7 +1452,7 @@ function New-WindowsFromGoldenImage {
 
         $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
         $uncompressedImagePath = $windowsImageConfig.image_path
-        
+
         if ($windowsImageConfig.image_type -eq "MAAS") {
             $uncompressedImagePath = $barePath + ".img"
             Write-Log "Converting VHD to RAW"
