@@ -1145,7 +1145,7 @@ function New-WindowsOnlineImage {
     if (!$windowsImageConfig.run_sysprep -and !$windowsImageConfig.force) {
         throw "You chose not to run sysprep.
             This will build an unusable Windows image.
-            If you really want to continue use the `force = true` config option."
+            If you really want to continue use the ``force = true`` config option."
     }
 
     Check-Prerequisites
@@ -1155,9 +1155,7 @@ function New-WindowsOnlineImage {
             throw "Selected vmswitch {0} does not exist" -f $windowsImageConfig.external_switch
         }
         if ($switch.SwitchType -ne "External" -and !$windowsImageConfig.force) {
-            throw "Selected switch {0}} is not an external
-                switch. If you really want to continue use the `force = true` flag." `
-                -f $windowsImageConfig.external_switch
+            throw ("Selected switch {0} is not an external switch. If you really want to continue use the ``force = true`` flag." -f $windowsImageConfig.external_switch)
         }
     }
     if ([int]$windowsImageConfig.cpu_count -gt [int](Get-TotalLogicalProcessors)) {
@@ -1379,7 +1377,7 @@ function New-WindowsFromGoldenImage {
     if (!$windowsImageConfig.run_sysprep -and !$windowsImageConfig.force) {
         throw "You chose not to run sysprep.
             This will build an unusable Windows image.
-            If you really want to continue use the `force = true` config option."
+            If you really want to continue use the ``force = true`` config option."
     }
 
     Check-Prerequisites
@@ -1389,9 +1387,7 @@ function New-WindowsFromGoldenImage {
             throw "Selected vmswitch {0} does not exist" -f $windowsImageConfig.external_switch
         }
         if ($switch.SwitchType -ne "External" -and !$windowsImageConfig.force) {
-            throw "Selected switch {0} is not an external
-                switch. If you really want to continue use the `force = true` flag." `
-                -f $windowsImageConfig.external_switch
+            throw ("Selected switch {0} is not an external switch. If you really want to continue use the ``force = true`` flag." -f $windowsImageConfig.external_switch)
         }
     }
     if ([int]$windowsImageConfig.cpu_count -gt [int](Get-TotalLogicalProcessors)) {
