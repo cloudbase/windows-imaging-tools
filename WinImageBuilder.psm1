@@ -1453,7 +1453,9 @@ function New-WindowsFromGoldenImage {
         }
 
         $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
-        Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $windowsImageConfig.image_name
+        Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $windowsImageConfig.image_name `
+                               -InstallMaaSHooks $windowsImageConfig.install_maas_hooks `
+                               -VMwareToolsPath $windowsImageConfig.vmware_tools_path
         Copy-CustomResources -ResourcesDir $resourcesDir -CustomResources $windowsImageConfig.custom_resources_path `
                              -CustomScripts $windowsImageConfig.custom_scripts_path
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
