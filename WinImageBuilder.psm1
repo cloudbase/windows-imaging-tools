@@ -1352,7 +1352,7 @@ function New-WindowsCloudImage {
             }
         }
         if ($windowsImageConfig.extra_capabilities) {
-            Add-CapabilitiesInImage $winImagePath $windowsImageConfig.extra_capabilities
+            Add-CapabilitiesToImage $winImagePath $windowsImageConfig.extra_capabilities
         }
     } finally {
         if (Test-Path $vhdPath) {
