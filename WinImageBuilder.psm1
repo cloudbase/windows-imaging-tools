@@ -35,15 +35,16 @@ $VirtIODrivers = @("balloon", "netkvm", "pvpanic", "qemupciserial", "qxl",
              "qxldod", "vioinput", "viorng", "vioscsi", "vioserial", "viostor")
 
 $VirtIODriverMappings = @{
-    "2k8" = @(60, 1);
-    "2k8r2" = @(61, 1);
-    "w7" = @(61, 0);
-    "2k12" = @(62, 1);
-    "w8" = @(62, 0);
-    "2k12r2" = @(63, 1);
-    "w8.1" = @(63, 0);
-    "2k16" = @(100, 1);
-    "w10" = @(100, 0);
+    "2k8" = @(60, 0, 1);
+    "2k8r2" = @(61, 0, 1);
+    "w7" = @(61, 0, 0);
+    "2k12" = @(62, 0, 1);
+    "w8" = @(62, 0, 0);
+    "2k12r2" = @(63, 0, 1);
+    "w8.1" = @(63, 0, 0);
+    "2k16" = @(100, 14393, 1);
+    "2k19" = @(100, 17763, 1);
+    "w10" = @(100, 0, 0);
 }
 
 $AvailableCompressionFormats = @("tar","gz","zip")
@@ -639,6 +640,8 @@ function Get-VirtIODrivers {
         [parameter(Mandatory=$true)]
         [int]$MajorMinorVersion,
         [parameter(Mandatory=$true)]
+        [int]$BuildNumber,
+        [parameter(Mandatory=$true)]
         [int]$IsServer,
         [parameter(Mandatory=$true)]
         [string]$BasePath,
@@ -653,7 +656,10 @@ function Get-VirtIODrivers {
     foreach ($driver in $VirtioDrivers) {
         foreach ($osVersion in $VirtIODriverMappings.Keys) {
             $map = $VirtIODriverMappings[$osVersion]
-            if (!(($map[0] -eq $MajorMinorVersion) -and ($map[1] -eq $isServer))) {
+            if (!(($map[0] -eq $MajorMinorVersion) -and ($map[2] -eq $isServer))) {
+              continue
+            }
+            if (($map[1] -ne 0) -and ($map[1] -ne $BuildNumber)) {
               continue
             }
             $driverPath = "{0}\{1}\{2}\{3}" -f @($basePath,
@@ -668,7 +674,7 @@ function Get-VirtIODrivers {
     }
     if (!$driverPaths -and $RecursionDepth -lt 1) {
         # Note(avladu): Fallback to 2012r2/w8.1 if no drivers are found
-        $driverPaths = Get-VirtIODrivers 63 $IsServer $BasePath $Architecture 1
+        $driverPaths = Get-VirtIODrivers 63 0 $IsServer $BasePath $Architecture 1
     }
     return $driverPaths
     Write-Log "Finished to get IO Drivers."
@@ -708,8 +714,8 @@ function Add-VirtIODrivers {
     # For VirtIO ISO with drivers version higher than 1.8.x
     $majorMinorVersion = [string]$image.ImageVersion.Major + [string]$image.ImageVersion.Minor
     $virtioDriversPaths = Get-VirtIODrivers -MajorMinorVersion $majorMinorVersion `
-        -IsServer ([int](Is-ServerInstallationType $image)) -BasePath $driversBasePath `
-        -Architecture $image.ImageArchitecture
+        -BuildNumber $image.ImageVersion.Build -IsServer ([int](Is-ServerInstallationType $image)) `
+        -BasePath $driversBasePath -Architecture $image.ImageArchitecture
     foreach ($virtioDriversPath in $virtioDriversPaths) {
         if (Test-Path $virtioDriversPath) {
             Add-DriversToImage $vhdDriveLetter $virtioDriversPath
