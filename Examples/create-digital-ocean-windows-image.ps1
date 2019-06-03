@@ -28,7 +28,7 @@ if (!(Get-VMSwitch $HyperVSwitchName -ErrorAction SilentlyContinue)) {
     throw "HyperV switch ${HyperVSwitchName} could not be found.`nPlease enable HyperV module and create ${HyperVSwitchName} switch."
 }
 
-git submodule update --init
+git -C $scriptPath submodule update --init
 if ($LASTEXITCODE) {
     throw "Failed to update git modules."
 }
