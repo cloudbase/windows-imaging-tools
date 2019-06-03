@@ -32,19 +32,31 @@ try {
 }
 
 # The Windows image file path that will be generated
-$virtualDiskPath = "C:\images\my-windows-image.raw"
+$virtualDiskPath = "C:\images\my-windows-image.qcow2"
 
 # The wim file path is the installation image on the Windows ISO
 $wimFilePath = "D:\Sources\install.wim"
 
 # VirtIO ISO contains all the synthetic drivers for the KVM hypervisor
 $virtIOISOPath = "C:\images\virtio.iso"
+$virtIOISOSum = "6327d722bdea72bcb1849ce99604bbe0"
 # Note(avladu): Do not use stable 0.1.126 version because of this bug https://github.com/crobinso/virtio-win-pkg-scripts/issues/10
 # Note (atira): Here https://fedorapeople.org/groups/virt/virtio-win/CHANGELOG you can see the changelog for the VirtIO drivers
 $virtIODownloadLink = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.141-1/virtio-win-0.1.141.iso"
 
 # Download the VirtIO drivers ISO from Fedora
-(New-Object System.Net.WebClient).DownloadFile($virtIODownloadLink, $virtIOISOPath)
+if (Test-Path $virtIOISOPath) {
+    $ha = [Security.Cryptography.HashAlgorithm]::Create("MD5")
+    $s = ([IO.StreamReader]$virtIOISOPath).BaseStream
+    $sum = -join ($ha.ComputeHash($s) | ForEach { "{0:x2}" -f $_ })
+    $s.Close()
+    if (!($sum.tolower().equals($virtIOISOSum.tolower()))) {
+        (New-Object System.Net.WebClient).DownloadFile($virtIODownloadLink, $virtIOISOPath)
+    }
+} else {
+    (New-Object System.Net.WebClient).DownloadFile($virtIODownloadLink, $virtIOISOPath)
+}
+
 
 # Extra drivers path contains the drivers for the baremetal nodes
 # Examples: Chelsio NIC Drivers, Mellanox NIC drivers, LSI SAS drivers, etc.
@@ -63,7 +75,7 @@ New-WindowsImageConfig -ConfigFilePath $configFilePath
 Set-IniFileValue -Path $configFilePath -Section "Default" -Key "wim_file_path" -Value $wimFilePath
 Set-IniFileValue -Path $configFilePath -Section "Default" -Key "image_name" -Value $image.ImageName
 Set-IniFileValue -Path $configFilePath -Section "Default" -Key "image_path" -Value $virtualDiskPath
-Set-IniFileValue -Path $configFilePath -Section "Default" -Key "virtual_disk_format" -Value "RAW"
+Set-IniFileValue -Path $configFilePath -Section "Default" -Key "virtual_disk_format" -Value "qcow2"
 Set-IniFileValue -Path $configFilePath -Section "vm" -Key "disk_size" -Value (30GB)
 Set-IniFileValue -Path $configFilePath -Section "drivers" -Key "virtio_iso_path" -Value $virtIOISOPath
 Set-IniFileValue -Path $configFilePath -Section "drivers" -Key "drivers_path" -Value $extraDriversPath

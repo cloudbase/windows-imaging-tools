@@ -75,9 +75,16 @@ function Clean-UpdateResources {
     Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name AutoLogonCount -ErrorAction SilentlyContinue
 
     # Cleanup
-    Remove-Item -Recurse -Force $resourcesDir
+    Remove-Item -Recurse -Force -Exclude "sdelete.exe" $resourcesDir
     Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
-
+    $sdelete = "$resourcesDir\sdelete.exe"
+    if ( Test-Path $sdelete ) {
+        Write-Host "Optimizing for sparse image..."
+        & $sdelete -AcceptEULA -z $ENV:SystemDrive
+        Remove-Item -Recurse -Force $resourcesDir
+    } else {
+        Write-Debug "No sdelete. Image not optimized for qcow2"
+    }
 }
 
 function Clean-WindowsUpdates {
@@ -125,6 +132,7 @@ function Install-WindowsUpdates {
         "6.3" = @("KB2887595")
     }
     $excludedUpdates = $KBIdsBlacklist[$OSKernelVersion]
+    Write-Host "Searching for updates..."
     $updates = ExecRetry {
         Get-WindowsUpdate -Verbose -ExcludeKBId $excludedUpdates
     } -maxRetryCount 30 -retryInterval 1
