@@ -83,7 +83,7 @@ function Clean-UpdateResources {
         & $sdelete -AcceptEULA -z $ENV:SystemDrive
         Remove-Item -Recurse -Force $resourcesDir
     } else {
-        Write-Debug "No sdelete. Image not optimized for qcow2"
+        Write-Debug "No sdelete. Image not optimized."
     }
 }
 
@@ -132,7 +132,6 @@ function Install-WindowsUpdates {
         "6.3" = @("KB2887595")
     }
     $excludedUpdates = $KBIdsBlacklist[$OSKernelVersion]
-    Write-Host "Searching for updates..."
     $updates = ExecRetry {
         Get-WindowsUpdate -Verbose -ExcludeKBId $excludedUpdates
     } -maxRetryCount 30 -retryInterval 1

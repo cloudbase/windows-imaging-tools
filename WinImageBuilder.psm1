@@ -363,7 +363,6 @@ function Convert-VirtualDisk {
         $compressParam = "-c"
     }
     Write-Log "Converting virtual disk image from $vhdPath to $outPath..."
-    Write-Debug "Executing: $scriptPath\bin\qemu-img.exe convert $compressParam -O $($format.ToLower()) $vhdPath $outPath"
     Execute-Retry {
         & "$scriptPath\bin\qemu-img.exe" convert $compressParam -O $format.ToLower() $vhdPath $outPath
         if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
@@ -1354,7 +1353,9 @@ function New-WindowsCloudImage {
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper -WinDrive $winImagePath -WallpaperPath $windowsImageConfig.wallpaper_path `
             -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
-        Download-SDelete $resourcesDir ([string]$image.ImageArchitecture)
+        if ($windowsImageConfig.sdelete_cleanup) {
+            Download-SDelete $resourcesDir ([string]$image.ImageArchitecture)
+        }
         Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
         Apply-Image $winImagePath $windowsImageConfig.wim_file_path $image.ImageIndex
@@ -1488,7 +1489,9 @@ function New-WindowsFromGoldenImage {
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper -WinDrive $driveLetterGold -WallpaperPath $windowsImageConfig.wallpaper_path `
             -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
-        Download-SDelete $resourcesDir ([string]$image.ImageArchitecture)
+        if ($windowsImageConfig.sdelete_cleanup) {
+            Download-SDelete $resourcesDir $imageInfo.imageArchitecture
+        }
         Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
         Dismount-VHD -Path $windowsImageConfig.gold_image_path

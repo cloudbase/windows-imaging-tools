@@ -16,7 +16,6 @@ $ErrorActionPreference = "Stop"
 
 $scriptPath =Split-Path -Parent $MyInvocation.MyCommand.Definition | Split-Path
 
-cd $scriptPath
 git submodule update --init
 if ($LASTEXITCODE) {
     throw "Failed to update git modules."
