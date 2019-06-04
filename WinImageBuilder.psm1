@@ -950,7 +950,7 @@ function Resize-VHDImage {
         $NewSize = $newSizeGB*1GB
         Write-Log "New partition size: $newSizeGB GB"
 
-        if ($NewSize -gt $MinSize) {
+        if (($NewSize - $FreeSpace) -gt $MinSize) {
             $global:i = 0
             $step = 100MB
             Execute-Retry {
@@ -972,6 +972,12 @@ function Resize-VHDImage {
     }
     $FinalDiskSize = ((Get-VHD -Path $VirtualDiskPath).Size/1GB)
     Write-Log "Final disk size: $FinalDiskSize GB"
+
+    $virtualDiskFileSize = (Get-Item -Path $VirtualDiskPath).Length / 1GB
+    Write-Log "Optimize VHD ${VirtualDiskPath}: file size before optimization is ${virtualDiskFileSize} GB"
+    Optimize-VHD $VirtualDiskPath -Mode Full
+    $finalVirtualDiskFileSize = (Get-Item -Path $VirtualDiskPath).Length / 1GB
+    Write-Log "Optimize VHD ${VirtualDiskPath}: file size after optimization is ${finalVirtualDiskFileSize} GB"
 }
 
 function Check-Prerequisites {

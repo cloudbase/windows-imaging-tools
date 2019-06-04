@@ -141,6 +141,7 @@ Describe "Test Resize-VHDImage" {
     function Mount-VHD { }
     function Resize-VHD { }
     function Dismount-VHD { }
+    function Optimize-VHD { }
     Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-VHD -Verifiable -ModuleName $moduleName { return @{"Size" = 100; "MinimumSize" = 10} }
     Mock Mount-VHD -Verifiable -ModuleName $moduleName {
@@ -165,6 +166,8 @@ Describe "Test Resize-VHDImage" {
     Mock Resize-Partition -Verifiable -ModuleName $moduleName { return 0 }
     Mock Resize-VHD -Verifiable -ModuleName $moduleName { return 0 }
     Mock Dismount-VHD -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Get-Item -Verifiable -ModuleName $moduleName { return @{"Length"=100} }
+    Mock Optimize-VHD -Verifiable -ModuleName $moduleName { return 0 }
 
     It "Should resize a vhd image" {
         Resize-VHDImage -VirtualDiskPath "fakePath" `
