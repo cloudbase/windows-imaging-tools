@@ -421,7 +421,7 @@ function Copy-UnattendResources {
         New-Item -Type Directory $resourcesDir | Out-Null
     }
     Write-Log "Copying: $localResourcesDir $resourcesDir"
-    Copy-Item -Recurse "$localResourcesDir\*" $resourcesDir
+    Copy-Item -Recurse -Force "$localResourcesDir\*" $resourcesDir
 
     if ($InstallMaaSHooks) {
         $src = Join-Path $localResourcesDir "windows-curtin-hooks\curtin"
@@ -992,7 +992,7 @@ function Wait-ForVMShutdown {
         [Parameter(Mandatory=$true)]
         [string]$Name
     )
-    Write-Log "Waiting for $Name to finish sysprep"
+    Write-Log "Waiting for $Name to finish sysprep."
     $isOff = (Get-VM -Name $Name).State -eq "Off"
     while ($isOff -eq $false) {
         Start-Sleep 1
@@ -1078,8 +1078,8 @@ function Set-WindowsWallpaper {
         [string]$WallpaperSolidColor
     )
 
+    Write-Log "Setting wallpaper..."
     $useWallpaperImage = $false
-    Write-Log "Set Wallpaper: $WallpaperPath..."
     $wallpaperGPOPath = Join-Path $localResourcesDir "GPO"
 
     if ($WallpaperPath -and $WallpaperSolidColor) {
@@ -1455,8 +1455,11 @@ function New-WindowsFromGoldenImage {
 
         $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
         $maxPartitionSize = (Get-PartitionSupportedSize -DiskNumber $driveNumber -PartitionNumber 1).SizeMax
-        Resize-Partition -DiskNumber $driveNumber -PartitionNumber 1 -Size $maxPartitionSize
-
+        try {
+            Resize-Partition -DiskNumber $driveNumber -PartitionNumber 1 -Size $maxPartitionSize -ErrorAction SilentlyContinue
+        } catch {
+            Write-Log "Partition has already the desired size"
+        }
         $imageInfo = Get-ImageInformation $driveLetterGold -ImageName $windowsImageConfig.image_name
         if ($windowsImageConfig.virtio_iso_path) {
             Add-VirtIODriversFromISO -driveLetter $driveLetterGold -image $imageInfo `
@@ -1486,9 +1489,13 @@ function New-WindowsFromGoldenImage {
 
         $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
 
-        New-VM -Name $Name -MemoryStartupBytes $windowsImageConfig.ram_size -SwitchName $switch.Name `
-            -VHDPath $windowsImageConfig.gold_image_path | Out-Null
+        $vm = New-VM -Name $Name -MemoryStartupBytes $windowsImageConfig.ram_size -SwitchName $switch.Name `
+            -VHDPath $windowsImageConfig.gold_image_path
         Set-VMProcessor -VMname $Name -count $windowsImageConfig.cpu_count
+        Set-VMMemory -VMname $Name -DynamicMemoryEnabled:$false
+        if ($vm.AutomaticCheckpointsEnabled) {
+            Set-VM -VMName $Name -AutomaticCheckpointsEnabled:$false
+        }
 
         Start-VM $Name | Out-Null
         Start-Sleep 10
