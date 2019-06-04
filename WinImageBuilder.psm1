@@ -315,7 +315,8 @@ function Generate-UnattendXml {
         $xsltArgs["productKey"] = $productKey
     }
 
-    Transform-Xml "$scriptPath\Unattend.xslt" $inUnattendXmlPath $outUnattendXmlPath $xsltArgs
+    Transform-Xml -xsltPath "$scriptPath\Unattend.xslt" -inXmlPath $inUnattendXmlPath `
+        -outXmlPath $outUnattendXmlPath -xsltArgs $xsltArgs
     Write-Log "Xml was generated."
 }
 
@@ -668,7 +669,8 @@ function Get-VirtIODrivers {
     }
     if (!$driverPaths -and $RecursionDepth -lt 1) {
         # Note(avladu): Fallback to 2012r2/w8.1 if no drivers are found
-        $driverPaths = Get-VirtIODrivers 63 $IsServer $BasePath $Architecture 1
+        $driverPaths = Get-VirtIODrivers -MajorMinorVersion 63 -IsServer $IsServer `
+            -BasePath $BasePath -Architecture $Architecture -RecursionDepth 1
     }
     return $driverPaths
     Write-Log "Finished to get IO Drivers."
@@ -757,7 +759,8 @@ function Add-VirtIODriversFromISO {
             # Otherwise, "Test-Path $driversBasePath" will return $False
             # http://www.vistax64.com/powershell/2653-powershell-does-not-update-subst-mapped-drives.html
             Get-PSDrive | Out-Null
-            Add-VirtIODrivers $vhdDriveLetter $image $driversBasePath
+            Add-VirtIODrivers -vhdDriveLetter $vhdDriveLetter -image $image `
+                -driversBasePath $driversBasePath
         } else {
             throw "The $isoPath is not a valid iso path."
         }
@@ -1229,26 +1232,29 @@ function New-WindowsOnlineImage {
         if ($windowsImageConfig.image_type -eq "MAAS") {
             $uncompressedImagePath = $barePath + ".img"
             Write-Log "Converting VHD to RAW"
-            Convert-VirtualDisk $virtualDiskPath $uncompressedImagePath "raw"
+            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $uncompressedImagePath -format "raw"
             Remove-Item -Force $virtualDiskPath
         }
 
         if ($windowsImageConfig.image_type -ceq "VMware") {
             $uncompressedImagePath = $barePath + ".vmdk"
             Write-Log "Converting VHD to VMDK"
-            Convert-VirtualDisk $virtualDiskPath $uncompressedImagePath "vmdk"
+            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $uncompressedImagePath -format "vmdk"
             Remove-Item -Force $virtualDiskPath
         }
 
         if ($windowsImageConfig.image_type -eq "KVM") {
             $uncompressedImagePath = $barePath + ".qcow2"
             Write-Log "Converting VHD to Qcow2"
-            Convert-VirtualDisk $virtualDiskPath $uncompressedImagePath "qcow2" $windowsImageConfig.compress_qcow2
+            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $uncompressedImagePath -format "qcow2" `
+                -CompressQcow2 $windowsImageConfig.compress_qcow2
             Remove-Item -Force $virtualDiskPath
         }
         if ($windowsImageConfig.compression_format) {
-            Compress-Image $uncompressedImagePath $windowsImageConfig['image_path'] `
-                $windowsImageConfig.compression_format $windowsImageConfig.zip_password
+            Compress-Image -VirtualDiskPath $uncompressedImagePath `
+                -ImagePath $windowsImageConfig['image_path'] `
+                -compressionFormats $windowsImageConfig.compression_format `
+                -ZipPassword $windowsImageConfig.zip_password
         }
     } catch {
         Write-Log $_
@@ -1307,7 +1313,8 @@ function New-WindowsCloudImage {
     }
 
     try {
-        $drives = Create-ImageVirtualDisk $vhdPath $windowsImageConfig.disk_size $windowsImageConfig.disk_layout
+        $drives = Create-ImageVirtualDisk -VhdPath $vhdPath -Size $windowsImageConfig.disk_size `
+            -DiskLayout $windowsImageConfig.disk_layout
         $winImagePath = "$($drives[1])\"
         $resourcesDir = "${winImagePath}UnattendResources"
         $outUnattendXmlPath = "${winImagePath}Unattend.xml"
@@ -1321,8 +1328,9 @@ function New-WindowsCloudImage {
             $xmlParams.Add('productKey', $windowsImageConfig.product_key);
         }
         Generate-UnattendXml @xmlParams
-        Copy-UnattendResources $resourcesDir $image.ImageInstallationType `
-            $windowsImageConfig.install_maas_hooks $windowsImageConfig.vmware_tools_path
+        Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $image.ImageInstallationType `
+            -InstallMaaSHooks $windowsImageConfig.install_maas_hooks `
+            -VMwareToolsPath $windowsImageConfig.vmware_tools_path
         Copy-CustomResources -ResourcesDir $resourcesDir -CustomResources $windowsImageConfig.custom_resources_path `
                              -CustomScripts $windowsImageConfig.custom_scripts_path
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
@@ -1330,18 +1338,22 @@ function New-WindowsCloudImage {
             -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
         Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
-        Apply-Image $winImagePath $windowsImageConfig.wim_file_path $image.ImageIndex
-        Create-BCDBootConfig $drives[0] $drives[1] $windowsImageConfig.disk_layout $image
+        Apply-Image -winImagePath $winImagePath -wimFilePath $windowsImageConfig.wim_file_path `
+            -imageIndex $image.ImageIndex
+        Create-BCDBootConfig -systemDrive $drives[0] -windowsDrive $drives[1] -diskLayout $windowsImageConfig.disk_layout `
+            -image $image
         Check-EnablePowerShellInImage $winImagePath $image
 
         if ($windowsImageConfig.drivers_path -and (Test-Path $windowsImageConfig.drivers_path)) {
             Add-DriversToImage $winImagePath $windowsImageConfig.drivers_path
         }
         if ($windowsImageConfig.virtio_iso_path) {
-            Add-VirtIODriversFromISO $winImagePath $image $windowsImageConfig.virtio_iso_path
+            Add-VirtIODriversFromISO -vhdDriveLetter $winImagePath -image $image `
+                -driversBasePath$windowsImageConfig.virtio_iso_path
         }
         if ($windowsImageConfig.virtio_base_path) {
-            Add-VirtIODrivers $winImagePath $image $windowsImageConfig.virtio_base_path
+            Add-VirtIODrivers -vhdDriveLetter $winImagePath -image $image `
+                -driversBasePath $windowsImageConfig.virtio_base_path
         }
         if ($windowsImageConfig.extra_features) {
             Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features
@@ -1361,8 +1373,8 @@ function New-WindowsCloudImage {
     }
 
     if (!($windowsImageConfig.virtual_disk_format -in @("VHD", "VHDX"))) {
-        Convert-VirtualDisk $vhdPath $windowsImageConfig.image_path `
-            $windowsImageConfig.virtual_disk_format
+        Convert-VirtualDisk -vhdPath $vhdPath -outPath $windowsImageConfig.image_path `
+            -format $windowsImageConfig.virtual_disk_format
         Remove-Item -Force $vhdPath
     } elseif ($vhdPath -ne $windowsImageConfig.image_path) {
         Move-Item -Force $vhdPath $windowsImageConfig.image_path
@@ -1441,7 +1453,8 @@ function New-WindowsFromGoldenImage {
 
         $imageInfo = Get-ImageInformation $driveLetterGold -ImageName $windowsImageConfig.image_name
         if ($windowsImageConfig.virtio_iso_path) {
-            Add-VirtIODriversFromISO $driveLetterGold $imageInfo $windowsImageConfig.virtio_iso_path
+            Add-VirtIODriversFromISO -driveLetter $driveLetterGold -image $imageInfo `
+                -virtioDriversPath $windowsImageConfig.virtio_iso_path
         }
 
         if ($windowsImageConfig.drivers_path -and (Get-ChildItem $windowsImageConfig.drivers_path)) {
@@ -1484,7 +1497,8 @@ function New-WindowsFromGoldenImage {
         if ($windowsImageConfig.image_type -eq "MAAS") {
             $uncompressedImagePath = $barePath + ".img"
             Write-Log "Converting VHD to RAW"
-            Convert-VirtualDisk $windowsImageConfig.gold_image_path $uncompressedImagePath "RAW"
+            Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $uncompressedImagePath `
+                -format "RAW"
             Remove-Item -Force $windowsImageConfig.gold_image_path
             if (!($windowsImageConfig.compression_format -match ".tar.gz")) {
                 $windowsImageConfig.compression_format = ".tar.gz" + $windowsImageConfig.compression_format
@@ -1493,12 +1507,15 @@ function New-WindowsFromGoldenImage {
         if ($windowsImageConfig.image_type -eq "KVM") {
             $uncompressedImagePath = $barePath + ".qcow2"
             Write-Log "Converting VHD to QCow2"
-            Convert-VirtualDisk $windowsImageConfig.gold_image_path $uncompressedImagePath "qcow2" $windowsImageConfig.compress_qcow2
+            Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $uncompressedImagePath `
+                -format "qcow2" -CompressQcow2 $windowsImageConfig.compress_qcow
             Remove-Item -Force $windowsImageConfig.gold_image_path
         }
         if ($windowsImageConfig.compression_format) {
-            Compress-Image $uncompressedImagePath $windowsImageConfig.image_path `
-                $windowsImageConfig.compression_format $windowsImageConfig.zip_password
+            Compress-Image -VirtualDiskPath $uncompressedImagePath `
+                -ImagePath $windowsImageConfig['image_path'] `
+                -compressionFormats $windowsImageConfig.compression_format `
+                -ZipPassword $windowsImageConfig.zip_password
         }
         Write-Log "Cloud image from golden image generation finished."
     } catch {
