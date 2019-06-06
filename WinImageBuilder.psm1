@@ -1485,15 +1485,20 @@ function New-WindowsFromGoldenImage {
             -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
         Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
-        Dismount-VHD -Path $windowsImageConfig.gold_image_path
+        Dismount-VHD -Path $windowsImageConfig.gold_image_path | Out-Null
 
         $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
 
         $vm = New-VM -Name $Name -MemoryStartupBytes $windowsImageConfig.ram_size -SwitchName $switch.Name `
             -VHDPath $windowsImageConfig.gold_image_path
-        Set-VMProcessor -VMname $Name -count $windowsImageConfig.cpu_count
-        Set-VMMemory -VMname $Name -DynamicMemoryEnabled:$false
-        if ($vm.AutomaticCheckpointsEnabled) {
+        Set-VMProcessor -VMname $Name -count $windowsImageConfig.cpu_count | Out-Null
+        Set-VMMemory -VMname $Name -DynamicMemoryEnabled:$false | Out-Null
+        $vmAutomaticCheckpointsEnabledWrapper = $vm | Select-Object 'AutomaticCheckpointsEnabled' -ErrorAction SilentlyContinue
+        $vmAutomaticCheckpointsEnabled = $false
+        if ($vmAutomaticCheckpointsEnabledWrapper) {
+            $vmAutomaticCheckpointsEnabled = $vmAutomaticCheckpointsEnabledWrapper.AutomaticCheckpointsEnabled
+        }
+        if ($vmAutomaticCheckpointsEnabled) {
             Set-VM -VMName $Name -AutomaticCheckpointsEnabled:$false
         }
 
