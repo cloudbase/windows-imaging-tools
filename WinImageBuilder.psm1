@@ -1349,7 +1349,7 @@ function New-WindowsCloudImage {
         }
         if ($windowsImageConfig.virtio_iso_path) {
             Add-VirtIODriversFromISO -vhdDriveLetter $winImagePath -image $image `
-                -driversBasePath$windowsImageConfig.virtio_iso_path
+                -driversBasePath $windowsImageConfig.virtio_iso_path
         }
         if ($windowsImageConfig.virtio_base_path) {
             Add-VirtIODrivers -vhdDriveLetter $winImagePath -image $image `
@@ -1453,8 +1453,8 @@ function New-WindowsFromGoldenImage {
 
         $imageInfo = Get-ImageInformation $driveLetterGold -ImageName $windowsImageConfig.image_name
         if ($windowsImageConfig.virtio_iso_path) {
-            Add-VirtIODriversFromISO -driveLetter $driveLetterGold -image $imageInfo `
-                -virtioDriversPath $windowsImageConfig.virtio_iso_path
+            Add-VirtIODriversFromISO -vhdDriveLetter $driveLetterGold -image $imageInfo `
+                -isoPath $windowsImageConfig.virtio_iso_path
         }
 
         if ($windowsImageConfig.drivers_path -and (Get-ChildItem $windowsImageConfig.drivers_path)) {
