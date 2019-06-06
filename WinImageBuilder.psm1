@@ -1526,7 +1526,7 @@ function New-WindowsFromGoldenImage {
             $uncompressedImagePath = $barePath + ".qcow2"
             Write-Log "Converting VHD to QCow2"
             Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $uncompressedImagePath `
-                -format "qcow2" -CompressQcow2 $windowsImageConfig.compress_qcow
+                -format "qcow2" -CompressQcow2 $windowsImageConfig.compress_qcow2
             Remove-Item -Force $windowsImageConfig.gold_image_path
         }
         if ($windowsImageConfig.compression_format) {
