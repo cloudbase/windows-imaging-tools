@@ -516,7 +516,7 @@ function Download-ZapFree {
     $ZapFreeZipPath = "$resourcesDir\ntfszapfree.zip"
     Write-Log "Downloading ntfszapfree..."
 
-    $ZapFreeUrl = "https://github.com/felfert/ntfszapfree/releases/download/ntfszapfree-0.10/ntfszapfree.zip"
+    $ZapFreeUrl = "https://github.com/felfert/ntfszapfree/releases/download/ntfszapfree-0.11/ntfszapfree.zip"
     Execute-Retry {
         (New-Object System.Net.WebClient).DownloadFile($ZapFreeUrl, $ZapFreeZipPath)
     }
