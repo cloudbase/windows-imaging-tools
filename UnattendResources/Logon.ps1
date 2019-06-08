@@ -75,15 +75,15 @@ function Clean-UpdateResources {
     Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name AutoLogonCount -ErrorAction SilentlyContinue
 
     # Cleanup
-    Remove-Item -Recurse -Force -Exclude "sdelete.exe" $resourcesDir
+    Remove-Item -Recurse -Force -Exclude "zapfree.exe" $resourcesDir
     Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
-    $sdelete = "$resourcesDir\sdelete.exe"
-    if ( Test-Path $sdelete ) {
+    $zapfree = "$resourcesDir\zapfree.exe"
+    if ( Test-Path $zapfree ) {
         Write-Host "Optimizing for sparse image..."
-        & $sdelete -AcceptEULA -z $ENV:SystemDrive
+        & $zapfree -z $ENV:SystemDrive
         Remove-Item -Recurse -Force $resourcesDir
     } else {
-        Write-Debug "No sdelete. Image not optimized."
+        Write-Debug "No zapfree. Image not optimized."
     }
 }
 
