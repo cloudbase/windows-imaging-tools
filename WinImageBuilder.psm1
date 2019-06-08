@@ -504,28 +504,28 @@ function Download-CloudbaseInit {
     }
 }
 
-function Download-SDelete {
+function Download-ZapFree {
     Param(
         [Parameter(Mandatory=$true)]
         [string]$resourcesDir,
         [Parameter(Mandatory=$true)]
         [string]$osArch
     )
-    $SDeletePath = "$resourcesDir\sdelete.exe"
-    $SDelete64Path = "$resourcesDir\sdelete64.exe"
-    $SDeleteZipPath = "$resourcesDir\sdelete.zip"
-    Write-Log "Downloading SDelete..."
+    $ZapFreePath = "$resourcesDir\zapfree.exe"
+    $ZapFree32Path = "$resourcesDir\zapfree32.exe"
+    $ZapFreeZipPath = "$resourcesDir\ntfszapfree.zip"
+    Write-Log "Downloading ntfszapfree..."
 
-    $SDeleteUrl = "https://download.sysinternals.com/files/SDelete.zip"
+    $ZapFreeUrl = "https://github.com/felfert/ntfszapfree/releases/download/ntfszapfree-0.10/ntfszapfree.zip"
     Execute-Retry {
-        (New-Object System.Net.WebClient).DownloadFile($SDeleteUrl, $SDeleteZipPath)
+        (New-Object System.Net.WebClient).DownloadFile($ZapFreeUrl, $ZapFreeZipPath)
     }
-    Expand-Archive -LiteralPath $SDeleteZipPath -DestinationPath $resourcesDir
-    Remove-Item -Force $SDeleteZipPath
+    Expand-Archive -LiteralPath $ZapFreeZipPath -DestinationPath $resourcesDir
+    Remove-Item -Force $ZapFreeZipPath
     if ($osArch.equals("amd64")) {
-        Move-Item -Force -Path $SDelete64Path -Destination $SDeletePath
+        Remove-Item -Force $ZapFree32Path
     } else {
-        Remove-Item -Force $SDelete64Path
+        Move-Item -Force -Path $ZapFree32Path -Destination $ZapFreePath
     }
 }
 
@@ -1353,8 +1353,8 @@ function New-WindowsCloudImage {
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper -WinDrive $winImagePath -WallpaperPath $windowsImageConfig.wallpaper_path `
             -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
-        if ($windowsImageConfig.sdelete_cleanup) {
-            Download-SDelete $resourcesDir ([string]$image.ImageArchitecture)
+        if ($windowsImageConfig.zero_unused_volume_sectors) {
+            Download-ZapFree $resourcesDir ([string]$image.ImageArchitecture)
         }
         Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
@@ -1489,8 +1489,8 @@ function New-WindowsFromGoldenImage {
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper -WinDrive $driveLetterGold -WallpaperPath $windowsImageConfig.wallpaper_path `
             -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
-        if ($windowsImageConfig.sdelete_cleanup) {
-            Download-SDelete $resourcesDir $imageInfo.imageArchitecture
+        if ($windowsImageConfig.zero_unused_volume_sectors) {
+            Download-ZapFree $resourcesDir $imageInfo.imageArchitecture
         }
         Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
