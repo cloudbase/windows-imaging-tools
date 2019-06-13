@@ -1355,7 +1355,7 @@ function New-WindowsCloudImage {
         }
         if ($windowsImageConfig.virtio_iso_path) {
             Add-VirtIODriversFromISO -vhdDriveLetter $winImagePath -image $image `
-                -driversBasePath $windowsImageConfig.virtio_iso_path
+                -isoPath $windowsImageConfig.virtio_iso_path
         }
         if ($windowsImageConfig.virtio_base_path) {
             Add-VirtIODrivers -vhdDriveLetter $winImagePath -image $image `
