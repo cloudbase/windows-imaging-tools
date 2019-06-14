@@ -68,6 +68,16 @@ function Set-UnattendEnableSwap {
     $xml.Save($Path)
 }
 
+function Optimize-SparseImage {
+    $zapfree = "$resourcesDir\zapfree.exe"
+    if ( Test-Path $zapfree ) {
+        Write-Host "Optimizing for sparse image..."
+        & $zapfree -z $ENV:SystemDrive
+    } else {
+        Write-Debug "No zapfree. Image not optimized."
+    }
+}
+
 function Clean-UpdateResources {
     $HOST.UI.RawUI.WindowTitle = "Running update resources cleanup"
     # We're done, disable AutoLogon
@@ -75,16 +85,9 @@ function Clean-UpdateResources {
     Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name AutoLogonCount -ErrorAction SilentlyContinue
 
     # Cleanup
-    Remove-Item -Recurse -Force -Exclude "zapfree.exe" $resourcesDir
+    Remove-Item -Recurse -Force $resourcesDir
     Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
-    $zapfree = "$resourcesDir\zapfree.exe"
-    if ( Test-Path $zapfree ) {
-        Write-Host "Optimizing for sparse image..."
-        & $zapfree -z $ENV:SystemDrive
-        Remove-Item -Recurse -Force $resourcesDir
-    } else {
-        Write-Debug "No zapfree. Image not optimized."
-    }
+
 }
 
 function Clean-WindowsUpdates {
@@ -399,6 +402,7 @@ try
         Set-UnattendEnableSwap -Path $unattendedXmlPath
     }
     Run-CustomScript "RunBeforeSysprep.ps1"
+    Optimize-SparseImage
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
     Run-CustomScript "RunAfterSysprep.ps1"
     Clean-UpdateResources
