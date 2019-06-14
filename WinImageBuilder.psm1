@@ -517,6 +517,7 @@ function Download-ZapFree {
     Write-Log "Downloading ntfszapfree..."
 
     $ZapFreeUrl = "https://github.com/felfert/ntfszapfree/releases/latest/download/ntfszapfree.zip"
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Execute-Retry {
         (New-Object System.Net.WebClient).DownloadFile($ZapFreeUrl, $ZapFreeZipPath)
     }
