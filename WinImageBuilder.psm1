@@ -19,6 +19,9 @@ $localResourcesDir = "$scriptPath\UnattendResources"
 Import-Module "$scriptPath\Config.psm1"
 Import-Module "$scriptPath\UnattendResources\ini.psm1"
 
+# Enforce Tls1.2, as GitHub and more websites require it.
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $noHypervWarning = @"
 The Hyper-V role is missing from this machine. In order to be able to finish
 generating the image, you need to install the Hyper-V role.
