@@ -508,6 +508,31 @@ function Download-CloudbaseInit {
     }
 }
 
+function Download-ZapFree {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$resourcesDir,
+        [Parameter(Mandatory=$true)]
+        [string]$osArch
+    )
+    $ZapFreePath = "$resourcesDir\zapfree.exe"
+    $ZapFree32Path = "$resourcesDir\zapfree32.exe"
+    $ZapFreeZipPath = "$resourcesDir\ntfszapfree.zip"
+    Write-Log "Downloading ntfszapfree..."
+
+    $ZapFreeUrl = "https://github.com/felfert/ntfszapfree/releases/latest/download/ntfszapfree.zip"
+    Execute-Retry {
+        (New-Object System.Net.WebClient).DownloadFile($ZapFreeUrl, $ZapFreeZipPath)
+    }
+    Expand-Archive -LiteralPath $ZapFreeZipPath -DestinationPath $resourcesDir
+    Remove-Item -Force $ZapFreeZipPath
+    if ($osArch.equals("amd64")) {
+        Remove-Item -Force $ZapFree32Path
+    } else {
+        Move-Item -Force -Path $ZapFree32Path -Destination $ZapFreePath
+    }
+}
+
 function Generate-ConfigFile {
     Param(
         [Parameter(Mandatory=$true)]
@@ -1345,6 +1370,9 @@ function New-WindowsCloudImage {
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper -WinDrive $winImagePath -WallpaperPath $windowsImageConfig.wallpaper_path `
             -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
+        if ($windowsImageConfig.zero_unused_volume_sectors) {
+            Download-ZapFree $resourcesDir ([string]$image.ImageArchitecture)
+        }
         Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
         Apply-Image -winImagePath $winImagePath -wimFilePath $windowsImageConfig.wim_file_path `
@@ -1486,6 +1514,9 @@ function New-WindowsFromGoldenImage {
         Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
         Set-WindowsWallpaper -WinDrive $driveLetterGold -WallpaperPath $windowsImageConfig.wallpaper_path `
             -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
+        if ($windowsImageConfig.zero_unused_volume_sectors) {
+            Download-ZapFree $resourcesDir $imageInfo.imageArchitecture
+        }
         Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release `
                                $windowsImageConfig.msi_path
         Dismount-VHD -Path $windowsImageConfig.gold_image_path | Out-Null

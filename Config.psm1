@@ -151,6 +151,10 @@ function Get-AvailableConfigOptions {
           "Description" = "If set to true and the target image format is QCOW2, the image conversion will
                            use qemu-img built-in compression. The compressed qcow2 image will be smaller, but the conversion
                            will take longer time."},
+        @{"Name" = "zero_unused_volume_sectors"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true, during final cleanup, https://github.com/felfert/ntfszapfree will be used to zero unused space.
+                           This helps qemu-img to minimize image size. In order to benefit from this, an additional invocation
+                           of qemu-img convert has to be performed after the initial run of the image has shutdown."},
         @{"Name" = "extra_packages";
           "Description" = "A comma separated list of extra packages (referenced by filepath)
                            to slipstream into the underlying image.
