@@ -57,7 +57,9 @@ function Get-AvailableConfigOptions {
           "Description" = "Select between tar, gz, zip formats or any combination between these."},
         @{"Name" = "zip_password";
           "Description" = "If this parameter is set, after the image is generated,
-                           a password protected zip archive with the image will be created."},
+                           a password protected zip archive with the image will be created. 
+                           Previous parameter, compression_format, must contain zip format 
+                           in order for this parameter to be used"},
         @{"Name" = "gold_image"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "It will stop the image generation after the updates are installed and cleaned."},
         @{"Name" = "gold_image_path";
