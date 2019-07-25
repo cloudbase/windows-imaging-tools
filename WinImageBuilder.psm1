@@ -1678,6 +1678,8 @@ function New-WindowsCloudImage {
             if ($windowsImageConfig.clean_updates_offline) {
                 Clean-WindowsUpdates $winImagePath -PurgeUpdates $windowsImageConfig.purge_updates
             }
+
+            Optimize-Volume -DriveLetter $drives[1].replace(":","") -Defrag -ReTrim -SlabConsolidate
         } finally {
             if (Test-Path $vhdPath) {
                 Detach-VirtualDisk $vhdPath
