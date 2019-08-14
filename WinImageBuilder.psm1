@@ -850,20 +850,20 @@ function Compress-Image {
                         # Avoid storing the full path in the archive
                         $imageFileName = (Get-Item $VirtualDiskPath).Name
                         Write-Log "Creating tar archive..."
-                        & $7zip a -ttar $tmpName $imageFileName
+                        & $7zip a -aoa -ttar $tmpName $imageFileName
                         if ($LASTEXITCODE) {
                             if ((Test-Path $imageFileName)) {
                                 Remove-Item -Force $imageFileName
                             }
                             throw "7za.exe failed while creating tar file for image: $tmpName"
                         }
-                        Remove-Item -Force $ImagePath
+                        Remove-Item -Force $VirtualDiskPath
                 }
                 if ($compresionFormat -eq "gz") {
                     Write-Log "Compressing $tmpName to gzip"
                         $tmpPathName = (Get-Item $tmpName).Name
                         Write-Log "Creating gzip..."
-                        & $pigz -p12 $tmpPathName
+                        & $pigz -f -q -p12 $tmpPathName
                         if ($LASTEXITCODE) {
                             if ((Test-Path $tmpName)) {
                                 Remove-Item -Force $tmpName
@@ -873,36 +873,38 @@ function Compress-Image {
                     $tmpName = ($tmpName + ".gz")
                 }
                 if ($compresionFormat -eq "zip") {
-                    Write-Log "Archiving $VirtualDiskPath to zip $tmpName"
+                    if ($ZipPassword) {
+                        $zipPath = $tmpName + ".zip"
+                        $7zip = Get-7zipPath
+                        Write-Log "Creating protected zip..."
+                        Write-Log "The zip password is: $ZipPassword"
+                        Start-Executable -Command @("$7zip", "a", "-aoa", "-tzip", "$zipPath", `
+                                                    "$tmpName", "-p$ZipPassword", "-mx1")
+                        Remove-Item -Force $tmpName
+                    } else {
+                        Write-Log "Archiving $VirtualDiskPath to zip $tmpName"
                         # Avoid storing the full path in the archive
                         Write-Log "Creating zip archive..."
                         $zipName = $tmpName + ".zip"
-                        & $7zip a -t7z $zipName $tmpName
+                        & $7zip a -aoa -t7z $zipName $tmpName
                         if ($LASTEXITCODE) {
                             if ((Test-Path $tmpName)) {
                                 Remove-Item -Force $tmpName
                             }
                             throw "7za.exe failed while creating tar file for image: $tmpName"
                         }
-                    Remove-Item -Force $tmpName
+                        Remove-Item -Force $tmpName
+                    }
                 }
             } finally {
-                    Pop-Location }
+                    Write-Log "Archiving finished." }
         }
     } catch {
         Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
         Remove-Item -Force $VirtualDiskPath -ErrorAction SilentlyContinue
         throw
     }
-    if ($ZipPassword) {
-        $zipPath = $tmpName + ".zip"
-        $7zip = Get-7zipPath
-        Write-Log "Creating protected zip..."
-        Write-Log "The zip password is: $ZipPassword"
-        Start-Executable -Command @("$7zip", "a", "-tzip", "$zipPath", `
-                                    "$tmpName", "-p$ZipPassword", "-mx1")
-        Remove-Item -Force $tmpName
-    }
+    Pop-Location
     if (Test-Path $ImagePath) {
         throw "File $ImagePath already exists. The image has been created at $tmpName."
     }
@@ -1249,6 +1251,10 @@ function New-WindowsOnlineImage {
             Remove-IniFileValue -Path $offlineConfigFilePath `
                 -Key 'zip_password' -Section 'DEFAULT'
         }
+        if ($windowsImageConfig.compression_format) {
+            Remove-IniFileValue -Path $offlineConfigFilePath `
+                -Key 'compression_format' -Section 'DEFAULT'
+        }
         New-WindowsCloudImage -ConfigFilePath $offlineConfigFilePath
 
         if ($windowsImageConfig.run_sysprep) {
@@ -1286,6 +1292,7 @@ function New-WindowsOnlineImage {
                 -CompressQcow2 $windowsImageConfig.compress_qcow2
             Remove-Item -Force $virtualDiskPath
         }
+        
         if ($windowsImageConfig.compression_format) {
             Compress-Image -VirtualDiskPath $uncompressedImagePath `
                 -ImagePath $windowsImageConfig['image_path'] `
@@ -1418,11 +1425,13 @@ function New-WindowsCloudImage {
     } elseif ($vhdPath -ne $windowsImageConfig.image_path) {
         Move-Item -Force $vhdPath $windowsImageConfig.image_path
     }
-
-    if ($windowsImageConfig.zip_password) {
-        New-ProtectedZip -ZipPassword $windowsImageConfig.zip_password `
-            -virtualDiskPath $windowsImageConfig.image_path
-    }
+    
+    if ($windowsImageConfig.compression_format) {
+            Compress-Image -VirtualDiskPath $windowsImageConfig.image_path `
+                -ImagePath $windowsImageConfig['image_path'] `
+                -compressionFormats $windowsImageConfig.compression_format `
+                -ZipPassword $windowsImageConfig.zip_password
+        }
     Write-Log "Cloud image generation finished."
 }
 
@@ -1552,9 +1561,6 @@ function New-WindowsFromGoldenImage {
             Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $uncompressedImagePath `
                 -format "RAW"
             Remove-Item -Force $windowsImageConfig.gold_image_path
-            if (!($windowsImageConfig.compression_format -match ".tar.gz")) {
-                $windowsImageConfig.compression_format = ".tar.gz" + $windowsImageConfig.compression_format
-            }
         }
         if ($windowsImageConfig.image_type -eq "KVM") {
             $uncompressedImagePath = $barePath + ".qcow2"
