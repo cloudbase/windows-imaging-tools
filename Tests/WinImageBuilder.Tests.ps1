@@ -142,7 +142,6 @@ Describe "Test Resize-VHDImage" {
     function Mount-VHD { }
     function Resize-VHD { }
     function Dismount-VHD { }
-    function Optimize-VHD { }
     Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-VHD -Verifiable -ModuleName $moduleName { return @{"Size" = 100; "MinimumSize" = 10} }
     Mock Mount-VHD -Verifiable -ModuleName $moduleName {
@@ -167,8 +166,6 @@ Describe "Test Resize-VHDImage" {
     Mock Resize-Partition -Verifiable -ModuleName $moduleName { return 0 }
     Mock Resize-VHD -Verifiable -ModuleName $moduleName { return 0 }
     Mock Dismount-VHD -Verifiable -ModuleName $moduleName { return 0 }
-    Mock Get-Item -Verifiable -ModuleName $moduleName { return @{"Length"=100} }
-    Mock Optimize-VHD -Verifiable -ModuleName $moduleName { return 0 }
 
     It "Should resize a vhd image" {
         Resize-VHDImage -VirtualDiskPath "fakePath" `
@@ -182,6 +179,8 @@ Describe "Test Resize-VHDImage" {
 
 
 Describe "Test New-WindowsOnlineImage" {
+    function Optimize-VHD { }
+
     Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
     Mock Is-Administrator -Verifiable -ModuleName $moduleName { return 0 }
     Mock Check-Prerequisites -Verifiable -ModuleName $moduleName { return 0 }
@@ -193,6 +192,7 @@ Describe "Test New-WindowsOnlineImage" {
     Mock Get-Random -Verifiable -ModuleName $moduleName { return 1 }
     Mock Remove-Item -Verifiable -ModuleName $moduleName { return 0 }
     Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Optimize-VHD -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-VMSwitch -Verifiable -ModuleName $moduleName { return @{"Name"="external";"SwitchType"="External"} }
 
     It "Should create an online image" {
