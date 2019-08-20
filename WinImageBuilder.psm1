@@ -1535,9 +1535,12 @@ function New-WindowsFromGoldenImage {
             Get-Volume).DriveLetter + ":"
 
         $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
-        $maxPartitionSize = (Get-PartitionSupportedSize -DiskNumber $driveNumber -PartitionNumber 1).SizeMax
+        $partition = Get-Partition -DiskNumber $driveNumber | Where-Object {$_.Type -eq "Basic"}
         try {
-            Resize-Partition -DiskNumber $driveNumber -PartitionNumber 1 -Size $maxPartitionSize -ErrorAction SilentlyContinue
+            $maxPartitionSize = (Get-PartitionSupportedSize -DiskNumber $driveNumber -PartitionNumber `
+                                     $partition.PartitionNumber).SizeMax
+            Resize-Partition -DiskNumber $driveNumber -PartitionNumber $partition.PartitionNumber `
+                -Size $maxPartitionSize -ErrorAction SilentlyContinue
         } catch {
             Write-Log "Partition has already the desired size"
         }
