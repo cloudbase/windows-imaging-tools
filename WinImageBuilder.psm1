@@ -1175,6 +1175,22 @@ function Set-WindowsWallpaper {
     Write-Log "Wallpaper was set."
 }
 
+function Reset-WindowsWallpaper {
+    Param(
+        [Parameter(Mandatory=$true)][PathShouldExist()]
+        [string]$WinDrive
+    )
+    $wallpaperDestination = Join-Path $winDrive "\Windows\web\Wallpaper\Cloud\Wallpaper.jpg"
+    Remove-Item -Force -ErrorAction SilentlyContinue $wallpaperDestination
+
+    $cachedWallpaperPartPath = "\Users\Administrator\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper*"
+    $cachedWallpaperPath = Join-Path -ErrorAction SilentlyContinue $winDrive $cachedWallpaperPartPath
+    Remove-Item -Force -ErrorAction SilentlyContinue $cachedWallpaperPath
+
+    $windowsLocalGPOPath = Join-Path $winDrive "\Windows\System32\GroupPolicy\User\Registry.pol"
+    Remove-Item -Force -ErrorAction SilentlyContinue $windowsLocalGPOPath
+}
+
 function Get-TotalLogicalProcessors {
     $count = 0
     $cpus = Get-WmiObject Win32_Processor
@@ -1538,6 +1554,8 @@ function New-WindowsFromGoldenImage {
         if ($windowsImageConfig.enable_custom_wallpaper) {
             Set-WindowsWallpaper -WinDrive $driveLetterGold -WallpaperPath $windowsImageConfig.wallpaper_path `
                 -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
+        } else {
+            Reset-WindowsWallpaper -WinDrive $driveLetterGold
         }
         if ($windowsImageConfig.zero_unused_volume_sectors) {
             Download-ZapFree $resourcesDir $imageInfo.imageArchitecture
