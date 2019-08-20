@@ -1059,7 +1059,18 @@ function Run-Sysprep {
     Write-Log "Creating VM $Name attached to $VMSwitch"
     New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch `
         -VhdPath $VhdPath -Generation $Generation | Out-Null
-    Set-VMProcessor -VMname $Name -count $CpuCores
+    Set-VMProcessor -VMname $Name -count $CpuCores | Out-Null
+
+    Set-VMMemory -VMname $Name -DynamicMemoryEnabled:$false | Out-Null
+    $vmAutomaticCheckpointsEnabledWrapper = (Get-VM -Name $Name) | Select-Object 'AutomaticCheckpointsEnabled' `
+        -ErrorAction SilentlyContinue
+    $vmAutomaticCheckpointsEnabled = $false
+    if ($vmAutomaticCheckpointsEnabledWrapper) {
+       $vmAutomaticCheckpointsEnabled = $vmAutomaticCheckpointsEnabledWrapper.AutomaticCheckpointsEnabled
+    }
+    if ($vmAutomaticCheckpointsEnabled) {
+       Set-VM -VMName $Name -AutomaticCheckpointsEnabled:$false
+    }
     Write-Log "Starting $Name"
     Start-VM $Name | Out-Null
     Start-Sleep 5
@@ -1566,25 +1577,18 @@ function New-WindowsFromGoldenImage {
                                -CloudbaseInitUnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
         Dismount-VHD -Path $windowsImageConfig.gold_image_path | Out-Null
 
-        $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
+        if ($windowsImageConfig.run_sysprep) {
+            if($windowsImageConfig.disk_layout -eq "UEFI") {
+                $generation = "2"
+            } else {
+                $generation = "1"
+            }
 
-        $vm = New-VM -Name $Name -MemoryStartupBytes $windowsImageConfig.ram_size -SwitchName $switch.Name `
-            -VHDPath $windowsImageConfig.gold_image_path
-        Set-VMProcessor -VMname $Name -count $windowsImageConfig.cpu_count | Out-Null
-        Set-VMMemory -VMname $Name -DynamicMemoryEnabled:$false | Out-Null
-        $vmAutomaticCheckpointsEnabledWrapper = $vm | Select-Object 'AutomaticCheckpointsEnabled' -ErrorAction SilentlyContinue
-        $vmAutomaticCheckpointsEnabled = $false
-        if ($vmAutomaticCheckpointsEnabledWrapper) {
-            $vmAutomaticCheckpointsEnabled = $vmAutomaticCheckpointsEnabledWrapper.AutomaticCheckpointsEnabled
+            $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
+            Run-Sysprep -Name $Name -Memory $windowsImageConfig.ram_size -vhdPath $windowsImageConfig.gold_image_path `
+                -VMSwitch $switch.Name -CpuCores $windowsImageConfig.cpu_count `
+                -Generation $generation
         }
-        if ($vmAutomaticCheckpointsEnabled) {
-            Set-VM -VMName $Name -AutomaticCheckpointsEnabled:$false
-        }
-
-        Start-VM $Name | Out-Null
-        Start-Sleep 10
-        Wait-ForVMShutdown $Name
-        Remove-VM $Name -Confirm:$False -Force
 
         if ($windowsImageConfig.shrink_image_to_minimum_size -eq $true) {
             Resize-VHDImage $windowsImageConfig.gold_image_path
