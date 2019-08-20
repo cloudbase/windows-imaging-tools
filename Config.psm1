@@ -171,10 +171,12 @@ function Get-AvailableConfigOptions {
         @{"Name" = "extra_packages";
           "Description" = "A comma separated list of extra packages (referenced by filepath)
                            to slipstream into the underlying image.
-                           This allows additional local packages, like security updates, to be added to the image."}
+                           This allows additional local packages, like security updates, to be added to the image."},
         @{"Name" = "extra_packages_ignore_errors"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "Ignore failures from DISM when installing extra_packages, such as when
-                           updates are skipped which are not applicable to the image."}
+                           updates are skipped which are not applicable to the image."},
+        @{"Name" = "enable_shutdown_without_logon"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "Enables shutdown of the Windows instance from the logon console."}
 
     )
 }

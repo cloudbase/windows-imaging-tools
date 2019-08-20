@@ -335,6 +335,9 @@ try
         $runCloudbaseInitUnderLocalSystem = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" `
             -Key "cloudbase_init_use_local_system"
     } catch {}
+    try {
+        $enableShutdownWithoutLogon = Get-IniFileValue -Path $configIniPath -Key "enable_shutdown_without_logon"
+    } catch {}
 
     if ($productKey) {
         License-Windows $productKey
@@ -401,6 +404,13 @@ try
     Run-Defragment
 
     Release-IP
+
+    if ($enableShutdownWithoutLogon) {
+       Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\" `
+           -Name shutdownwithoutlogon -Value 1 -Type DWord
+       Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\" `
+           -Name ShutdownWarningDialogTimeout -Value 1 -Type DWord
+    }
 
     if (Is-WindowsClient -and $enableAdministrator) {
         Enable-AdministratorAccount
