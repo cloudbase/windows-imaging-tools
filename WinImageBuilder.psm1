@@ -1396,8 +1396,8 @@ function New-WindowsCloudImage {
         }
         Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
                                -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
-                               -ConfigPath $windowsImageConfig.cloudbase_init_config_path `
-                               -UnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
+                               -CloudbaseInitConfigPath $windowsImageConfig.cloudbase_init_config_path `
+                               -CloudbaseInitUnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
         Apply-Image -winImagePath $winImagePath -wimFilePath $windowsImageConfig.wim_file_path `
             -imageIndex $image.ImageIndex
         Create-BCDBootConfig -systemDrive $drives[0] -windowsDrive $drives[1] -diskLayout $windowsImageConfig.disk_layout `
