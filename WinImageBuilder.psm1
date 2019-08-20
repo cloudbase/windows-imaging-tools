@@ -1006,12 +1006,6 @@ function Resize-VHDImage {
     }
     $FinalDiskSize = ((Get-VHD -Path $VirtualDiskPath).Size/1GB)
     Write-Log "Final disk size: $FinalDiskSize GB"
-
-    $virtualDiskFileSize = (Get-Item -Path $VirtualDiskPath).Length / 1GB
-    Write-Log "Optimize VHD ${VirtualDiskPath}: file size before optimization is ${virtualDiskFileSize} GB"
-    Optimize-VHD $VirtualDiskPath -Mode Full
-    $finalVirtualDiskFileSize = (Get-Item -Path $VirtualDiskPath).Length / 1GB
-    Write-Log "Optimize VHD ${VirtualDiskPath}: file size after optimization is ${finalVirtualDiskFileSize} GB"
 }
 
 function Check-Prerequisites {
@@ -1269,7 +1263,11 @@ function New-WindowsOnlineImage {
                 -VMSwitch $switch.Name -CpuCores $windowsImageConfig.cpu_count `
                 -Generation $generation
         }
-        Resize-VHDImage $virtualDiskPath
+
+        if ($windowsImageConfig.shrink_image_to_minimum_size -eq $true) {
+            Resize-VHDImage $virtualDiskPath
+        }
+        Optimize-VHD $VirtualDiskPath -Mode Full
 
         if ($windowsImageConfig.image_type -eq "MAAS") {
             $uncompressedImagePath = $barePath + ".img"
@@ -1550,7 +1548,10 @@ function New-WindowsFromGoldenImage {
         Wait-ForVMShutdown $Name
         Remove-VM $Name -Confirm:$False -Force
 
-        Resize-VHDImage $windowsImageConfig.gold_image_path
+        if ($windowsImageConfig.shrink_image_to_minimum_size -eq $true) {
+            Resize-VHDImage $windowsImageConfig.gold_image_path
+        }
+        Optimize-VHD $windowsImageConfig.gold_image_path -Mode Full
 
         $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
         $uncompressedImagePath = $windowsImageConfig.image_path
