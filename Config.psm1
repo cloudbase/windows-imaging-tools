@@ -99,7 +99,7 @@ function Get-AvailableConfigOptions {
           "Description" = "The number of CPU cores assigned to the VM used to generate the image."},
         @{"Name" = "ram_size"; "GroupName" = "vm"; "DefaultValue" = "2147483648";
           "Description" = "RAM (in bytes) assigned to the VM used to generate the image."},
-        @{"Name" = "disk_size"; "GroupName" = "vm"; "DefaultValue" = "42949672960,";
+        @{"Name" = "disk_size"; "GroupName" = "vm"; "DefaultValue" = "42949672960";
           "Description" = "Disk space (in bytes) assigned to the boot disk  for the VM used to generate the image."},
         @{"Name" = "shrink_image_to_minimum_size"; "DefaultValue" = $true; "AsBoolean" = $true
           "Description" = "Whether to shrink the image partition and disk after the image generation is complete."},
@@ -146,7 +146,7 @@ function Get-AvailableConfigOptions {
           "Description" = "If set, the cloudbase-init.conf is replaced with the file at the path."},
         @{"Name" = "cloudbase_init_unattended_config_path"; "GroupName" = "cloudbase_init";
           "Description" = "If set, the cloudbase-init-unattend.conf is replaced with the file at the path."},
-        @{"Name" = "cloudbase_init_use_local_system"; "GroupName" = "cloudbase_init";
+        @{"Name" = "cloudbase_init_use_local_system"; "GroupName" = "cloudbase_init"; "AsBoolean" = $true;" DefaultValue" = $false;
           "Description" = "If set, the Cloudbase-Init service will be run under Local System account.
                            By default, a user named cloudbase-init with admin rights is created and used."},
         @{"Name" = "enable_custom_wallpaper"; "DefaultValue" = $true; "AsBoolean" = $true;
