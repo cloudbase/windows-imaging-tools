@@ -536,7 +536,7 @@ function Download-ZapFree {
     Execute-Retry {
         (New-Object System.Net.WebClient).DownloadFile($ZapFreeUrl, $ZapFreeZipPath)
     }
-    Expand-Archive -LiteralPath $ZapFreeZipPath -DestinationPath $resourcesDir
+    Expand-Archive -LiteralPath $ZapFreeZipPath -DestinationPath $resourcesDir -Force
     Remove-Item -Force $ZapFreeZipPath
     if ($osArch.equals("amd64")) {
         Remove-Item -Force $ZapFree32Path
