@@ -1562,8 +1562,8 @@ function New-WindowsFromGoldenImage {
         }
         Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
                                -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
-                               -ConfigPath $windowsImageConfig.cloudbase_init_config_path `
-                               -UnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
+                               -CloudbaseInitConfigPath $windowsImageConfig.cloudbase_init_config_path `
+                               -CloudbaseInitUnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
         Dismount-VHD -Path $windowsImageConfig.gold_image_path | Out-Null
 
         $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
