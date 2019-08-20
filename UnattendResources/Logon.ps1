@@ -338,6 +338,9 @@ try
     try {
         $enableShutdownWithoutLogon = Get-IniFileValue -Path $configIniPath -Key "enable_shutdown_without_logon"
     } catch {}
+    try {
+        $enablePing = Get-IniFileValue -Path $configIniPath -Key "enable_ping_requests"
+    } catch {}
 
     if ($productKey) {
         License-Windows $productKey
@@ -410,6 +413,11 @@ try
            -Name shutdownwithoutlogon -Value 1 -Type DWord
        Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\" `
            -Name ShutdownWarningDialogTimeout -Value 1 -Type DWord
+    }
+
+    if ($enablePing) {
+        netsh advfirewall firewall add rule name="Allow IPv4 ping requests" protocol="icmpv4:8,any" dir=in action=allow
+        netsh advfirewall firewall add rule name="Allow IPv6 ping requests" protocol="icmpv6:8,any" dir=in action=allow
     }
 
     if (Is-WindowsClient -and $enableAdministrator) {

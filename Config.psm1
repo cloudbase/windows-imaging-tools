@@ -176,7 +176,9 @@ function Get-AvailableConfigOptions {
           "Description" = "Ignore failures from DISM when installing extra_packages, such as when
                            updates are skipped which are not applicable to the image."},
         @{"Name" = "enable_shutdown_without_logon"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = "Enables shutdown of the Windows instance from the logon console."}
+          "Description" = "Enables shutdown of the Windows instance from the logon console."},
+        @{"Name" = "enable_ping_requests"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true, it adds adds firewall rules to enable ping requests (ipv4 and ipv6)."}
 
     )
 }
