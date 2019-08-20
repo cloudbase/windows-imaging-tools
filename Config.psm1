@@ -142,6 +142,13 @@ function Get-AvailableConfigOptions {
         @{"Name" = "msi_path"; "GroupName" = "cloudbase_init";
           "Description" = "If set, the Cloudbase-Init msi at this path will be used.
                           The path needs to be a locally accesible file path."},
+        @{"Name" = "cloudbase_init_config_path"; "GroupName" = "cloudbase_init";
+          "Description" = "If set, the cloudbase-init.conf is replaced with the file at the path."},
+        @{"Name" = "cloudbase_init_unattended_config_path"; "GroupName" = "cloudbase_init";
+          "Description" = "If set, the cloudbase-init-unattend.conf is replaced with the file at the path."},
+        @{"Name" = "cloudbase_init_use_local_system"; "GroupName" = "cloudbase_init";
+          "Description" = "If set, the Cloudbase-Init service will be run under Local System account.
+                           By default, a user named cloudbase-init with admin rights is created and used."},
         @{"Name" = "enable_custom_wallpaper"; "DefaultValue" = $true; "AsBoolean" = $true;
           "Description" = "If set to true, a custom wallpaper will be set according to the values of configuration options
                            wallpaper_path and wallpaper_solid_color"},

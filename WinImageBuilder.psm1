@@ -479,9 +479,21 @@ function Download-CloudbaseInit {
         [parameter(Mandatory=$false)]
         [switch]$BetaRelease,
         [parameter(Mandatory=$false)]
-        [string]$MsiPath
+        [string]$MsiPath,
+        [string]$CloudbaseInitConfigPath,
+        [string]$CloudbaseInitUnattendedConfigPath
     )
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
+    if ($CloudbaseInitConfigPath) {
+        Write-Log "Copying Cloudbase-Init custom configuration file..."
+        Copy-Item -Force $CloudbaseInitConfigPath "$resourcesDir\cloudbase-init.conf"
+    }
+    if ($CloudbaseInitUnattendedConfigPath) {
+        Write-Log "Copying Cloudbase-Init custom unattended configuration file..."
+        Copy-Item -Force $CloudbaseInitUnattendedConfigPath `
+            "$resourcesDir\cloudbase-init-unattend.conf"
+    }
+
     if ($MsiPath) {
         if (!(Test-Path $MsiPath)) {
             throw "Cloudbase-Init installer could not be copied. $MsiPath does not exist."
@@ -1382,8 +1394,10 @@ function New-WindowsCloudImage {
         if ($windowsImageConfig.zero_unused_volume_sectors) {
             Download-ZapFree $resourcesDir ([string]$image.ImageArchitecture)
         }
-        Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release `
-                               $windowsImageConfig.msi_path
+        Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
+                               -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
+                               -ConfigPath $windowsImageConfig.cloudbase_init_config_path `
+                               -UnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
         Apply-Image -winImagePath $winImagePath -wimFilePath $windowsImageConfig.wim_file_path `
             -imageIndex $image.ImageIndex
         Create-BCDBootConfig -systemDrive $drives[0] -windowsDrive $drives[1] -diskLayout $windowsImageConfig.disk_layout `
@@ -1528,8 +1542,10 @@ function New-WindowsFromGoldenImage {
         if ($windowsImageConfig.zero_unused_volume_sectors) {
             Download-ZapFree $resourcesDir $imageInfo.imageArchitecture
         }
-        Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release `
-                               $windowsImageConfig.msi_path
+        Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
+                               -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
+                               -ConfigPath $windowsImageConfig.cloudbase_init_config_path `
+                               -UnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
         Dismount-VHD -Path $windowsImageConfig.gold_image_path | Out-Null
 
         $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
