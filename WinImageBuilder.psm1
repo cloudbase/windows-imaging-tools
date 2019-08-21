@@ -1653,4 +1653,5 @@ function New-WindowsFromGoldenImage {
 }
 
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
-    New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage
+    New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage, Get-WindowsImageConfig,
+    New-WindowsImageConfig
