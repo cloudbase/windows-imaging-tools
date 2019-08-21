@@ -100,7 +100,7 @@ function Get-AvailableConfigOptions {
         @{"Name" = "ram_size"; "GroupName" = "vm"; "DefaultValue" = "2147483648";
           "Description" = "RAM (in bytes) assigned to the VM used to generate the image."},
         @{"Name" = "disk_size"; "GroupName" = "vm"; "DefaultValue" = "42949672960";
-          "Description" = "Disk space (in bytes) assigned to the boot disk  for the VM used to generate the image."},
+          "Description" = "Disk space (in bytes) assigned to the boot disk for the VM used to generate the image."},
         @{"Name" = "shrink_image_to_minimum_size"; "DefaultValue" = $true; "AsBoolean" = $true
           "Description" = "Whether to shrink the image partition and disk after the image generation is complete."},
         @{"Name" = "virtio_iso_path"; "GroupName" = "drivers";
@@ -141,7 +141,7 @@ function Get-AvailableConfigOptions {
                            If set to null, the first serial port (if any) from the generation VM will be used"},
         @{"Name" = "msi_path"; "GroupName" = "cloudbase_init";
           "Description" = "If set, the Cloudbase-Init msi at this path will be used.
-                          The path needs to be a locally accesible file path."},
+                          The path needs to be a locally accessible file path."},
         @{"Name" = "cloudbase_init_config_path"; "GroupName" = "cloudbase_init";
           "Description" = "If set, the cloudbase-init.conf is replaced with the file at the path."},
         @{"Name" = "cloudbase_init_unattended_config_path"; "GroupName" = "cloudbase_init";
@@ -167,7 +167,7 @@ function Get-AvailableConfigOptions {
         @{"Name" = "zero_unused_volume_sectors"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true, during final cleanup, https://github.com/felfert/ntfszapfree will be used to zero unused space.
                            This helps qemu-img to minimize image size. In order to benefit from this, an additional invocation
-                           of qemu-img convert has to be performed after the initial run of the image has shutdown."},
+                           of qemu-img convert must be performed after the initial run of the image has shutdown."},
         @{"Name" = "extra_packages";
           "Description" = "A comma separated list of extra packages (referenced by filepath)
                            to slipstream into the underlying image.
@@ -178,7 +178,7 @@ function Get-AvailableConfigOptions {
         @{"Name" = "enable_shutdown_without_logon"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "Enables shutdown of the Windows instance from the logon console."},
         @{"Name" = "enable_ping_requests"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = "If set to true, it adds adds firewall rules to enable ping requests (ipv4 and ipv6)."}
+          "Description" = "If set to true, firewall rules will be added to enable ping requests (ipv4 and ipv6)."}
 
     )
 }
