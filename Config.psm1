@@ -146,7 +146,7 @@ function Get-AvailableConfigOptions {
           "Description" = "If set, the cloudbase-init.conf is replaced with the file at the path."},
         @{"Name" = "cloudbase_init_unattended_config_path"; "GroupName" = "cloudbase_init";
           "Description" = "If set, the cloudbase-init-unattend.conf is replaced with the file at the path."},
-        @{"Name" = "cloudbase_init_use_local_system"; "GroupName" = "cloudbase_init"; "AsBoolean" = $true;" DefaultValue" = $false;
+        @{"Name" = "cloudbase_init_use_local_system"; "GroupName" = "cloudbase_init"; "AsBoolean" = $true; "DefaultValue" = $false;
           "Description" = "If set, the Cloudbase-Init service will be run under Local System account.
                            By default, a user named cloudbase-init with admin rights is created and used."},
         @{"Name" = "enable_custom_wallpaper"; "DefaultValue" = $true; "AsBoolean" = $true;
