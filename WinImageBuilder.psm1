@@ -1330,8 +1330,23 @@ function New-WindowsCloudImage {
         [string]$ConfigFilePath
     )
     Write-Log "Cloud image generation started."
-
+    try {
     $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
+    $mountedWindowsIso = $null
+    if ($windowsImageConfig.wim_file_path.EndsWith('.iso')) {
+        $windowsImageConfig.wim_file_path = get-command $windowsImageConfig.wim_file_path -erroraction ignore | Select-Object -ExpandProperty Source
+        if($windowsImageConfig.wim_file_path -eq $null){
+            throw ("Unable to find source iso. Either specify the full path or add the folder containing the iso to the path variable")
+        }
+        
+        $mountedWindowsIso = [WIMInterop.VirtualDisk]::OpenVirtualDisk($windowsImageConfig.wim_file_path)
+        $mountedWindowsIso.AttachVirtualDisk()
+        $devicePath = $mountedWindowsIso.GetVirtualDiskPhysicalPath()
+        $basePath = ((Get-DiskImage -DevicePath $devicePath `
+                | Get-Volume).DriveLetter) + ":"
+        $windowsImageConfig.wim_file_path = "$($basePath)\Sources\install.wim"
+    }
+    
     Validate-WindowsImageConfig $windowsImageConfig
     Set-DotNetCWD
     Is-Administrator
@@ -1433,6 +1448,11 @@ function New-WindowsCloudImage {
                 -ZipPassword $windowsImageConfig.zip_password
         }
     Write-Log "Cloud image generation finished."
+    } finally {
+        if($mountedWindowsIso){
+            $mountedWindowsIso.DetachVirtualDisk()
+        }
+    }
 }
 
 function New-WindowsFromGoldenImage {
