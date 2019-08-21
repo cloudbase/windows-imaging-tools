@@ -331,6 +331,16 @@ try
         $productKey = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "product_key"
     } catch {}
     $serialPortName = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "serial_logging_port"
+    try {
+        $runCloudbaseInitUnderLocalSystem = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" `
+            -Key "cloudbase_init_use_local_system"
+    } catch {}
+    try {
+        $enableShutdownWithoutLogon = Get-IniFileValue -Path $configIniPath -Key "enable_shutdown_without_logon"
+    } catch {}
+    try {
+        $enablePing = Get-IniFileValue -Path $configIniPath -Key "enable_ping_requests"
+    } catch {}
 
     if ($productKey) {
         License-Windows $productKey
@@ -357,9 +367,12 @@ try
     Run-CustomScript "RunBeforeCloudbaseInitInstall.ps1"
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
-    $programFilesDir = $ENV:ProgramFiles
+    $cloudbaseInitInstallDir = Join-Path $ENV:ProgramFiles "Cloudbase Solutions\Cloudbase-Init"
+
 
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
+    $CloudbaseInitConfigPath = "$resourcesDir\cloudbase-init.conf"
+    $CloudbaseInitUnattendedConfigPath = "$resourcesDir\cloudbase-init-unattend.conf"
     $CloudbaseInitMsiLog = "$resourcesDir\CloudbaseInit.log"
 
     if (!$serialPortName) {
@@ -373,26 +386,46 @@ try
     if ($serialPortName) {
         $msiexecArgumentList += " LOGGINGSERIALPORTNAME=$serialPortName"
     }
+    if ($runCloudbaseInitUnderLocalSystem) {
+        $msiexecArgumentList += " RUN_SERVICE_AS_LOCAL_SYSTEM=1"
+    }
 
     $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList $msiexecArgumentList
     if ($p.ExitCode -ne 0) {
         throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
     }
 
+    Copy-Item -Force $CloudbaseInitConfigPath "${cloudbaseInitInstallDir}\conf\cloudbase-init.conf" `
+              -ErrorAction SilentlyContinue
+    Copy-Item -Force $CloudbaseInitUnattendedConfigPath "${cloudbaseInitInstallDir}\conf\cloudbase-init-unattend.conf" `
+              -ErrorAction SilentlyContinue
+
     $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
-    & "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\bin\SetSetupComplete.cmd"
+    & "${cloudbaseInitInstallDir}\bin\SetSetupComplete.cmd"
     Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
 
     Run-Defragment
 
     Release-IP
 
+    if ($enableShutdownWithoutLogon) {
+       Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\" `
+           -Name shutdownwithoutlogon -Value 1 -Type DWord
+       Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\" `
+           -Name ShutdownWarningDialogTimeout -Value 1 -Type DWord
+    }
+
+    if ($enablePing) {
+        netsh advfirewall firewall add rule name="Allow IPv4 ping requests" protocol="icmpv4:8,any" dir=in action=allow
+        netsh advfirewall firewall add rule name="Allow IPv6 ping requests" protocol="icmpv6:8,any" dir=in action=allow
+    }
+
     if (Is-WindowsClient -and $enableAdministrator) {
         Enable-AdministratorAccount
     }
 
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
-    $unattendedXmlPath = "$programFilesDir\Cloudbase Solutions\Cloudbase-Init\conf\Unattend.xml"
+    $unattendedXmlPath = "${cloudbaseInitInstallDir}\conf\Unattend.xml"
     Set-PersistDrivers -Path $unattendedXmlPath -Persist:$persistDrivers
 
     if ($disableSwap) {

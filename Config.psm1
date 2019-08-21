@@ -99,8 +99,8 @@ function Get-AvailableConfigOptions {
           "Description" = "The number of CPU cores assigned to the VM used to generate the image."},
         @{"Name" = "ram_size"; "GroupName" = "vm"; "DefaultValue" = "2147483648";
           "Description" = "RAM (in bytes) assigned to the VM used to generate the image."},
-        @{"Name" = "disk_size"; "GroupName" = "vm"; "DefaultValue" = "42949672960,";
-          "Description" = "Disk space (in bytes) assigned to the boot disk  for the VM used to generate the image."},
+        @{"Name" = "disk_size"; "GroupName" = "vm"; "DefaultValue" = "42949672960";
+          "Description" = "Disk space (in bytes) assigned to the boot disk for the VM used to generate the image."},
         @{"Name" = "shrink_image_to_minimum_size"; "DefaultValue" = $true; "AsBoolean" = $true
           "Description" = "Whether to shrink the image partition and disk after the image generation is complete."},
         @{"Name" = "virtio_iso_path"; "GroupName" = "drivers";
@@ -141,7 +141,14 @@ function Get-AvailableConfigOptions {
                            If set to null, the first serial port (if any) from the generation VM will be used"},
         @{"Name" = "msi_path"; "GroupName" = "cloudbase_init";
           "Description" = "If set, the Cloudbase-Init msi at this path will be used.
-                          The path needs to be a locally accesible file path."},
+                          The path needs to be a locally accessible file path."},
+        @{"Name" = "cloudbase_init_config_path"; "GroupName" = "cloudbase_init";
+          "Description" = "If set, the cloudbase-init.conf is replaced with the file at the path."},
+        @{"Name" = "cloudbase_init_unattended_config_path"; "GroupName" = "cloudbase_init";
+          "Description" = "If set, the cloudbase-init-unattend.conf is replaced with the file at the path."},
+        @{"Name" = "cloudbase_init_use_local_system"; "GroupName" = "cloudbase_init"; "AsBoolean" = $true; "DefaultValue" = $false;
+          "Description" = "If set, the Cloudbase-Init service will be run under Local System account.
+                           By default, a user named cloudbase-init with admin rights is created and used."},
         @{"Name" = "enable_custom_wallpaper"; "DefaultValue" = $true; "AsBoolean" = $true;
           "Description" = "If set to true, a custom wallpaper will be set according to the values of configuration options
                            wallpaper_path and wallpaper_solid_color"},
@@ -160,14 +167,18 @@ function Get-AvailableConfigOptions {
         @{"Name" = "zero_unused_volume_sectors"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true, during final cleanup, https://github.com/felfert/ntfszapfree will be used to zero unused space.
                            This helps qemu-img to minimize image size. In order to benefit from this, an additional invocation
-                           of qemu-img convert has to be performed after the initial run of the image has shutdown."},
+                           of qemu-img convert must be performed after the initial run of the image has shutdown."},
         @{"Name" = "extra_packages";
           "Description" = "A comma separated list of extra packages (referenced by filepath)
                            to slipstream into the underlying image.
-                           This allows additional local packages, like security updates, to be added to the image."}
+                           This allows additional local packages, like security updates, to be added to the image."},
         @{"Name" = "extra_packages_ignore_errors"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "Ignore failures from DISM when installing extra_packages, such as when
-                           updates are skipped which are not applicable to the image."}
+                           updates are skipped which are not applicable to the image."},
+        @{"Name" = "enable_shutdown_without_logon"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "Enables shutdown of the Windows instance from the logon console."},
+        @{"Name" = "enable_ping_requests"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true, firewall rules will be added to enable ping requests (ipv4 and ipv6)."}
 
     )
 }

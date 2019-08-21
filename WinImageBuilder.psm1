@@ -479,9 +479,21 @@ function Download-CloudbaseInit {
         [parameter(Mandatory=$false)]
         [switch]$BetaRelease,
         [parameter(Mandatory=$false)]
-        [string]$MsiPath
+        [string]$MsiPath,
+        [string]$CloudbaseInitConfigPath,
+        [string]$CloudbaseInitUnattendedConfigPath
     )
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
+    if ($CloudbaseInitConfigPath) {
+        Write-Log "Copying Cloudbase-Init custom configuration file..."
+        Copy-Item -Force $CloudbaseInitConfigPath "$resourcesDir\cloudbase-init.conf"
+    }
+    if ($CloudbaseInitUnattendedConfigPath) {
+        Write-Log "Copying Cloudbase-Init custom unattended configuration file..."
+        Copy-Item -Force $CloudbaseInitUnattendedConfigPath `
+            "$resourcesDir\cloudbase-init-unattend.conf"
+    }
+
     if ($MsiPath) {
         if (!(Test-Path $MsiPath)) {
             throw "Cloudbase-Init installer could not be copied. $MsiPath does not exist."
@@ -524,7 +536,7 @@ function Download-ZapFree {
     Execute-Retry {
         (New-Object System.Net.WebClient).DownloadFile($ZapFreeUrl, $ZapFreeZipPath)
     }
-    Expand-Archive -LiteralPath $ZapFreeZipPath -DestinationPath $resourcesDir
+    Expand-Archive -LiteralPath $ZapFreeZipPath -DestinationPath $resourcesDir -Force
     Remove-Item -Force $ZapFreeZipPath
     if ($osArch.equals("amd64")) {
         Remove-Item -Force $ZapFree32Path
@@ -1047,7 +1059,18 @@ function Run-Sysprep {
     Write-Log "Creating VM $Name attached to $VMSwitch"
     New-VM -Name $Name -MemoryStartupBytes $Memory -SwitchName $VMSwitch `
         -VhdPath $VhdPath -Generation $Generation | Out-Null
-    Set-VMProcessor -VMname $Name -count $CpuCores
+    Set-VMProcessor -VMname $Name -count $CpuCores | Out-Null
+
+    Set-VMMemory -VMname $Name -DynamicMemoryEnabled:$false | Out-Null
+    $vmAutomaticCheckpointsEnabledWrapper = (Get-VM -Name $Name) | Select-Object 'AutomaticCheckpointsEnabled' `
+        -ErrorAction SilentlyContinue
+    $vmAutomaticCheckpointsEnabled = $false
+    if ($vmAutomaticCheckpointsEnabledWrapper) {
+       $vmAutomaticCheckpointsEnabled = $vmAutomaticCheckpointsEnabledWrapper.AutomaticCheckpointsEnabled
+    }
+    if ($vmAutomaticCheckpointsEnabled) {
+       Set-VM -VMName $Name -AutomaticCheckpointsEnabled:$false
+    }
     Write-Log "Starting $Name"
     Start-VM $Name | Out-Null
     Start-Sleep 5
@@ -1161,6 +1184,22 @@ function Set-WindowsWallpaper {
     Write-Log "Wallpaper GPO copied to the image."
 
     Write-Log "Wallpaper was set."
+}
+
+function Reset-WindowsWallpaper {
+    Param(
+        [Parameter(Mandatory=$true)][PathShouldExist()]
+        [string]$WinDrive
+    )
+    $wallpaperDestination = Join-Path $winDrive "\Windows\web\Wallpaper\Cloud\Wallpaper.jpg"
+    Remove-Item -Force -ErrorAction SilentlyContinue $wallpaperDestination
+
+    $cachedWallpaperPartPath = "\Users\Administrator\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper*"
+    $cachedWallpaperPath = Join-Path -ErrorAction SilentlyContinue $winDrive $cachedWallpaperPartPath
+    Remove-Item -Force -ErrorAction SilentlyContinue $cachedWallpaperPath
+
+    $windowsLocalGPOPath = Join-Path $winDrive "\Windows\System32\GroupPolicy\User\Registry.pol"
+    Remove-Item -Force -ErrorAction SilentlyContinue $windowsLocalGPOPath
 }
 
 function Get-TotalLogicalProcessors {
@@ -1397,8 +1436,10 @@ function New-WindowsCloudImage {
         if ($windowsImageConfig.zero_unused_volume_sectors) {
             Download-ZapFree $resourcesDir ([string]$image.ImageArchitecture)
         }
-        Download-CloudbaseInit $resourcesDir ([string]$image.ImageArchitecture) -BetaRelease:$windowsImageConfig.beta_release `
-                               $windowsImageConfig.msi_path
+        Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
+                               -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
+                               -CloudbaseInitConfigPath $windowsImageConfig.cloudbase_init_config_path `
+                               -CloudbaseInitUnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
         Apply-Image -winImagePath $winImagePath -wimFilePath $windowsImageConfig.wim_file_path `
             -imageIndex $image.ImageIndex
         Create-BCDBootConfig -systemDrive $drives[0] -windowsDrive $drives[1] -diskLayout $windowsImageConfig.disk_layout `
@@ -1514,9 +1555,12 @@ function New-WindowsFromGoldenImage {
             Get-Volume).DriveLetter + ":"
 
         $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
-        $maxPartitionSize = (Get-PartitionSupportedSize -DiskNumber $driveNumber -PartitionNumber 1).SizeMax
+        $partition = Get-Partition -DiskNumber $driveNumber | Where-Object {$_.Type -eq "Basic"}
         try {
-            Resize-Partition -DiskNumber $driveNumber -PartitionNumber 1 -Size $maxPartitionSize -ErrorAction SilentlyContinue
+            $maxPartitionSize = (Get-PartitionSupportedSize -DiskNumber $driveNumber -PartitionNumber `
+                                     $partition.PartitionNumber).SizeMax
+            Resize-Partition -DiskNumber $driveNumber -PartitionNumber $partition.PartitionNumber `
+                -Size $maxPartitionSize -ErrorAction SilentlyContinue
         } catch {
             Write-Log "Partition has already the desired size"
         }
@@ -1544,33 +1588,30 @@ function New-WindowsFromGoldenImage {
         if ($windowsImageConfig.enable_custom_wallpaper) {
             Set-WindowsWallpaper -WinDrive $driveLetterGold -WallpaperPath $windowsImageConfig.wallpaper_path `
                 -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
+        } else {
+            Reset-WindowsWallpaper -WinDrive $driveLetterGold
         }
         if ($windowsImageConfig.zero_unused_volume_sectors) {
             Download-ZapFree $resourcesDir $imageInfo.imageArchitecture
         }
-        Download-CloudbaseInit $resourcesDir $imageInfo.imageArchitecture -BetaRelease:$windowsImageConfig.beta_release `
-                               $windowsImageConfig.msi_path
+        Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
+                               -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
+                               -CloudbaseInitConfigPath $windowsImageConfig.cloudbase_init_config_path `
+                               -CloudbaseInitUnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
         Dismount-VHD -Path $windowsImageConfig.gold_image_path | Out-Null
 
-        $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
+        if ($windowsImageConfig.run_sysprep) {
+            if($windowsImageConfig.disk_layout -eq "UEFI") {
+                $generation = "2"
+            } else {
+                $generation = "1"
+            }
 
-        $vm = New-VM -Name $Name -MemoryStartupBytes $windowsImageConfig.ram_size -SwitchName $switch.Name `
-            -VHDPath $windowsImageConfig.gold_image_path
-        Set-VMProcessor -VMname $Name -count $windowsImageConfig.cpu_count | Out-Null
-        Set-VMMemory -VMname $Name -DynamicMemoryEnabled:$false | Out-Null
-        $vmAutomaticCheckpointsEnabledWrapper = $vm | Select-Object 'AutomaticCheckpointsEnabled' -ErrorAction SilentlyContinue
-        $vmAutomaticCheckpointsEnabled = $false
-        if ($vmAutomaticCheckpointsEnabledWrapper) {
-            $vmAutomaticCheckpointsEnabled = $vmAutomaticCheckpointsEnabledWrapper.AutomaticCheckpointsEnabled
+            $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
+            Run-Sysprep -Name $Name -Memory $windowsImageConfig.ram_size -vhdPath $windowsImageConfig.gold_image_path `
+                -VMSwitch $switch.Name -CpuCores $windowsImageConfig.cpu_count `
+                -Generation $generation
         }
-        if ($vmAutomaticCheckpointsEnabled) {
-            Set-VM -VMName $Name -AutomaticCheckpointsEnabled:$false
-        }
-
-        Start-VM $Name | Out-Null
-        Start-Sleep 10
-        Wait-ForVMShutdown $Name
-        Remove-VM $Name -Confirm:$False -Force
 
         if ($windowsImageConfig.shrink_image_to_minimum_size -eq $true) {
             Resize-VHDImage $windowsImageConfig.gold_image_path
