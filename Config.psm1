@@ -178,7 +178,11 @@ function Get-AvailableConfigOptions {
         @{"Name" = "enable_shutdown_without_logon"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "Enables shutdown of the Windows instance from the logon console."},
         @{"Name" = "enable_ping_requests"; "DefaultValue" = $false; "AsBoolean" = $true;
-          "Description" = "If set to true, firewall rules will be added to enable ping requests (ipv4 and ipv6)."}
+          "Description" = "If set to true, firewall rules will be added to enable ping requests (ipv4 and ipv6)."},
+        @{"Name" = "enable_ipv6_eui64"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true, use EUI-64 derived IDs and disable privacy extensions for IPv6.
+                           If set to false, the IPv6 protocol might not work on OpenStack or CloudStack.
+                           See https://github.com/cloudbase/windows-openstack-imaging-tools/issues/192"}
 
     )
 }

@@ -341,6 +341,9 @@ try
     try {
         $enablePing = Get-IniFileValue -Path $configIniPath -Key "enable_ping_requests"
     } catch {}
+    try {
+        $useIpv6EUI64 = Get-IniFileValue -Path $configIniPath -Key "enable_ipv6_eui64"
+    } catch {}
 
     if ($productKey) {
         License-Windows $productKey
@@ -418,6 +421,11 @@ try
     if ($enablePing) {
         netsh advfirewall firewall add rule name="Allow IPv4 ping requests" protocol="icmpv4:8,any" dir=in action=allow
         netsh advfirewall firewall add rule name="Allow IPv6 ping requests" protocol="icmpv6:8,any" dir=in action=allow
+    }
+
+    if ($useIpv6EUI64) {
+        Set-NetIPv6Protocol -RandomizeIdentifiers Disabled
+        Set-NetIPv6Protocol -UseTemporaryAddresses Disabled
     }
 
     if (Is-WindowsClient -and $enableAdministrator) {
