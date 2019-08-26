@@ -999,12 +999,14 @@ function Resize-VHDImage {
         if (($NewSize - $FreeSpace) -gt $MinSize) {
             $global:i = 0
             $step = 100MB
+            # Adding 10 retries means increasing the size to a max of 1.5GB,
+            # which should be enough for the Resize-Partition to succeed.
             Execute-Retry {
                 $sizeIncreased = ($NewSize + ($step * $global:i))
                 Write-Log "Size increased: $sizeIncreased"
                 $global:i = $global:i + 1
                 Resize-Partition -DriveLetter $Drive -Size $sizeIncreased -ErrorAction "Stop"
-            }
+            } -maxRetryCount 10
         }
     }
     finally
