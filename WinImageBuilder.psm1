@@ -1036,9 +1036,27 @@ function Wait-ForVMShutdown {
     )
     Write-Log "Waiting for $Name to finish sysprep."
     $isOff = (Get-VM -Name $Name).State -eq "Off"
+    $vmMessages = @{}
     while ($isOff -eq $false) {
         Start-Sleep 1
-        $isOff = (Get-VM -Name $Name).State -eq "Off"
+        $vmState = (Get-VM -Name $Name).State
+        $isOff =  $vmState -eq "Off"
+        try {
+            if ($vmState -ne "Running" -or `
+                !(Get-VMIntegrationService $Name -Name "Key-Value Pair Exchange").Enabled) {
+                continue
+            }
+            $currentVMMessages = Get-KVPData -VMName $Name
+            if (!$currentVMMessages) {continue}
+            foreach ($stage in $currentVMMessages.keys) {
+                if (!$vmMessages[$stage]) {
+                    Write-Log ("- - {0}: {1}" -f @($stage, $currentVMMessages[$stage]))
+                }
+            }
+            $vmMessages = $currentVMMessages
+        } catch {
+            Write-Log "Could not retrieve VM runtime logs"
+        }
     }
 }
 
@@ -1078,6 +1096,45 @@ function Run-Sysprep {
     Start-Sleep 5
     Wait-ForVMShutdown $Name
     Remove-VM $Name -Confirm:$false -Force
+}
+
+function Convert-KvpData($xmlData) {
+   $data = @{}
+
+   foreach ($xmlItem in $xmlData) {
+      $key = ""
+      $value = ""
+      $xmlData = [Xml]$xmlItem
+      foreach ($i in $xmlData.INSTANCE.PROPERTY) {
+         if ($i.Name -eq "Name") {
+            $key = $i.Value
+         }
+         if ($i.Name -eq "Data") {
+            $value = $i.Value
+         }
+      }
+      if ($key -like "ImageGenerationLog-*") {
+         $key = $key.replace("ImageGenerationLog-","")
+         $data[$key] = $value
+      }
+   }
+
+   return $data
+}
+
+function Get-KVPData {
+   param($VMName)
+   $wmiNamespace = "root\virtualization\v2"
+   $vm = Get-WmiObject -Namespace $wmiNamespace `
+      -Query "Select * From Msvm_ComputerSystem Where ElementName=`'$VMName`'"
+   if (!$vm) {return}
+
+   $kvp = Get-WmiObject -Namespace $wmiNamespace `
+      -Query "Associators of {$vm} Where AssocClass=Msvm_SystemDevice ResultClass=Msvm_KvpExchangeComponent"
+   if (!$kvp) {return}
+
+   $kvpData = Convert-KvpData($kvp.GuestIntrinsicExchangeItems)
+   return $kvpData
 }
 
 function Get-ImageInformation {

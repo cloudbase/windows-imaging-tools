@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 $resourcesDir = "$ENV:SystemDrive\UnattendResources"
 $configIniPath = "$resourcesDir\config.ini"
 $customScriptsDir = "$resourcesDir\CustomScripts"
+$logFile = "$resourcesDir\image-generation-log.txt"
 
 function Set-PersistDrivers {
     Param(
@@ -30,6 +31,7 @@ function Set-PersistDrivers {
         }
     }
     $xml.Save($Path)
+    Write-Log "Drivers" "PersistDrivers was set to ${Persist} in the unattend.xml"
 }
 
 function Set-UnattendEnableSwap {
@@ -66,6 +68,7 @@ function Set-UnattendEnableSwap {
         }
     }
     $xml.Save($Path)
+    Write-Log "Swap(1)" "Was enabled in the unattend.xml"
 }
 
 function Optimize-SparseImage {
@@ -73,6 +76,7 @@ function Optimize-SparseImage {
     if ( Test-Path $zapfree ) {
         Write-Host "Optimizing for sparse image..."
         & $zapfree -z $ENV:SystemDrive
+        Write-Log "ZapFree" "Image was zeroed succesfully"
     } else {
         Write-Debug "No zapfree. Image not optimized."
     }
@@ -87,6 +91,7 @@ function Clean-UpdateResources {
     # Cleanup
     Remove-Item -Recurse -Force $resourcesDir
     Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
+    Write-Log "Cleanup(1)" "Image was cleaned up succesfully"
 
 }
 
@@ -105,6 +110,7 @@ function Clean-WindowsUpdates {
         if ($LASTEXITCODE) {
             throw "Dism.exe clean failed"
         }
+        Write-Log "Cleanup" "Updates were cleaned up succesfully"
     }
 }
 
@@ -115,14 +121,16 @@ function Run-Defragment {
     if ($LASTEXITCODE) {
         throw "Defrag.exe failed"
     }
+    Write-Log "Defragment" "Image was defragemented succesfully"
 }
 
 function Release-IP {
     $HOST.UI.RawUI.WindowTitle = "Releasing IP..."
     ipconfig.exe /release
     if ($LASTEXITCODE) {
-            throw "IPconfig release failed"
-        }
+        throw "IPconfig release failed"
+    }
+    Write-Log "Ipconfig" "IPs were released succesfully"
 }
 
 function Install-WindowsUpdates {
@@ -150,10 +158,12 @@ function Install-WindowsUpdates {
             # to be retrieved on a changed system state and be applied correctly.
             Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
          } finally {
+            Write-Log "Updates(${availableUpdatesNumber})" "Available updates were installed succesfully. Rebooting..."
             Restart-Computer -Force
             exit 0
          }
     }
+    Write-Log "Updates" "All available updates were installed succesfully"
 }
 
 function ExecRetry($command, $maxRetryCount=4, $retryInterval=4) {
@@ -191,6 +201,7 @@ function Disable-Swap {
     if ($pageFileSetting) {
         $pageFileSetting.Delete()
     }
+    Write-Log "Swap" "Swap was disabled succesfully"
 }
 
 function License-Windows {
@@ -215,10 +226,12 @@ function License-Windows {
     if ($licenseWindows) {
        $licensingOutput = cscript.exe "$env:windir\system32\slmgr.vbs" /ipk $ProductKey
        if ($lastExitCode) {
+           Write-Log "License" "Error: Windows could not be licensed"
            throw $licensingOutput
        } else {
            Write-Host "Windows has been succesfully licensed."
        }
+        Write-Log "License" "Windows was licensed succesfully"
     } else {
        Write-Host "Windows will not be licensed."
     }
@@ -261,8 +274,10 @@ function Enable-AdministratorAccount {
     & cmd.exe /c "net.exe user $username """
     # Note(atira): net.exe can set an empty password only if it is run from cmd.exe
     if ($LASTEXITCODE) {
+        Write-Log "Administrator" "Error: Account could not be enabled"
         throw "Resetting $username password failed."
     }
+        Write-Log "Administrator" "Account was enabled succesfully"
 }
 
 function Is-WindowsClient {
@@ -281,24 +296,25 @@ function Run-CustomScript {
     if (Test-Path $fullScriptFilePath) {
         Write-Host "Executing script $fullScriptFilePath"
         & $fullScriptFilePath
-	if ($LastExitCode -eq 1004) {
-	    # exit this script
-	    exit 0
-	}
-	if ($LastExitCode -eq 1005) {
-	    # exit this script and reboot
-	    shutdown -r -t 0 -f
-	    exit 0
-	}
-	if ($LastExitCode -eq 1006) {
-	    # exit this script and shutdown
-	    shutdown -s -t 0 -f
-	    exit 0
-	}
-	if ($LastExitCode -eq 1) {
-	    throw "Script $ScriptFileName executed unsuccessfuly"
-	}
-
+        if ($LastExitCode -eq 1004) {
+            # exit this script
+            exit 0
+        }
+        if ($LastExitCode -eq 1005) {
+            # exit this script and reboot
+            shutdown -r -t 0 -f
+            exit 0
+        }
+        if ($LastExitCode -eq 1006) {
+            # exit this script and shutdown
+            shutdown -s -t 0 -f
+            exit 0
+        }
+        if ($LastExitCode -eq 1) {
+            Write-Log "CustomScripts(${ScriptFileName})" "${ScriptFileName} failed to run"
+            throw "Script $ScriptFileName executed unsuccessfuly"
+        }
+        Write-Log "CustomScripts(${ScriptFileName})" "${ScriptFileName} executed succesfully"
     }
 }
 
@@ -310,12 +326,48 @@ function Install-VMwareTools {
     }
     $p = Start-Process -FilePath $vmwareToolsPath -ArgumentList $vmwareToolsInstallArgs -Wait -verb runAS
     if ($p.ExitCode) {
+        Write-Log "VMwareTools" "Error: Tools could not be installed"
         throw "VMware tools setup failed" 
+    }
+    Write-Log "VMwareTools" "Tools installed succesfully"
+}
+
+function Write-HostLog {
+    <#
+    .SYNOPSIS
+     Uses KVP to communicate to the Hyper-V host the status of the various stages
+     of the imaging generation. This feature works only if the VM where this script
+     runs is spawned on Hyper-V and the 'Data Exchange' (aka Key Value Pair Exchange)
+     is enabled for the instance. On KVM / ESXi / baremetal, this method is NOOP.
+    #>
+    Param($Stage = "Default",
+          $StageLog
+    )
+
+    $KVPOutgoingRegistryKey = "HKLM://SOFTWARE/Microsoft/Virtual Machine/Auto"
+    if ($Stage -and $StageLog -and (Test-Path $KVPOutgoingRegistryKey)) {
+        Set-ItemProperty $KVPOutgoingRegistryKey -Name "ImageGenerationLog-${Stage}" `
+            -Value $StageLog -ErrorAction SilentlyContinue
     }
 }
 
-try
-{
+function Write-Log {
+    <#
+    .SYNOPSIS
+     Writes timestamped logs to the console, to the log file and via KVP if on Hyper-V platform.
+    #>
+    Param($Stage = "Default",
+          $StageLog
+    )
+
+    $logMessage = "{0} - {1}: {2}" -f @((Get-Date), $Stage, $StageLog)
+    Write-Host $logMessage
+    Add-Content -Value $logMessage -Path $logFile -Force -Encoding Ascii -ErrorAction SilentlyContinue
+    Write-HostLog $Stage $StageLog
+}
+
+try {
+    Write-Log "StatusInitial" "Automated instance configuration started..."
     Import-Module "$resourcesDir\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "install_updates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "persist_drivers_install" -Default $true -AsBoolean
@@ -395,6 +447,7 @@ try
 
     $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList $msiexecArgumentList
     if ($p.ExitCode -ne 0) {
+        Write-Log "Cloudbase-Init" "Failed to install cloudbase-init"
         throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
     }
 
@@ -405,6 +458,7 @@ try
 
     $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
     & "${cloudbaseInitInstallDir}\bin\SetSetupComplete.cmd"
+    Write-Log "Cloudbase-Init" "Installed succesfully"
     Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
 
     Run-Defragment
@@ -445,8 +499,10 @@ try
     Run-CustomScript "RunBeforeSysprep.ps1"
     Optimize-SparseImage
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
+    Write-Log "Sysprep" "Sysprep initiated succesfully"
     Run-CustomScript "RunAfterSysprep.ps1"
     Clean-UpdateResources
+    Write-Log "StatusFinal" "Waiting for sysprep to stop machine..."
 } catch {
     $host.ui.WriteErrorLine($_.Exception.ToString())
     $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
