@@ -162,7 +162,7 @@ Describe "Test Resize-VHDImage" {
     }
     Mock Get-Volume -Verifiable -ModuleName $moduleName { return @{"DriveLetter" = "F"} }
     Mock Optimize-Volume -Verifiable -ModuleName $moduleName { return }
-    Mock Get-PartitionSupportedSize -Verifiable -ModuleName $moduleName { return @{"SizeMin" = 100} }
+    Mock Get-PartitionSupportedSize -Verifiable -ModuleName $moduleName { return @{"SizeMin" = 100; "SizeMax" = 1000} }
     Mock Resize-Partition -Verifiable -ModuleName $moduleName { return 0 }
     Mock Resize-VHD -Verifiable -ModuleName $moduleName { return 0 }
     Mock Dismount-VHD -Verifiable -ModuleName $moduleName { return 0 }
@@ -174,6 +174,47 @@ Describe "Test Resize-VHDImage" {
 
     It "should run all mocked commands" {
         Assert-VerifiableMock
+    }
+}
+
+Describe "Test Resize-VHDImage with binary search" {
+    function Get-VHD { }
+    function Mount-VHD { }
+    function Resize-VHD { }
+    function Dismount-VHD { }
+    Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Get-VHD -Verifiable -ModuleName $moduleName { return @{"Size" = 100; "MinimumSize" = 10} }
+    Mock Mount-VHD -Verifiable -ModuleName $moduleName {
+        $b = New-Object System.Management.Automation.PSObject
+        $b | Add-Member -MemberType NoteProperty -Name "Number" -Value 1 -Force
+        return $b
+    }
+    Mock Get-Disk -Verifiable -ModuleName $moduleName {
+        $b = New-Object System.Management.Automation.PSObject
+        $b | Add-Member -MemberType NoteProperty -Name "DiskId" -Value 1 -Force
+        return $b
+    }
+    Mock Get-Partition -Verifiable -ModuleName $moduleName {
+        $b = New-Object System.Management.Automation.PSObject
+        $b | Add-Member -MemberType NoteProperty -Name "DriveLetter" -Value "L" -Force
+        $b | Add-Member -MemberType NoteProperty -Name "Size" -Value 90 -Force
+       return $b
+    }
+    Mock Get-Volume -Verifiable -ModuleName $moduleName { return @{"DriveLetter" = "F"} }
+    Mock Optimize-Volume -Verifiable -ModuleName $moduleName { return }
+    Mock Get-PartitionSupportedSize -Verifiable -ModuleName $moduleName { return @{"SizeMin" = 10GB; "SizeMax" = 1000GB} }
+    Mock Resize-Partition -Verifiable -ModuleName $moduleName { throw "Failure to resize" }
+    Mock Resize-VHD -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Dismount-VHD -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Start-Sleep -Verifiable -ModuleName $moduleName { return }
+
+    It "Should resize a vhd image" {
+        Resize-VHDImage -VirtualDiskPath "fakePath" `
+            -FreeSpace 100 | Should -Contain 0
+    }
+
+    It "should run all mocked commands" {
+        Assert-MockCalled -Times 10 -CommandName "Resize-Partition" -ModuleName $moduleName
     }
 }
 

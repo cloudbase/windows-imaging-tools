@@ -983,12 +983,14 @@ function Resize-VHDImage {
     $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | `
         Get-Disk | Get-Partition | Get-Volume | `
         Sort-Object -Property Size -Descending | Select-Object -First 1).DriveLetter
-    try
-    {
+
+    try {
         Optimize-Volume -DriveLetter $Drive -Defrag -ReTrim -SlabConsolidate
 
         $partitionInfo = Get-Partition -DriveLetter $Drive
-        $MinSize = (Get-PartitionSupportedSize -DriveLetter $Drive).SizeMin
+        $partitionResizeInfo = Get-PartitionSupportedSize -DriveLetter $Drive
+        $MinSize = $partitionResizeInfo.SizeMin
+        $MaxSize = $partitionResizeInfo.SizeMax
         $CurrSize = $partitionInfo.Size/1GB
         Write-Log "Current partition size: $CurrSize GB"
         # Leave free space for making sure Sysprep finishes successfuly
@@ -997,20 +999,42 @@ function Resize-VHDImage {
         Write-Log "New partition size: $newSizeGB GB"
 
         if (($NewSize - $FreeSpace) -gt $MinSize) {
-            $global:i = 0
-            $step = 100MB
-            # Adding 10 retries means increasing the size to a max of 1.5GB,
-            # which should be enough for the Resize-Partition to succeed.
-            Execute-Retry {
-                $sizeIncreased = ($NewSize + ($step * $global:i))
-                Write-Log "Size increased: $sizeIncreased"
-                $global:i = $global:i + 1
-                Resize-Partition -DriveLetter $Drive -Size $sizeIncreased -ErrorAction "Stop"
-            } -maxRetryCount 10
+                $global:i = 0
+                $global:sizeIncreased = 0
+            try {
+                $step = 100MB
+                # Adding 10 retries means increasing the size to a max of 1.5GB,
+                # which should be enough for the Resize-Partition to succeed.
+                Execute-Retry {
+                    $global:sizeIncreased = ($NewSize + ($step * $global:i))
+                    Write-Log "Size increased: $sizeIncreased"
+                    $global:i = $global:i + 1
+                    Resize-Partition -DriveLetter $Drive -Size $global:sizeIncreased -ErrorAction "Stop"
+                } -maxRetryCount 10
+            } catch {
+                Write-Log "Partition could not be resized using an incremental method"
+                Write-Log "Trying to resize partition using a binary search method"
+                $binaryTries = 0
+                # For example, with 10 binary tries and a max min difference of 1TB space,
+                # we will get 1024 / 1024 = 1 GB difference
+                $binaryMaxTries = 10
+                $MinSize = $global:sizeIncreased
+                while (($MinSize -lt $MaxSize) -and ($binaryTries -lt $binaryMaxTries)) {
+                    $desiredSize = $MinSize + ($MaxSize - $MinSize) / 2
+                    Write-Log "Trying to decrease the partition to $desiredSize"
+                    try {
+                        Resize-Partition -DriveLetter $Drive -Size $desiredSize -ErrorAction "Stop"
+                        Write-Log "Partition resized to $desiredSize. MaxSize becomes the desired size"
+                        $MaxSize = $desiredSize
+                    } catch {
+                        Write-Log "Partition could not be resized to $desiredSize. MinSize becomes the desired size"
+                        $MinSize = $desiredSize
+                    }
+                    $binaryTries ++
+                }
+            }
         }
-    }
-    finally
-    {
+    } finally {
         Dismount-VHD -Path $VirtualDiskPath
     }
 
