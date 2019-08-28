@@ -467,6 +467,16 @@ function Enable-ShutdownWithoutLogon {
     Write-Log "ShutdownWithoutLogon" "Shutdown without logon was enabled"
 }
 
+function Reset-AutoLogon {
+    param($AutoLogonPassword)
+
+    $autologonUser = $env:UserName
+    $winLogonRegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+    Set-ItemProperty $winLogonRegistryPath "AutoAdminLogon" -Value 1 -Type String -Force
+    Set-ItemProperty $winLogonRegistryPath "DefaultUsername" -Value $autologonUser -Type String -Force
+    Set-ItemProperty $winLogonRegistryPath "DefaultPassword" -Value $autologonPassword -Type String -Force
+}
+
 try {
     Write-Log "StatusInitial" "Automated instance configuration started..."
     Import-Module "$resourcesDir\ini.psm1"
@@ -518,6 +528,15 @@ try {
     try {
         $customNtpServers = Get-IniFileValue -Path $configIniPath -Section "custom" -Key "ntp_servers"
     } catch{}
+    try {
+        $autologonPassword = Get-IniFileValue -Path $configIniPath -Section "vm" -Key "administrator_password"
+    } catch {}
+
+    if ([System.Environment]::OSVersion.Version.Major -eq 10 -and `
+        [System.Environment]::OSVersion.Version.Minor -eq 0 -and `
+        ((Get-WindowsEdition -Online).Edition -like '*Enterprise*')) {
+        Reset-AutoLogon -AutoLogonPassword $autologonPassword
+    }
 
     if ($productKey) {
         License-Windows $productKey

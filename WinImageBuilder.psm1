@@ -336,6 +336,12 @@ function Generate-UnattendXml {
     $xsltArgs["versionMajor"] = $image.ImageVersion.Major
     $xsltArgs["versionMinor"] = $image.ImageVersion.Minor
     $xsltArgs["installationType"] = $image.ImageInstallationType
+    # Note(avladu): This is a hack to properly set autologon on Windows 10 Enterprise,
+    # as the Administrator account is enabled, unlike for other client Windows versions.
+    if ($image.ImageVersion.Major -eq 10 -and $image.ImageVersion.Minor -eq 0 -and `
+        $image.ImageName -like '*Enterprise*') {
+        $xsltArgs["installationType"] = 'Server'
+    }
     $xsltArgs["administratorPassword"] = $administratorPassword
 
     if ($productKey) {
