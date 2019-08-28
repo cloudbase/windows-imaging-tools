@@ -1614,7 +1614,7 @@ function New-WindowsFromGoldenImage {
             Get-Volume).DriveLetter + ":"
 
         $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
-        $partition = Get-Partition -DiskNumber $driveNumber | Where-Object {$_.Type -eq "Basic"}
+        $partition = Get-Partition -DiskNumber $driveNumber | Where-Object {@("Basic", "IFS") -contains $_.Type}
         try {
             $maxPartitionSize = (Get-PartitionSupportedSize -DiskNumber $driveNumber -PartitionNumber `
                                      $partition.PartitionNumber).SizeMax
