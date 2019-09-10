@@ -938,6 +938,61 @@ function Compress-Image {
     return $compressedImagePath
 }
 
+function Decompress-File {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$FilePath,
+        [parameter(Mandatory=$true)]
+        [string]$CompressionFormat,
+        [string]$ZipPassword
+    )
+
+    Write-Log "Decompressing image $FilePath..."
+    if (!(Test-Path $FilePath)) {
+        throw "$FilePath not found"
+    }
+    $7zip = Get-7zipPath
+    $pigz = Get-PigzPath
+    $imageName = (Get-Item $FilePath).Name
+    $virtualDiskPathRoot = [System.IO.Path]::GetDirectoryName((Resolve-Path $FilePath).Path)
+
+    # Avoid storing the full path in the archive
+    Push-Location $VirtualDiskPathRoot
+    try {
+        if ($CompressionFormat -eq "tar") {
+            $imageNameTar = $imageName -replace ".tar", ""
+            Write-Log "Decompressing tar ${imageName} to ${imageNameTar}"
+            $tarCommand = @($7zip, "e", $imageName, "-y")
+            Start-Executable -Command $tarCommand | Out-Null
+            Remove-Item -Force $imageName
+            $imageName = $imageNameTar
+        }
+        if ($CompressionFormat -eq "gz") {
+            $imageNameGz = $imageName -replace ".gz", ""
+            Write-Log "Decompressing gzip ${imageName} to ${imageNameGz}"
+            & $pigz -d -f $imageName | Out-Null
+            if ($LASTEXITCODE) {
+                throw "pigz.exe failed to decompress gzip ${imageName}"
+            }
+            $imageName = $imageNameGz
+        }
+        if ($CompressionFormat -eq "zip") {
+            $imageNameZip = $imageName -replace ".zip", ""
+            Write-Log "Decompressing zip ${imageName} to ${imageNameZip}"
+            $zipCommand = @($7zip, "e", $imageName, "-y")
+            if ($ZipPassword) {
+                $zipCommand += "-p$ZipPassword"
+            }
+            Start-Executable -Command $zipCommand | Out-Null
+            Remove-Item -Force $imageName
+            $imageName = $imageNameZip
+        }
+    } finally {
+        Pop-Location
+    }
+    return (Join-Path $virtualDiskPathRoot $imageName)
+}
+
 function Start-Executable {
     [CmdletBinding()]
     Param(
@@ -1776,6 +1831,163 @@ function New-WindowsFromGoldenImage {
     }
 }
 
+function Test-OfflineWindowsImage {
+    <#
+    .SYNOPSIS
+     This function verifies if a Windows image has been properly generated according to
+     the configuration file. The verification is performed offline, without instantiating
+     the image.
+    .DESCRIPTION
+     This function first tests if the config.image_path exists, then uses the extension and the
+     config.compression_format to detect the compression and qemu-img binary to detect
+     the image format.
+     If any compression is detected, a decompression is performed for each compression.
+     If the image format is other than vhdx, "qemu-img convert -O vhdx" is performed.
+     The vhdx is mounted and the following checks are performed:
+       1. If Cloudbase-Init folder exists
+       2. If curtin (for MAAS) folder exists
+       3. If OEM drivers are installed
+     Finally, the full chain of decompressed/converted files is removed.
+     #>
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$ConfigFilePath
+    )
+
+    Write-Log "Offline Windows image validation started."
+    $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
+    Is-Administrator
+
+    if (!(Test-Path $windowsImageConfig.image_path)) {
+        throw "Image validation failed: $($windowsImageConfig.image_path) does not exist."
+    }
+
+    $imageChain = @()
+    $imagePath = $windowsImageConfig.image_path
+
+    try {
+        if ($windowsImageConfig.compression_format) {
+            $compressionFormats = $windowsImageConfig.compression_format.split(".")
+            [array]::Reverse($compressionFormats)
+            $invalidCompressionFormat = $compressionFormats | Where-Object `
+                {$AvailableCompressionFormats -notcontains $_}
+            if ($invalidCompressionFormat) {
+                throw "Compression format $invalidCompressionFormat not available."
+            } else {
+                Write-Log "Compression format ${invalidCompressionFormat} is available."
+            }
+            foreach($compressionFormat in $compressionFormats) {
+                $imageToDecompress = $imagePath
+                $imagePath = Decompress-File -FilePath $imageToDecompress `
+                    -CompressionFormat $compressionFormat `
+                    -ZipPassword $windowsImageConfig.zip_password
+                Write-Log "Image ${imageToDecompress} decompressed to ${imagePath}"
+                $imageChain += $imagePath
+            }
+        }
+
+        $imageFileExtension = [System.IO.Path]::GetExtension($imagePath)
+        $fileExtension = '*'
+        $diskFormat = '*'
+        if ($windowsImageConfig.image_type -eq "HYPER-V") {
+            $fileExtension = 'vhdx'
+            $diskFormat = 'vhdx'
+            if ($imageFileExtension -eq '.vhd') {
+                $fileExtension = 'vhd'
+                $diskFormat = 'vpc'
+            }
+        }
+        if ($windowsImageConfig.image_type -eq "KVM") {
+            $fileExtension = 'qcow2'
+            $diskFormat = 'qcow2'
+        }
+        if ($windowsImageConfig.image_type -eq "MAAS") {
+            $fileExtension = 'raw'
+            $diskFormat = 'raw'
+        }
+
+        if (!([System.IO.Path]::GetExtension($imagePath) -like ".${fileExtension}")) {
+            throw "${imagePath} does not have ${fileExtension} extension."
+        } else {
+            Write-Log "${imagePath} has the correct ${fileExtension} extension."
+        }
+
+        $qemuInfoOutput = & "$scriptPath\bin\qemu-img.exe" info --output=json $imagePath
+        $qemuInfoJson = ConvertFrom-Json ($qemuInfoOutput -join "")
+        $qemuImgFormat = $qemuInfoJson | Select-Object "Format"
+        if ($qemuImgFormat.Format -ne $diskFormat) {
+            throw "${imagePath} does not have ${diskFormat} format."
+        } else {
+            Write-Log "${imagePath} has the correct ${diskFormat} format."
+        }
+
+        if (!(@("vhd", "vhdx").Contains($fileExtension))) {
+            $barePath = Get-PathWithoutExtension $imagePath
+            $tempImagePath = $barePath + ".vhdx"
+            Convert-VirtualDisk -vhdPath $imagePath -outPath $tempImagePath `
+                -format "vhdx"
+            $imagePath = $tempImagePath
+            $imageChain += $imagePath
+        }
+
+        $childImagePath = $imagePath -ireplace ".vhd", "_bak.vhd"
+        New-VHD -ParentPath $imagePath -Path $childImagePath | Out-Null
+        $imagePath = $childImagePath
+        $imageChain += $imagePath
+        Mount-VHD -Path $imagePath -Passthru | Out-Null
+
+        try {
+            Get-PSDrive | Out-Null
+            $driveNumber = (Get-DiskImage -ImagePath $imagePath | Get-Disk).Number
+            $mountPoint = (Get-Partition -DiskNumber $driveNumber | `
+                Where-Object {@("Basic", "IFS") -contains $_.Type}).DriveLetter + ":"
+
+            # Test if Cloudbase-Init is installed
+            $cloudbaseInitPath = "Program Files\Cloudbase Solutions\Cloudbase-Init"
+            $cloudbaseInitPathX86 = "${cloudbaseInitPath} (x86)"
+            if ((Test-Path (Join-Path $mountPoint $cloudbaseInitPath)) -or `
+                (Test-Path (Join-Path $mountPoint $cloudbaseInitPathX86))) {
+                Write-Log "Cloudbase-Init is installed."
+            } else {
+                throw "Cloudbase-Init is not installed on the image."
+            }
+
+            # Test if curtin modules are installed
+            if ($windowsImageConfig.install_maas_hooks -or $windowsImageConfig.image_type -eq "MAAS") {
+                if (Test-Path (Join-Path $mountPoint "curtin")) {
+                    Write-Log "Curtin hooks are installed."
+                } else {
+                    throw "Curtin hooks are not installed on the image."
+                }
+            }
+
+            # Test if extra drivers are installed
+            if ($windowsImageConfig.virtio_iso_path -or $windowsImageConfig.virtio_base_path `
+                    -or $windowsImageConfig.drivers_path -or $windowsImageConfig.image_type -eq "KVM") {
+                $extraDriversNr = (Get-Item "$mountPoint\Windows\INF\OEM*.inf" | Measure-Object).Count
+                if ($extraDriversNr) {
+                    Write-Log "Found ${extraDriversNr} extra drivers installed."
+                } else {
+                    throw "No extra drivers installed on the image."
+                }
+            }
+        } finally {
+            Dismount-VHD $imagePath
+        }
+    } finally {
+        [array]::Reverse($imageChain)
+        foreach ($chainItem in $imageChain) {
+            if ($chainItem -ne $windowsImageConfig.image_path) {
+                Write-Log "Removing chain file item ${chainItem}"
+                Remove-Item -Force $chainItem -ErrorAction SilentlyContinue
+            }
+        }
+        Write-Log "Offline Windows image validation finished."
+    }
+}
+
+
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
     New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage, Get-WindowsImageConfig,
-    New-WindowsImageConfig
+    New-WindowsImageConfig, Test-OfflineWindowsImage
