@@ -366,6 +366,13 @@ function Write-Log {
     Write-HostLog $Stage $StageLog
 }
 
+function Disable-FirstLogonAnimation {
+    if (([System.Environment]::OSVersion.Version.Major -gt 6) -or ([System.Environment]::OSVersion.Version.Minor -ge 2)) {
+        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+            -Name "EnableFirstLogonAnimation" -Value 0 -Type DWORD -Force
+    }
+}
+
 try {
     Write-Log "StatusInitial" "Automated instance configuration started..."
     Import-Module "$resourcesDir\ini.psm1"
@@ -396,6 +403,10 @@ try {
     try {
         $useIpv6EUI64 = Get-IniFileValue -Path $configIniPath -Key "enable_ipv6_eui64"
     } catch {}
+    try {
+        $disableFirstLogonAnimation = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "disable_first_logon_animation" `
+            -Default $false -AsBoolean
+    } catch{}
 
     if ($productKey) {
         License-Windows $productKey
@@ -409,6 +420,7 @@ try {
     ExecRetry {
         Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
     }
+
     Run-CustomScript "RunAfterWindowsUpdates.ps1"
 
     if ($goldImage) {
@@ -416,15 +428,15 @@ try {
         Remove-Item -Recurse -Force $resourcesDir
         shutdown -s -t 0 -f
     }
+
     if ($vmwareToolsPath) {
         Install-VMwareTools
     }
+
     Run-CustomScript "RunBeforeCloudbaseInitInstall.ps1"
     $Host.UI.RawUI.WindowTitle = "Installing Cloudbase-Init..."
 
     $cloudbaseInitInstallDir = Join-Path $ENV:ProgramFiles "Cloudbase Solutions\Cloudbase-Init"
-
-
     $CloudbaseInitMsiPath = "$resourcesDir\CloudbaseInit.msi"
     $CloudbaseInitConfigPath = "$resourcesDir\cloudbase-init.conf"
     $CloudbaseInitUnattendedConfigPath = "$resourcesDir\cloudbase-init-unattend.conf"
@@ -441,6 +453,7 @@ try {
     if ($serialPortName) {
         $msiexecArgumentList += " LOGGINGSERIALPORTNAME=$serialPortName"
     }
+
     if ($runCloudbaseInitUnderLocalSystem) {
         $msiexecArgumentList += " RUN_SERVICE_AS_LOCAL_SYSTEM=1"
     }
@@ -466,10 +479,14 @@ try {
     Release-IP
 
     if ($enableShutdownWithoutLogon) {
-       Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\" `
+        Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\" `
            -Name shutdownwithoutlogon -Value 1 -Type DWord
-       Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\" `
+        Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\" `
            -Name ShutdownWarningDialogTimeout -Value 1 -Type DWord
+    }
+
+    if (Is-WindowsClient -and $disableFirstLogonAnimation) {
+        Disable-FirstLogonAnimation
     }
 
     if ($enablePing) {
@@ -496,6 +513,7 @@ try {
         }
         Set-UnattendEnableSwap -Path $unattendedXmlPath
     }
+
     Run-CustomScript "RunBeforeSysprep.ps1"
     Optimize-SparseImage
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"

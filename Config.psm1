@@ -160,6 +160,8 @@ function Get-AvailableConfigOptions {
                            Currently, the only allowed solid color is '0 0 0' (black).
                            If both wallpaper_path and wallpaper_solid_color are set,
                            the script will throw an error."},
+        @{"Name" = "disable_first_logon_animation"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set, the animation displayed during the first login on Windows Client versions will be disabled."},
         @{"Name" = "compress_qcow2"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true and the target image format is QCOW2, the image conversion will
                            use qemu-img built-in compression. The compressed qcow2 image will be smaller, but the conversion
