@@ -232,6 +232,7 @@ function Create-BCDBootConfig {
         $bcdbootPath = $bcdbootLocalPath
     }
 
+    $ErrorActionPreference = "SilentlyContinue"
     # Note: older versions of bcdboot.exe don't have a /f argument
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -lt 2) {
        $bcdbootOutput = & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v
@@ -244,7 +245,10 @@ function Create-BCDBootConfig {
     } else {
        $bcdbootOutput = & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
     }
-    if ($LASTEXITCODE) { throw "BCDBoot failed with error: $bcdbootOutput" }
+    if ($LASTEXITCODE) {
+        $ErrorActionPreference = "Stop"
+        throw "BCDBoot failed with error: $bcdbootOutput"
+    }
 
     if ($diskLayout -eq "BIOS") {
         $bcdeditPath = "${windowsDrive}\windows\system32\bcdedit.exe"
@@ -262,6 +266,7 @@ function Create-BCDBootConfig {
         & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} osdevice locate
         if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default osdevice locate" }
     }
+    $ErrorActionPreference = "Stop"
     Write-Log "BCDBoot config has been created."
 }
 
