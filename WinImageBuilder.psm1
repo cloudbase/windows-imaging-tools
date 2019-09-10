@@ -857,8 +857,14 @@ function Compress-Image {
     $pigz = Get-PigzPath
     $tmpName = (Get-Item $VirtualDiskPath).Name
     $compressionFormats = $compressionFormats.split(".")
+    $virtualDiskPathRoot = [System.IO.Path]::GetDirectoryName((Resolve-path $VirtualDiskPath).Path)
+    $compressedImagePath = Join-Path $virtualDiskPathRoot (Get-PathWithoutExtension($VirtualDiskPath))
+    if (!(Test-Path $compressedImagePath)) {
+        Throw "Compressed $compressedImagePath already exists."
+    }
+
     try {
-        Push-Location ([System.IO.Path]::GetDirectoryName((Resolve-path $VirtualDiskPath).Path))
+        Push-Location $VirtualDiskPathRoot
         foreach ($compresionFormat in $compressionFormats) {
             try {
                 if ($compresionFormat -eq "tar") {
@@ -925,6 +931,10 @@ function Compress-Image {
     if (Test-Path $ImagePath) {
         throw "File $ImagePath already exists. The image has been created at $tmpName."
     }
+    if (!(Test-Path $compressedImagePath)) {
+        throw "Failed to compress image to ${compressedImagePath}"
+    }
+    return $compressedImagePath
 }
 
 function Start-Executable {
@@ -1359,7 +1369,7 @@ function New-WindowsOnlineImage {
     try {
         $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
         $virtualDiskPath = $barePath + ".vhdx"
-        $uncompressedImagePath = $virtualDiskPath
+        $imagePath = $virtualDiskPath
 
         # We need different config files for New-WindowsCloudImage and New-WindowsOnlineImage
         $offlineConfigFilePath = $ConfigFilePath + ".offline"
@@ -1397,29 +1407,29 @@ function New-WindowsOnlineImage {
         Optimize-VHD $VirtualDiskPath -Mode Full
 
         if ($windowsImageConfig.image_type -eq "MAAS") {
-            $uncompressedImagePath = $barePath + ".img"
+            $imagePath = $barePath + ".img"
             Write-Log "Converting VHD to RAW"
-            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $uncompressedImagePath -format "raw"
+            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $imagePath -format "raw"
             Remove-Item -Force $virtualDiskPath
         }
 
         if ($windowsImageConfig.image_type -ceq "VMware") {
-            $uncompressedImagePath = $barePath + ".vmdk"
+            $imagePath = $barePath + ".vmdk"
             Write-Log "Converting VHD to VMDK"
-            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $uncompressedImagePath -format "vmdk"
+            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $imagePath -format "vmdk"
             Remove-Item -Force $virtualDiskPath
         }
 
         if ($windowsImageConfig.image_type -eq "KVM") {
-            $uncompressedImagePath = $barePath + ".qcow2"
+            $imagePath = $barePath + ".qcow2"
             Write-Log "Converting VHD to Qcow2"
-            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $uncompressedImagePath -format "qcow2" `
+            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $imagePath -format "qcow2" `
                 -CompressQcow2 $windowsImageConfig.compress_qcow2
             Remove-Item -Force $virtualDiskPath
         }
         
         if ($windowsImageConfig.compression_format) {
-            Compress-Image -VirtualDiskPath $uncompressedImagePath `
+            $imagePath = Compress-Image -VirtualDiskPath $imagePath `
                 -ImagePath $windowsImageConfig['image_path'] `
                 -compressionFormats $windowsImageConfig.compression_format `
                 -ZipPassword $windowsImageConfig.zip_password
@@ -1431,7 +1441,7 @@ function New-WindowsOnlineImage {
         }
         Throw
     }
-    Write-Log "Windows online image generation finished."
+    Write-Log "Windows online image generation finished. Image path: ${imagePath}"
 }
 
 function New-WindowsCloudImage {
@@ -1569,14 +1579,14 @@ function New-WindowsCloudImage {
     } elseif ($vhdPath -ne $windowsImageConfig.image_path) {
         Move-Item -Force $vhdPath $windowsImageConfig.image_path
     }
-    
+    $imagePath = $windowsImageConfig.image_path
     if ($windowsImageConfig.compression_format) {
-            Compress-Image -VirtualDiskPath $windowsImageConfig.image_path `
+            $imagePath = Compress-Image -VirtualDiskPath $windowsImageConfig.image_path `
                 -ImagePath $windowsImageConfig['image_path'] `
                 -compressionFormats $windowsImageConfig.compression_format `
                 -ZipPassword $windowsImageConfig.zip_password
         }
-    Write-Log "Cloud image generation finished."
+    Write-Log "Cloud image generation finished. Image path: ${imagePath}"
     } finally {
         if($mountedWindowsIso){
             $mountedWindowsIso.DetachVirtualDisk()
@@ -1707,29 +1717,29 @@ function New-WindowsFromGoldenImage {
         Optimize-VHD $windowsImageConfig.gold_image_path -Mode Full
 
         $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
-        $uncompressedImagePath = $windowsImageConfig.image_path
+        $imagePath = $windowsImageConfig.image_path
 
         if ($windowsImageConfig.image_type -eq "MAAS") {
-            $uncompressedImagePath = $barePath + ".img"
+            $imagePath = $barePath + ".img"
             Write-Log "Converting VHD to RAW"
-            Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $uncompressedImagePath `
+            Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $imagePath `
                 -format "RAW"
             Remove-Item -Force $windowsImageConfig.gold_image_path
         }
         if ($windowsImageConfig.image_type -eq "KVM") {
-            $uncompressedImagePath = $barePath + ".qcow2"
+            $imagePath = $barePath + ".qcow2"
             Write-Log "Converting VHD to QCow2"
-            Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $uncompressedImagePath `
+            Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $imagePath `
                 -format "qcow2" -CompressQcow2 $windowsImageConfig.compress_qcow2
             Remove-Item -Force $windowsImageConfig.gold_image_path
         }
         if ($windowsImageConfig.compression_format) {
-            Compress-Image -VirtualDiskPath $uncompressedImagePath `
+            $imagePath = Compress-Image -VirtualDiskPath $imagePath `
                 -ImagePath $windowsImageConfig['image_path'] `
                 -compressionFormats $windowsImageConfig.compression_format `
                 -ZipPassword $windowsImageConfig.zip_password
         }
-        Write-Log "Cloud image from golden image generation finished."
+        Write-Log "Cloud image from golden image generation finished. Image path: ${imagePath}"
     } catch {
       Write-Log $_
       try {
