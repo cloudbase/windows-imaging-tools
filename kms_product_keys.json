@@ -1,0 +1,44 @@
+{
+    "KMS": {
+        "6": {
+            "1": {
+                "0": {
+                    "Windows Server 2008 R2 SERVERDATACENTER": "74YFP-3QFB3-KQT8W-PMXWJ-7M648",
+                    "Windows Server 2008 R2 SERVERSTANDARD": "YC6KT-GKW9T-YTKYR-T4X34-R7VHC"
+                }
+            },
+            "2": {
+                "0": {
+                    "Windows Server 2012 SERVERDATACENTERCORE": "48HP8-DN98B-MYWDG-T2DCC-8W83P",
+                    "Windows Server 2012 SERVERDATACENTER": "48HP8-DN98B-MYWDG-T2DCC-8W83P",
+                    "Windows Server 2012 SERVERSTANDARDCORE": "XC9B7-NBPP2-83J2H-RHMBY-92BT4",
+                    "Windows Server 2012 SERVERSTANDARD": "XC9B7-NBPP2-83J2H-RHMBY-92BT4"
+                }
+            },
+            "3": {
+                "0": {
+                    "Windows Server 2012 R2 SERVERDATACENTERCORE": "W3GGN-FT8W3-Y4M27-J84CP-Q3VJ9",
+                    "Windows Server 2012 R2 SERVERDATACENTER": "W3GGN-FT8W3-Y4M27-J84CP-Q3VJ9",
+                    "Windows Server 2012 R2 SERVERSTANDARDCORE": "D2N9P-3P6X9-2R39C-7RTCD-MDVJX",
+                    "Windows Server 2012 R2 SERVERSTANDARD": "D2N9P-3P6X9-2R39C-7RTCD-MDVJX"
+                }
+            }
+        },
+        "10": {
+            "0": {
+                "14393": {
+                    "Windows Server 2016 SERVERDATACENTERCORE": "CB7KF-BWN84-R7R2Y-793K2-8XDDG",
+                    "Windows Server 2016 SERVERDATACENTER": "CB7KF-BWN84-R7R2Y-793K2-8XDDG",
+                    "Windows Server 2016 SERVERSTANDARDCORE": "WC2BQ-8NRM3-FDDYY-2BFGV-KHKQY",
+                    "Windows Server 2016 SERVERSTANDARD": "WC2BQ-8NRM3-FDDYY-2BFGV-KHKQY"
+                },
+                "17763": {
+                    "Windows Server 2019 SERVERDATACENTERCORE": "WMDGN-G9PQG-XVVXX-R3X43-63DFG",
+                    "Windows Server 2019 SERVERDATACENTER": "WMDGN-G9PQG-XVVXX-R3X43-63DFG",
+                    "Windows Server 2019 SERVERSTANDARDCORE": "N69G4-B89J2-4G8F4-WWYCC-J464C",
+                    "Windows Server 2019 SERVERSTANDARD": "N69G4-B89J2-4G8F4-WWYCC-J464C"
+                }
+            }
+        }
+    }
+}
