@@ -16,6 +16,7 @@ Set-StrictMode -Version 2
 Import-Module Dism
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $localResourcesDir = "$scriptPath\UnattendResources"
+$kmsProductKeysFile = "$scriptPath\kms_product_keys.json"
 Import-Module "$scriptPath\Config.psm1"
 Import-Module "$scriptPath\UnattendResources\ini.psm1"
 
@@ -1309,6 +1310,25 @@ function Get-TotalLogicalProcessors {
     return $count
 }
 
+function Map-KMSProductKey {
+    param($ImageName, $ImageVersion)
+
+    $productKeysMap = Get-Content -Encoding ASCII $kmsProductKeysFile | ConvertFrom-Json
+    try {
+        $ImageVersionBuild = $ImageVersion.Build
+        if ($ImageVersion.Major -eq "6") {
+            $ImageVersionBuild = 0
+        }
+        return ($productKeysMap | Select-Object -ExpandProperty "KMS" | `
+            Select-Object -ExpandProperty ([string]$ImageVersion.Major) | `
+            Select-Object -ExpandProperty ([string]$ImageVersion.Minor) | `
+            Select-Object -ExpandProperty ([string]$ImageVersionBuild) | `
+            Select-Object -ExpandProperty $ImageName)
+    } catch {
+        Write-Log "No valid KMS key found for image ${ImageName}"
+    }
+}
+
 function New-WindowsOnlineImage {
     <#
     .SYNOPSIS
@@ -1518,7 +1538,13 @@ function New-WindowsCloudImage {
                        'AdministratorPassword' = $windowsImageConfig.administrator_password;
         }
         if ($windowsImageConfig.product_key) {
-            $xmlParams.Add('productKey', $windowsImageConfig.product_key);
+            $productKey = $windowsImageConfig.product_key
+            if ($productKey -eq "default_kms_key") {
+                $productKey = Map-KMSProductKey $windowsImageConfig.image_name $image.ImageVersion
+            }
+            if ($productKey) {
+                $xmlParams.Add('productKey', $productKey)
+            }
         }
         Generate-UnattendXml @xmlParams
         Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $image.ImageInstallationType `

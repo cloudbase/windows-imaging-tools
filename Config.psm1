@@ -40,7 +40,8 @@ function Get-AvailableConfigOptions {
         @{"Name" = "disk_layout"; "DefaultValue" = "BIOS";
           "Description" = "This parameter can be set to either BIOS or UEFI."},
         @{"Name" = "product_key";
-          "Description" = "The product key for the selected OS."},
+          "Description" = "The product key for the selected OS. If the value is default_kms_key and the Windows image is
+                           ServerStandard or ServerDatacenter (Core), the appropiate KMS key will be used."},
         @{"Name" = "extra_features";
           "Description" = "A comma separated array of extra features that will be enabled on the resulting image.
                            These features need to be present in the ISO file."},

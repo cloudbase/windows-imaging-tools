@@ -408,7 +408,7 @@ try {
             -Default $false -AsBoolean
     } catch{}
 
-    if ($productKey) {
+    if ($productKey -and ($productKey -ne "default_kms_key")) {
         License-Windows $productKey
     }
 
