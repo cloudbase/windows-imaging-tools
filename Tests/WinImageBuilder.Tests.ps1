@@ -108,7 +108,6 @@ Describe "Test New-WindowsCloudImage" {
     Mock Set-WindowsWallpaper -Verifiable -ModuleName $moduleName { return 0 }
     Mock Enable-FeaturesInImage -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-PathWithoutExtension -Verifiable -ModuleName $moduleName { return "test" }
-    Mock Move-Item -Verifiable -ModuleName $moduleName { return 0 }
     Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
 
     It "Should create a windows image" {
