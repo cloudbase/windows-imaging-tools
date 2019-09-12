@@ -1823,12 +1823,16 @@ function New-WindowsFromGoldenImage {
 
         Write-Log "Cloud image from golden image generation finished. Image path: $($windowsImageConfig.image_path)"
     } catch {
-      Write-Log $_
-      try {
-        Get-VHD $windowsImageConfig.gold_image_path | Dismount-VHD
-      } catch {
-        Write-Log $_
-      }
+        $vhdDismountLog = ""
+        try {
+            Get-VHD $windowsImageConfig.gold_image_path | Dismount-VHD
+        } catch {
+            $vhdDismountLog = $_
+        }
+        if ($vhdDismountLog) {
+            Write-Log $vhdDismountLog.Message
+        }
+        throw $_
     }
 }
 
