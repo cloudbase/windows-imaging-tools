@@ -471,7 +471,7 @@ function Validate-WindowsImageConfig {
         $invalidCompressionFormat = $compressionFormats | Where-Object `
             {$AvailableCompressionFormats -notcontains $_}
         if ($invalidCompressionFormat) {
-            throw "Compresion format $invalidCompressionFormat not available."
+            throw "Compression format $invalidCompressionFormat not available."
         }
     }
 }
@@ -833,10 +833,15 @@ function Set-DotNetCWD {
 function Get-PathWithoutExtension {
     Param(
         [Parameter(Mandatory=$true)]
-        [string]$Path
+        [string]$Path,
+        [int]$Depth = 0
     )
-    return Join-Path ([System.IO.Path]::GetDirectoryName($Path)) `
-                     ([System.IO.Path]::GetFileNameWithoutExtension($Path))
+    # NOTE(avladu): Cleanup all the extensions
+    $fileName = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+    for($i = 0;$i -lt $Depth;$i++) {
+        $fileName = [System.IO.Path]::GetFileNameWithoutExtension($fileName)
+    }
+    return Join-Path ([System.IO.Path]::GetDirectoryName($Path)) $fileName
 }
 
 function Compress-Image {
@@ -846,96 +851,71 @@ function Compress-Image {
         [Parameter(Mandatory=$true)]
         [string]$ImagePath,
         [Parameter(Mandatory=$true)]
-        [string[]]$compressionFormats,
+        [string]$compressionFormats,
         [parameter(Mandatory=$false)]
         [string]$ZipPassword
     )
-    Write-Log "Compress Image: $ImagePath..."
+    Write-Log "Compressing image $VirtualDiskPath..."
     if (!(Test-Path $VirtualDiskPath)) {
-        Throw "$VirtualDiskPath not found"
+        throw "$VirtualDiskPath not found"
     }
     $7zip = Get-7zipPath
     $pigz = Get-PigzPath
-    $tmpName = (Get-Item $VirtualDiskPath).Name
-    $compressionFormats = $compressionFormats.split(".")
-    $virtualDiskPathRoot = [System.IO.Path]::GetDirectoryName((Resolve-path $VirtualDiskPath).Path)
-    $compressedImagePath = Join-Path $virtualDiskPathRoot (Get-PathWithoutExtension($VirtualDiskPath))
-    if (!(Test-Path $compressedImagePath)) {
-        Throw "Compressed $compressedImagePath already exists."
+    $imageName = (Get-Item $VirtualDiskPath).Name
+    $compressionFormatsArray = $compressionFormats.split(".")
+    $virtualDiskPathRoot = [System.IO.Path]::GetDirectoryName((Resolve-Path $VirtualDiskPath).Path)
+    $compressedImagePath = $VirtualDiskPath + "." + $compressionFormats
+    if (Test-Path $compressedImagePath) {
+        throw "Compressed $compressedImagePath already exists."
+    }
+    if (Test-Path $ImagePath) {
+        throw "Target compression path $ImagePath already exists."
     }
 
-    try {
-        Push-Location $VirtualDiskPathRoot
-        foreach ($compresionFormat in $compressionFormats) {
-            try {
-                if ($compresionFormat -eq "tar") {
-                    $tmpName = '{0}.tar' -f @((Get-PathWithoutExtension($ImagePath)))
-                    Write-Log "Archiving $VirtualDiskPath to tarfile $tmpName"
-                        # Avoid storing the full path in the archive
-                        $imageFileName = (Get-Item $VirtualDiskPath).Name
-                        Write-Log "Creating tar archive..."
-                        & $7zip a -aoa -ttar $tmpName $imageFileName
-                        if ($LASTEXITCODE) {
-                            if ((Test-Path $imageFileName)) {
-                                Remove-Item -Force $imageFileName
-                            }
-                            throw "7za.exe failed while creating tar file for image: $tmpName"
-                        }
-                        Remove-Item -Force $VirtualDiskPath
-                }
-                if ($compresionFormat -eq "gz") {
-                    Write-Log "Compressing $tmpName to gzip"
-                        $tmpPathName = (Get-Item $tmpName).Name
-                        Write-Log "Creating gzip..."
-                        & $pigz -f -q -p12 $tmpPathName
-                        if ($LASTEXITCODE) {
-                            if ((Test-Path $tmpName)) {
-                                Remove-Item -Force $tmpName
-                            }
-                            throw "pigz.exe failed while creating gzip file for: $tmpName"
-                        }
-                    $tmpName = ($tmpName + ".gz")
-                }
-                if ($compresionFormat -eq "zip") {
-                    if ($ZipPassword) {
-                        $zipPath = $tmpName + ".zip"
-                        $7zip = Get-7zipPath
-                        Write-Log "Creating protected zip..."
-                        Write-Log "The zip password is: $ZipPassword"
-                        Start-Executable -Command @("$7zip", "a", "-aoa", "-tzip", "$zipPath", `
-                                                    "$tmpName", "-p$ZipPassword", "-mx1")
-                        Remove-Item -Force $tmpName
-                    } else {
-                        Write-Log "Archiving $VirtualDiskPath to zip $tmpName"
-                        # Avoid storing the full path in the archive
-                        Write-Log "Creating zip archive..."
-                        $zipName = $tmpName + ".zip"
-                        & $7zip a -aoa -t7z $zipName $tmpName
-                        if ($LASTEXITCODE) {
-                            if ((Test-Path $tmpName)) {
-                                Remove-Item -Force $tmpName
-                            }
-                            throw "7za.exe failed while creating tar file for image: $tmpName"
-                        }
-                        Remove-Item -Force $tmpName
-                    }
-                }
-            } finally {
-                    Write-Log "Archiving finished." }
+    # Avoid storing the full path in the archive
+    Push-Location $VirtualDiskPathRoot
+    foreach ($compressionFormat in $compressionFormatsArray) {
+        if ($compressionFormat -eq "tar") {
+            $imageNameTar = "${imageName}.tar"
+            Write-Log "Compressing ${imageName} to tar ${imageNameTar}"
+            & $7zip a -aoa -ttar $imageNameTar $imageName
+            if ($LASTEXITCODE) {
+                throw "7za.exe failed to create tar ${imageNameTar}"
+            }
+            Remove-Item -Force $imageName
+            $imageName = $imageNameTar
         }
-    } catch {
-        Remove-Item -Force $tmpName -ErrorAction SilentlyContinue
-        Remove-Item -Force $VirtualDiskPath -ErrorAction SilentlyContinue
-        throw
+        if ($compressionFormat -eq "gz") {
+            $imageNameGz = "${imageName}.gz"
+            Write-Log "Compressing ${imageName} to gzip ${imageNameGz}"
+            & $pigz -3 -f -q $imageName
+            if ($LASTEXITCODE) {
+                throw "pigz.exe failed to create gzip ${imageNameGz}"
+            }
+            $imageName = $imageNameGz
+        }
+        if ($compressionFormat -eq "zip") {
+            $imageNameZip = "${imageName}.zip"
+            Write-Log "Compressing ${imageName} to zip ${imageNameZip}"
+            $zipCommand = @($7zip, "a", "-aoa", "-tzip", $imageNameZip, `
+                            $imageName, "-mx1")
+            if ($ZipPassword) {
+                Write-Log "The zip password is: $ZipPassword"
+                $zipCommand += "-p$ZipPassword"
+            }
+            Start-Executable -Command $zipCommand
+            Remove-Item -Force $imageName
+            $imageName = $imageNameZip
+        }
     }
+
     Pop-Location
-    if (Test-Path $ImagePath) {
-        throw "File $ImagePath already exists. The image has been created at $tmpName."
-    }
     if (!(Test-Path $compressedImagePath)) {
-        throw "Failed to compress image to ${compressedImagePath}"
+        throw "Failed to compress image ${VirtualDiskPath} to ${compressedImagePath}"
     }
-    return $compressedImagePath
+    if ($compressedImagePath -ne $imagePath) {
+        Move-Item -Force $compressedImagePath $imagePath
+    }
 }
 
 function Decompress-File {
@@ -1442,7 +1422,7 @@ function New-WindowsOnlineImage {
     }
 
     try {
-        $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
+        $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path 3
         $virtualDiskPath = $barePath + ".vhdx"
         $imagePath = $virtualDiskPath
 
@@ -1482,7 +1462,7 @@ function New-WindowsOnlineImage {
         Optimize-VHD $VirtualDiskPath -Mode Full
 
         if ($windowsImageConfig.image_type -eq "MAAS") {
-            $imagePath = $barePath + ".img"
+            $imagePath = $barePath + ".raw"
             Write-Log "Converting VHD to RAW"
             Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $imagePath -format "raw"
             Remove-Item -Force $virtualDiskPath
@@ -1502,12 +1482,14 @@ function New-WindowsOnlineImage {
                 -CompressQcow2 $windowsImageConfig.compress_qcow2
             Remove-Item -Force $virtualDiskPath
         }
-        
+
         if ($windowsImageConfig.compression_format) {
-            $imagePath = Compress-Image -VirtualDiskPath $imagePath `
-                -ImagePath $windowsImageConfig['image_path'] `
+            Compress-Image -VirtualDiskPath $imagePath `
+                -ImagePath $windowsImageConfig.image_path `
                 -compressionFormats $windowsImageConfig.compression_format `
-                -ZipPassword $windowsImageConfig.zip_password
+                -ZipPassword $windowsImageConfig.zip_password | Out-Null
+        } elseif ($imagePath -ne $windowsImageConfig['image_path']) {
+            Move-Item -Force $imagePath $windowsImageConfig['image_path']
         }
     } catch {
         Write-Log $_
@@ -1516,7 +1498,7 @@ function New-WindowsOnlineImage {
         }
         Throw
     }
-    Write-Log "Windows online image generation finished. Image path: ${imagePath}"
+    Write-Log "Windows online image generation finished. Image path: $($windowsImageConfig.image_path)"
 }
 
 function New-WindowsCloudImage {
@@ -1543,131 +1525,134 @@ function New-WindowsCloudImage {
     )
     Write-Log "Cloud image generation started."
     try {
-    $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
-    $mountedWindowsIso = $null
-    if ($windowsImageConfig.wim_file_path.EndsWith('.iso')) {
-        $windowsImageConfig.wim_file_path = get-command $windowsImageConfig.wim_file_path -erroraction ignore | Select-Object -ExpandProperty Source
-        if($windowsImageConfig.wim_file_path -eq $null){
-            throw ("Unable to find source iso. Either specify the full path or add the folder containing the iso to the path variable")
+        $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
+        $mountedWindowsIso = $null
+        if ($windowsImageConfig.wim_file_path.EndsWith('.iso')) {
+            $windowsImageConfig.wim_file_path = get-command $windowsImageConfig.wim_file_path -erroraction ignore `
+                | Select-Object -ExpandProperty Source
+            if($windowsImageConfig.wim_file_path -eq $null){
+                throw ("Unable to find source iso. Either specify the full path or add the folder containing the iso to the path variable")
+            }
+            $mountedWindowsIso = [WIMInterop.VirtualDisk]::OpenVirtualDisk($windowsImageConfig.wim_file_path)
+            $mountedWindowsIso.AttachVirtualDisk()
+            $devicePath = $mountedWindowsIso.GetVirtualDiskPhysicalPath()
+            $basePath = ((Get-DiskImage -DevicePath $devicePath `
+                    | Get-Volume).DriveLetter) + ":"
+            $windowsImageConfig.wim_file_path = "$($basePath)\Sources\install.wim"
         }
         
-        $mountedWindowsIso = [WIMInterop.VirtualDisk]::OpenVirtualDisk($windowsImageConfig.wim_file_path)
-        $mountedWindowsIso.AttachVirtualDisk()
-        $devicePath = $mountedWindowsIso.GetVirtualDiskPhysicalPath()
-        $basePath = ((Get-DiskImage -DevicePath $devicePath `
-                | Get-Volume).DriveLetter) + ":"
-        $windowsImageConfig.wim_file_path = "$($basePath)\Sources\install.wim"
-    }
-    
-    Validate-WindowsImageConfig $windowsImageConfig
-    Set-DotNetCWD
-    Is-Administrator
-    $image = Get-WimFileImagesInfo -WimFilePath $windowsImageConfig.wim_file_path | `
-        Where-Object { $_.ImageName -eq $windowsImageConfig.image_name }
-    if (!$image) {
-        throw ("Image {0} not found in WIM file {1}" -f @($windowsImageConfig.image_name, $windowsImageConfig.wim_file_path))
-    }
-    Check-DismVersionForImage $image
+        Validate-WindowsImageConfig $windowsImageConfig
+        Set-DotNetCWD
+        Is-Administrator
+        $image = Get-WimFileImagesInfo -WimFilePath $windowsImageConfig.wim_file_path | `
+            Where-Object { $_.ImageName -eq $windowsImageConfig.image_name }
+        if (!$image) {
+            throw ("Image {0} not found in WIM file {1}" -f @($windowsImageConfig.image_name, $windowsImageConfig.wim_file_path))
+        }
+        Check-DismVersionForImage $image
 
-    if (Test-Path $windowsImageConfig.image_path) {
-        Write-Log "Found already existing image file. Removing it..." -ForegroundColor Yellow
-        Remove-Item -Force $windowsImageConfig.image_path
-        Write-Log "Already existent image file has been removed." -ForegroundColor Yellow
-    }
+        if (Test-Path $windowsImageConfig.image_path) {
+            Write-Log "Found already existing image file. Removing it..." -ForegroundColor Yellow
+            Remove-Item -Force $windowsImageConfig.image_path
+            Write-Log "Already existent image file has been removed." -ForegroundColor Yellow
+        }
 
-    $vhdPath = "{0}.vhdx" -f (Get-PathWithoutExtension $windowsImageConfig.image_path)
-    if (Test-Path $vhdPath) {
-        Remove-Item -Force $vhdPath
-    }
-
-    try {
-        $drives = Create-ImageVirtualDisk -VhdPath $vhdPath -Size $windowsImageConfig.disk_size `
-            -DiskLayout $windowsImageConfig.disk_layout
-        $winImagePath = "$($drives[1])\"
-        $resourcesDir = "${winImagePath}UnattendResources"
-        $outUnattendXmlPath = "${winImagePath}Unattend.xml"
-        $xmlunattendPath = Join-Path $scriptPath $windowsImageConfig['unattend_xml_path']
-        $xmlParams = @{'InUnattendXmlPath' = $xmlunattendPath;
-                       'OutUnattendXmlPath' = $outUnattendXmlPath;
-                       'Image' = $image;
-                       'AdministratorPassword' = $windowsImageConfig.administrator_password;
-        }
-        if ($windowsImageConfig.product_key) {
-            $productKey = $windowsImageConfig.product_key
-            if ($productKey -eq "default_kms_key") {
-                $productKey = Map-KMSProductKey $windowsImageConfig.image_name $image.ImageVersion
-            }
-            if ($productKey) {
-                $xmlParams.Add('productKey', $productKey)
-            }
-        }
-        Generate-UnattendXml @xmlParams
-        Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $image.ImageInstallationType `
-            -InstallMaaSHooks $windowsImageConfig.install_maas_hooks `
-            -VMwareToolsPath $windowsImageConfig.vmware_tools_path
-        Copy-CustomResources -ResourcesDir $resourcesDir -CustomResources $windowsImageConfig.custom_resources_path `
-                             -CustomScripts $windowsImageConfig.custom_scripts_path
-        Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
-        if ($windowsImageConfig.enable_custom_wallpaper) {
-            Set-WindowsWallpaper -WinDrive $winImagePath -WallpaperPath $windowsImageConfig.wallpaper_path `
-                -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
-        }
-        if ($windowsImageConfig.zero_unused_volume_sectors) {
-            Download-ZapFree $resourcesDir ([string]$image.ImageArchitecture)
-        }
-        Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
-                               -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
-                               -CloudbaseInitConfigPath $windowsImageConfig.cloudbase_init_config_path `
-                               -CloudbaseInitUnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
-        Apply-Image -winImagePath $winImagePath -wimFilePath $windowsImageConfig.wim_file_path `
-            -imageIndex $image.ImageIndex
-        Create-BCDBootConfig -systemDrive $drives[0] -windowsDrive $drives[1] -diskLayout $windowsImageConfig.disk_layout `
-            -image $image
-        Check-EnablePowerShellInImage $winImagePath $image
-
-        if ($windowsImageConfig.drivers_path -and (Test-Path $windowsImageConfig.drivers_path)) {
-            Add-DriversToImage $winImagePath $windowsImageConfig.drivers_path
-        }
-        if ($windowsImageConfig.virtio_iso_path) {
-            Add-VirtIODriversFromISO -vhdDriveLetter $winImagePath -image $image `
-                -isoPath $windowsImageConfig.virtio_iso_path
-        }
-        if ($windowsImageConfig.virtio_base_path) {
-            Add-VirtIODrivers -vhdDriveLetter $winImagePath -image $image `
-                -driversBasePath $windowsImageConfig.virtio_base_path
-        }
-        if ($windowsImageConfig.extra_features) {
-            Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features
-        }
-        if ($windowsImageConfig.extra_packages) {
-            foreach ($package in $windowsImageConfig.extra_packages.split(",")) {
-                Add-PackageToImage $winImagePath $package -ignoreErrors $windowsImageConfig.extra_packages_ignore_errors
-            }
-        }
-        if ($windowsImageConfig.extra_capabilities) {
-            Add-CapabilitiesToImage $winImagePath $windowsImageConfig.extra_capabilities
-        }
-    } finally {
+        $vhdPath = "{0}.vhdx" -f (Get-PathWithoutExtension $windowsImageConfig.image_path)
         if (Test-Path $vhdPath) {
-            Detach-VirtualDisk $vhdPath
+            Remove-Item -Force $vhdPath
         }
-    }
 
-    if (!($windowsImageConfig.virtual_disk_format -in @("VHD", "VHDX"))) {
-        Convert-VirtualDisk -vhdPath $vhdPath -outPath $windowsImageConfig.image_path `
-            -format $windowsImageConfig.virtual_disk_format
-        Remove-Item -Force $vhdPath
-    } elseif ($vhdPath -ne $windowsImageConfig.image_path) {
-        Move-Item -Force $vhdPath $windowsImageConfig.image_path
-    }
-    $imagePath = $windowsImageConfig.image_path
-    if ($windowsImageConfig.compression_format) {
-            $imagePath = Compress-Image -VirtualDiskPath $windowsImageConfig.image_path `
+        try {
+            $drives = Create-ImageVirtualDisk -VhdPath $vhdPath -Size $windowsImageConfig.disk_size `
+                -DiskLayout $windowsImageConfig.disk_layout
+            $winImagePath = "$($drives[1])\"
+            $resourcesDir = "${winImagePath}UnattendResources"
+            $outUnattendXmlPath = "${winImagePath}Unattend.xml"
+            $xmlunattendPath = Join-Path $scriptPath $windowsImageConfig['unattend_xml_path']
+            $xmlParams = @{'InUnattendXmlPath' = $xmlunattendPath;
+                           'OutUnattendXmlPath' = $outUnattendXmlPath;
+                           'Image' = $image;
+                           'AdministratorPassword' = $windowsImageConfig.administrator_password;
+            }
+            if ($windowsImageConfig.product_key) {
+                $productKey = $windowsImageConfig.product_key
+                if ($productKey -eq "default_kms_key") {
+                    $productKey = Map-KMSProductKey $windowsImageConfig.image_name $image.ImageVersion
+                }
+                if ($productKey) {
+                    $xmlParams.Add('productKey', $productKey)
+                }
+            }
+            Generate-UnattendXml @xmlParams
+            Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $image.ImageInstallationType `
+                -InstallMaaSHooks $windowsImageConfig.install_maas_hooks `
+                -VMwareToolsPath $windowsImageConfig.vmware_tools_path
+            Copy-CustomResources -ResourcesDir $resourcesDir -CustomResources $windowsImageConfig.custom_resources_path `
+                                 -CustomScripts $windowsImageConfig.custom_scripts_path
+            Copy-Item $ConfigFilePath "$resourcesDir\config.ini"
+            if ($windowsImageConfig.enable_custom_wallpaper) {
+                Set-WindowsWallpaper -WinDrive $winImagePath -WallpaperPath $windowsImageConfig.wallpaper_path `
+                    -WallpaperSolidColor $windowsImageConfig.wallpaper_solid_color
+            }
+            if ($windowsImageConfig.zero_unused_volume_sectors) {
+                Download-ZapFree $resourcesDir ([string]$image.ImageArchitecture)
+            }
+            Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
+                                   -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
+                                   -CloudbaseInitConfigPath $windowsImageConfig.cloudbase_init_config_path `
+                                   -CloudbaseInitUnattendedConfigPath $windowsImageConfig.cloudbase_init_unattended_config_path
+            Apply-Image -winImagePath $winImagePath -wimFilePath $windowsImageConfig.wim_file_path `
+                -imageIndex $image.ImageIndex
+            Create-BCDBootConfig -systemDrive $drives[0] -windowsDrive $drives[1] -diskLayout $windowsImageConfig.disk_layout `
+                -image $image
+            Check-EnablePowerShellInImage $winImagePath $image
+
+            if ($windowsImageConfig.drivers_path -and (Test-Path $windowsImageConfig.drivers_path)) {
+                Add-DriversToImage $winImagePath $windowsImageConfig.drivers_path
+            }
+            if ($windowsImageConfig.virtio_iso_path) {
+                Add-VirtIODriversFromISO -vhdDriveLetter $winImagePath -image $image `
+                    -isoPath $windowsImageConfig.virtio_iso_path
+            }
+            if ($windowsImageConfig.virtio_base_path) {
+                Add-VirtIODrivers -vhdDriveLetter $winImagePath -image $image `
+                    -driversBasePath $windowsImageConfig.virtio_base_path
+            }
+            if ($windowsImageConfig.extra_features) {
+                Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features
+            }
+            if ($windowsImageConfig.extra_packages) {
+                foreach ($package in $windowsImageConfig.extra_packages.split(",")) {
+                    Add-PackageToImage $winImagePath $package -ignoreErrors $windowsImageConfig.extra_packages_ignore_errors
+                }
+            }
+            if ($windowsImageConfig.extra_capabilities) {
+                Add-CapabilitiesToImage $winImagePath $windowsImageConfig.extra_capabilities
+            }
+        } finally {
+            if (Test-Path $vhdPath) {
+                Detach-VirtualDisk $vhdPath
+            }
+        }
+
+        $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path 3
+        $imagePath = $barePath + "." + $windowsImageConfig.virtual_disk_format
+        if (!($windowsImageConfig.virtual_disk_format -in @("VHD", "VHDX"))) {
+            Convert-VirtualDisk -vhdPath $vhdPath -outPath $imagePath `
+                -format $windowsImageConfig.virtual_disk_format
+            Remove-Item -Force $vhdPath
+        } elseif ($vhdPath -ne $imagePath) {
+            Move-Item -Force $vhdPath $imagePath
+        }
+        if ($windowsImageConfig.compression_format) {
+            Compress-Image -VirtualDiskPath $imagePath `
                 -ImagePath $windowsImageConfig['image_path'] `
                 -compressionFormats $windowsImageConfig.compression_format `
-                -ZipPassword $windowsImageConfig.zip_password
+                -ZipPassword $windowsImageConfig.zip_password | Out-Null
+        } elseif ($imagePath -ne $windowsImageConfig['image_path']) {
+            Move-Item -Force $imagePath $windowsImageConfig['image_path']
         }
-    Write-Log "Cloud image generation finished. Image path: ${imagePath}"
+        Write-Log "Cloud image generation finished. Image path: $($windowsImageConfig.image_path)"
     } finally {
         if($mountedWindowsIso){
             $mountedWindowsIso.DetachVirtualDisk()
@@ -1797,30 +1782,46 @@ function New-WindowsFromGoldenImage {
         }
         Optimize-VHD $windowsImageConfig.gold_image_path -Mode Full
 
-        $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path
-        $imagePath = $windowsImageConfig.image_path
+        $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path 3
+        $imagePath = $windowsImageConfig.gold_image_path
+
+        if ($windowsImageConfig.image_type -eq "HYPER-V") {
+            $imagePathVhdx = $barePath + ".vhdx"
+            if ($imagePath -ne $imagePathVhdx) {
+                Move-Item -Force $imagePath $imagePathVhdx
+                $imagePath = $imagePathVhdx
+            }
+        }
 
         if ($windowsImageConfig.image_type -eq "MAAS") {
-            $imagePath = $barePath + ".img"
+            $imagePathRaw = $barePath + ".raw"
             Write-Log "Converting VHD to RAW"
-            Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $imagePath `
+            Convert-VirtualDisk -vhdPath $imagePath -outPath $imagePathRaw `
                 -format "RAW"
-            Remove-Item -Force $windowsImageConfig.gold_image_path
+            Remove-Item -Force $imagePath
+            $imagePath = $imagePathRaw
         }
+
         if ($windowsImageConfig.image_type -eq "KVM") {
-            $imagePath = $barePath + ".qcow2"
+            $imagePathQcow2 = $barePath + ".qcow2"
             Write-Log "Converting VHD to QCow2"
-            Convert-VirtualDisk -vhdPath $windowsImageConfig.gold_image_path -outPath $imagePath `
+            Convert-VirtualDisk -vhdPath $imagePath -outPath $imagePathQcow2 `
                 -format "qcow2" -CompressQcow2 $windowsImageConfig.compress_qcow2
-            Remove-Item -Force $windowsImageConfig.gold_image_path
+            Remove-Item -Force $imagePath
+            $imagePath = $imagePathQcow2
         }
+
         if ($windowsImageConfig.compression_format) {
-            $imagePath = Compress-Image -VirtualDiskPath $imagePath `
+            $imagePath = $windowsImageConfig['image_path']
+            Compress-Image -VirtualDiskPath $imagePath `
                 -ImagePath $windowsImageConfig['image_path'] `
                 -compressionFormats $windowsImageConfig.compression_format `
-                -ZipPassword $windowsImageConfig.zip_password
+                -ZipPassword $windowsImageConfig.zip_password | Out-Null
+        } elseif ($imagePath -ne $windowsImageConfig['image_path']) {
+            Move-Item -Force $imagePath $windowsImageConfig['image_path']
         }
-        Write-Log "Cloud image from golden image generation finished. Image path: ${imagePath}"
+
+        Write-Log "Cloud image from golden image generation finished. Image path: $($windowsImageConfig.image_path)"
     } catch {
       Write-Log $_
       try {
@@ -1830,6 +1831,7 @@ function New-WindowsFromGoldenImage {
       }
     }
 }
+
 
 function Test-OfflineWindowsImage {
     <#
