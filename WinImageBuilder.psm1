@@ -1715,11 +1715,13 @@ function New-WindowsFromGoldenImage {
         Mount-VHD -Path $windowsImageConfig.gold_image_path -Passthru | Out-Null
         Get-PSDrive | Out-Null
 
-        $driveLetterGold = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk | Get-Partition |`
-            Get-Volume).DriveLetter + ":"
-
         $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
         $partition = Get-Partition -DiskNumber $driveNumber | Where-Object {@("Basic", "IFS") -contains $_.Type}
+        if (!$partition -or !$partition.DriveLetter) {
+            throw "Partition not found for mounted $($windowsImageConfig.gold_image_path)"
+        }
+        $driveLetterGold = $partition.DriveLetter + ":"
+        Write-Log "The mount point for the gold image is: ${driveLetterGold}"
         try {
             $maxPartitionSize = (Get-PartitionSupportedSize -DiskNumber $driveNumber -PartitionNumber `
                                      $partition.PartitionNumber).SizeMax
@@ -1826,6 +1828,7 @@ function New-WindowsFromGoldenImage {
         $vhdDismountLog = ""
         try {
             Get-VHD $windowsImageConfig.gold_image_path | Dismount-VHD
+            Remove-Item -Force $windowsImageConfig.gold_image_path
         } catch {
             $vhdDismountLog = $_
         }
