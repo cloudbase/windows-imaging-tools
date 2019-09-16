@@ -950,7 +950,7 @@ function Decompress-File {
         if ($CompressionFormat -eq "gz") {
             $imageNameGz = $imageName -replace ".gz", ""
             Write-Log "Decompressing gzip ${imageName} to ${imageNameGz}"
-            & $pigz -d -f $imageName | Out-Null
+            & $pigz -k -d -f $imageName | Out-Null
             if ($LASTEXITCODE) {
                 throw "pigz.exe failed to decompress gzip ${imageName}"
             }
@@ -1031,8 +1031,10 @@ function Resize-VHDImage {
     $vhdSizeGB = $vhdSize/1GB
     Write-Log "Initial VHD size is: $vhdSizeGB GB"
 
-    $Drive = (Mount-VHD -Path $VirtualDiskPath -Passthru | `
-        Get-Disk | Get-Partition | Get-Volume | `
+    $mountedVHD = Mount-VHD -Path $VirtualDiskPath -Passthru
+    Get-PSDrive | Out-Null
+
+    $Drive = ($mountedVHD | Get-Disk | Get-Partition | Get-Volume | `
         Sort-Object -Property Size -Descending | Select-Object -First 1).DriveLetter
 
     try {
@@ -1710,7 +1712,7 @@ function New-WindowsFromGoldenImage {
     try {
         Execute-Retry {
             Resize-VHD -Path $windowsImageConfig.gold_image_path -SizeBytes $windowsImageConfig.disk_size
-        }
+        } | Out-Null
 
         Mount-VHD -Path $windowsImageConfig.gold_image_path -Passthru | Out-Null
         Get-PSDrive | Out-Null
@@ -1736,12 +1738,8 @@ function New-WindowsFromGoldenImage {
                 -isoPath $windowsImageConfig.virtio_iso_path
         }
 
-        if ($windowsImageConfig.drivers_path -and (Get-ChildItem $windowsImageConfig.drivers_path)) {
-            Dism.exe /Image:$driveLetterGold /Add-Driver /Driver:$windowsImageConfig.drivers_path `
-                /ForceUnsigned /Recurse
-            if ($LASTEXITCODE) {
-                throw ("Failed to install drivers from {0}" -f @($windowsImageConfig.drivers_path))
-            }
+        if ($windowsImageConfig.drivers_path -and (Test-Path $windowsImageConfig.drivers_path)) {
+            Add-DriversToImage $driveLetterGold $windowsImageConfig.drivers_path
         }
 
         $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
