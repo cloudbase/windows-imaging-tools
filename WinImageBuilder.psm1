@@ -1710,7 +1710,7 @@ function New-WindowsFromGoldenImage {
     try {
         Execute-Retry {
             Resize-VHD -Path $windowsImageConfig.gold_image_path -SizeBytes $windowsImageConfig.disk_size
-        }
+        } | Out-Null
 
         Mount-VHD -Path $windowsImageConfig.gold_image_path -Passthru | Out-Null
         Get-PSDrive | Out-Null
