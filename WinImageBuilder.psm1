@@ -950,7 +950,7 @@ function Decompress-File {
         if ($CompressionFormat -eq "gz") {
             $imageNameGz = $imageName -replace ".gz", ""
             Write-Log "Decompressing gzip ${imageName} to ${imageNameGz}"
-            & $pigz -d -f $imageName | Out-Null
+            & $pigz -k -d -f $imageName | Out-Null
             if ($LASTEXITCODE) {
                 throw "pigz.exe failed to decompress gzip ${imageName}"
             }
