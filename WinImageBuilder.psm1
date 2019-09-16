@@ -1736,12 +1736,8 @@ function New-WindowsFromGoldenImage {
                 -isoPath $windowsImageConfig.virtio_iso_path
         }
 
-        if ($windowsImageConfig.drivers_path -and (Get-ChildItem $windowsImageConfig.drivers_path)) {
-            Dism.exe /Image:$driveLetterGold /Add-Driver /Driver:$windowsImageConfig.drivers_path `
-                /ForceUnsigned /Recurse
-            if ($LASTEXITCODE) {
-                throw ("Failed to install drivers from {0}" -f @($windowsImageConfig.drivers_path))
-            }
+        if ($windowsImageConfig.drivers_path -and (Test-Path $windowsImageConfig.drivers_path)) {
+            Add-DriversToImage $driveLetterGold $windowsImageConfig.drivers_path
         }
 
         $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
