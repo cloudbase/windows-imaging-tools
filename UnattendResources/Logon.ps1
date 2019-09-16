@@ -214,6 +214,19 @@ function License-Windows {
     if ($lastExitCode) {
         throw "Windows license details could not be retrieved."
     }
+
+    if ($ProductKey -eq "default_kms_key") {
+        if ($slmgrOutput -like "*VOLUME_KMSCLIENT*") {
+            $licensingOutput = cscript.exe "$env:windir\system32\slmgr.vbs" /upk
+            if ($LASTEXITCODE) {
+                Write-Log "License" "Error: KMS trial licensing could not be reset"
+                throw $licensingOutput
+            }
+            Write-Log "License" "KMS trial licensing was reset"
+        }
+        return
+    }
+
     if ($slmgrOutput -like "*License Status: Licensed*") {
        $partialKey = ($slmgrOutput -like "Partial Product Key*").Replace("Partial Product Key:","").Trim()
        Write-Host "Windows is already licensed with partial key: $partialKey"
@@ -408,7 +421,7 @@ try {
             -Default $false -AsBoolean
     } catch{}
 
-    if ($productKey -and ($productKey -ne "default_kms_key")) {
+    if ($productKey) {
         License-Windows $productKey
     }
 
