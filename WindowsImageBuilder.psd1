@@ -53,7 +53,7 @@ ModuleList = @("Config.psm1", "UnattendResources\ini.psm1")
 
 # Functions to export from this module
 FunctionsToExport = "New-WindowsCloudImage", "New-WindowsOnlineImage", "New-WindowsFromGoldenImage",
-     "Get-WindowsImageConfig", "New-WindowsImageConfig", "Test-OfflineWindowsImage"
+     "Get-WindowsImageConfig", "New-WindowsImageConfig", "Test-WindowsImage"
 
 AliasesToExport = ""
 }
