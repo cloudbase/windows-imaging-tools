@@ -430,8 +430,14 @@ try {
         Install-WindowsUpdates
     }
 
-    ExecRetry {
-        Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
+    try {
+        ExecRetry {
+            Clean-WindowsUpdates -PurgeUpdates $purgeUpdates
+        }
+    } catch {
+        Write-Log "DISM" "Failed to cleanup updates. Rebooting..."
+        Restart-Computer -Force
+        exit 0
     }
 
     Run-CustomScript "RunAfterWindowsUpdates.ps1"
