@@ -386,6 +386,27 @@ function Disable-FirstLogonAnimation {
     }
 }
 
+function Enable-AlwaysActiveMode {
+    # This mode is the High Performance plus some tweaks to keep
+    # the screen always on and to not sleep
+
+    # The user should not automatically log off or the screen to become black
+    New-ItemProperty `
+        -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System" `
+        -Name "InactivityTimeoutSecs" `
+        -PropertyType "DWord" `
+        -Value "0" -Force
+
+    # This is changing the settings from the machine (power mode) perspective
+    powercfg /setactive "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c" # High performance mode
+    powercfg -change -monitor-timeout-ac 0
+    powercfg -change -monitor-timeout-dc 0
+    powercfg -change -standby-timeout-ac 0
+    powercfg -change -standby-timeout-dc 0
+    powercfg -hibernate OFF
+    Write-Log "AlwaysActive" "Always active mode was set."
+}
+
 try {
     Write-Log "StatusInitial" "Automated instance configuration started..."
     Import-Module "$resourcesDir\ini.psm1"
@@ -418,6 +439,10 @@ try {
     } catch {}
     try {
         $disableFirstLogonAnimation = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "disable_first_logon_animation" `
+            -Default $false -AsBoolean
+    } catch{}
+    try {
+        $enableAlwaysActiveMode = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "enable_active_mode" `
             -Default $false -AsBoolean
     } catch{}
 
@@ -520,6 +545,10 @@ try {
 
     if (Is-WindowsClient -and $enableAdministrator) {
         Enable-AdministratorAccount
+    }
+
+    if ($enableAlwaysActiveMode) {
+        Enable-AlwaysActiveMode
     }
 
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
