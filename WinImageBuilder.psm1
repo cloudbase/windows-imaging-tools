@@ -1150,7 +1150,8 @@ function Run-Sysprep {
         [Parameter(Mandatory=$true)]
         [string]$VMSwitch,
         [ValidateSet("1", "2")]
-        [string]$Generation = "1"
+        [string]$Generation = "1",
+        [switch]$DisableSecureBoot
     )
 
     Write-Log "Creating VM $Name attached to $VMSwitch"
@@ -1167,6 +1168,9 @@ function Run-Sysprep {
     }
     if ($vmAutomaticCheckpointsEnabled) {
        Set-VM -VMName $Name -AutomaticCheckpointsEnabled:$false
+    }
+    if ($DisableSecureBoot -and $Generation -eq "2") {
+         Set-VMFirmware -VMName $Name -EnableSecureBoot Off
     }
     Write-Log "Starting $Name"
     Start-VM $Name | Out-Null
@@ -1455,7 +1459,7 @@ function New-WindowsOnlineImage {
             $Name = "WindowsOnlineImage-Sysprep" + (Get-Random)
             Run-Sysprep -Name $Name -Memory $windowsImageConfig.ram_size -vhdPath $virtualDiskPath `
                 -VMSwitch $switch.Name -CpuCores $windowsImageConfig.cpu_count `
-                -Generation $generation
+                -Generation $generation -DisableSecureBoot:$windowsImageConfig.disable_secure_boot
         }
 
         if ($windowsImageConfig.shrink_image_to_minimum_size -eq $true) {
@@ -1774,7 +1778,7 @@ function New-WindowsFromGoldenImage {
             $Name = "WindowsGoldImage-Sysprep" + (Get-Random)
             Run-Sysprep -Name $Name -Memory $windowsImageConfig.ram_size -vhdPath $windowsImageConfig.gold_image_path `
                 -VMSwitch $switch.Name -CpuCores $windowsImageConfig.cpu_count `
-                -Generation $generation
+                -Generation $generation -DisableSecureBoot:$windowsImageConfig.disable_secure_boot
         }
 
         if ($windowsImageConfig.shrink_image_to_minimum_size -eq $true) {

@@ -185,8 +185,12 @@ function Get-AvailableConfigOptions {
         @{"Name" = "enable_ipv6_eui64"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true, use EUI-64 derived IDs and disable privacy extensions for IPv6.
                            If set to false, the IPv6 protocol might not work on OpenStack or CloudStack.
-                           See https://github.com/cloudbase/windows-openstack-imaging-tools/issues/192"}
-
+                           See https://github.com/cloudbase/windows-openstack-imaging-tools/issues/192"},
+        @{"Name" = "enable_active_mode"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true, it will set the High Performance mode and some power mode
+                           and registry tweaks to prevent the machine from sleeping / hibernating."},
+        @{"Name" = "disable_secure_boot"; "GroupName" = "vm"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true and the disk layout is UEFI, the secure boot firmware option will be disabled."}
     )
 }
 
