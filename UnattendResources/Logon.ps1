@@ -570,7 +570,7 @@ try {
     Clean-UpdateResources
     Write-Log "StatusFinal" "Waiting for sysprep to stop machine..."
 } catch {
-    $host.ui.WriteErrorLine($_.Exception.ToString())
+    Write-Log "ERROR" $_.Exception.ToString()
     $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     throw
 }
