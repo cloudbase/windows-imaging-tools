@@ -584,10 +584,12 @@ function Add-DriversToImage {
         [string]$driversPath
     )
     Write-Log ('Adding drivers from "{0}" to image "{1}"' -f $driversPath, $winImagePath)
-    & Dism.exe /image:${winImagePath} /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
-    if ($LASTEXITCODE) {
-        throw "Dism failed to add drivers from: $driversPath"
-    }
+    Execute-Retry {
+        & Dism.exe /image:${winImagePath} /Add-Driver /driver:${driversPath} /ForceUnsigned /recurse
+        if ($LASTEXITCODE) {
+            throw "Dism failed to add drivers from: $driversPath"
+        }
+    } -retryInterval 1
 }
 
 function Add-PackageToImage {
@@ -830,14 +832,14 @@ function Add-VirtIODriversFromISO {
             throw "The $isoPath is not a valid iso path."
         }
     } catch{
-        Write-Log $_
+        throw $_
     } finally {
         if ($v) {
             $v.DetachVirtualDisk()
             $v.Close()
         }
     }
-    Write-Log "ISO Virtual Drivers has been adeed."
+    Write-Log "ISO Virtual Drivers have been adeed."
 }
 
 function Set-DotNetCWD {
