@@ -397,14 +397,22 @@ function Copy-CustomResources {
             New-Item -Type Directory "$resourcesDir\CustomResources" | Out-Null
         }
         Write-Log "Copying: $CustomResources $resourcesDir"
-        Copy-Item -Recurse "$CustomResources\*" "$resourcesDir\CustomResources"
+        # Custom resources can be multiple directories, split by ","
+        $customResourcesSplit = $CustomResources.split(",")
+        foreach ($customResource in $customResourcesSplit) {
+            Copy-Item -Recurse "$customResource\*" "$resourcesDir\CustomResources"
+        }
     }
     if ($CustomScripts) {
         if (!(Test-Path "$resourcesDir\CustomScripts")) {
             New-Item -Type Directory "$resourcesDir\CustomScripts" | Out-Null
         }
         Write-Log "Copying: $CustomScripts $resourcesDir"
-        Copy-Item -Recurse "$CustomScripts\*" "$resourcesDir\CustomScripts"
+        # Custom scripts can be multiple directories, split by ","
+        $customScriptsSplit = $CustomScripts.split(",")
+        foreach ($customScript in $customScriptsSplit) {
+            Copy-Item -Recurse "$customScript\*" "$resourcesDir\CustomScripts"
+        }
     }
     Write-Log "Custom Resources at: $ResourcesDir."
 }
