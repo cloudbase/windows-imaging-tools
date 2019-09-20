@@ -368,15 +368,15 @@ function Convert-VirtualDisk {
 
     Write-Log "Convert Virtual Disk: $vhdPath..."
     $format = $format.ToLower()
-    $compressParam = ""
+    $qemuParams = @("$scriptPath\bin\qemu-img.exe", "convert")
     if ($format -eq "qcow2" -and $CompressQcow2) {
         Write-Log "Qcow2 compression has been enabled."
-        $compressParam = "-c"
+        $qemuParams += @("-c", "-W", "-m16")
     }
+    $qemuParams += @("-O", $format, $vhdPath, $outPath)
     Write-Log "Converting virtual disk image from $vhdPath to $outPath..."
     Execute-Retry {
-        & "$scriptPath\bin\qemu-img.exe" convert $compressParam -O $format.ToLower() $vhdPath $outPath
-        if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
+        Start-Executable $qemuParams
     }
     Write-Log "Finish to convert virtual disk."
 }
