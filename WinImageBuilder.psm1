@@ -809,14 +809,21 @@ function Add-VirtIODriversFromISO {
     try {
         if (Is-IsoFile $isoPath) {
             $v.AttachVirtualDisk()
-            $devicePath = $v.GetVirtualDiskPhysicalPath()
-            $driversBasePath = ((Get-DiskImage -DevicePath $devicePath `
-                | Get-Volume).DriveLetter) + ":"
-            Write-Log "Adding drivers from $driversBasePath"
             # We call Get-PSDrive to refresh the list of active drives.
             # Otherwise, "Test-Path $driversBasePath" will return $False
             # http://www.vistax64.com/powershell/2653-powershell-does-not-update-subst-mapped-drives.html
             Get-PSDrive | Out-Null
+            $devicePath = $v.GetVirtualDiskPhysicalPath()
+            $driversBasePath = Execute-Retry {
+                $res = (Get-DiskImage -DevicePath $devicePath `
+                    | Get-Volume).DriveLetter
+                if (!$res) {
+                    throw "Failed to mount ISO ${isoPath}"
+                }
+                return $res
+            }
+            $driversBasePath += ":"
+            Write-Log "Adding drivers from $driversBasePath"
             Add-VirtIODrivers -vhdDriveLetter $vhdDriveLetter -image $image `
                 -driversBasePath $driversBasePath
         } else {
