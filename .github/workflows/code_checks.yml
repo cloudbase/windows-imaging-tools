@@ -1,0 +1,25 @@
+name: Windows Image Builder code checks
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - name: Install Dependencies
+        shell: powershell
+        run: |
+          cinst pester
+          Install-Module -Name PSScriptAnalyzer -SkipPublisherCheck -AllowClobber -Force
+      - name: Run code checks
+        shell: powershell
+        run: |
+          Import-Module Pester;
+          $rules = @("PSProvideCommentHelp","PSUseDeclaredVarsMoreThanAssignments","PSAvoidUsingEmptyCatchBlock","PSAvoidUsingCmdletAliases","PSAvoidDefaultValueForMandatoryParameter","PSAvoidDefaultValueSwitchParameter","PSUseToExportFieldsInManifest","PSAvoidUsingPositionalParameters");
+          $resScryptAnalyzer = Invoke-ScriptAnalyzer -Path . -IncludeRule $rules;
+          $res = Invoke-Pester -OutputFormat NUnitXml -OutputFile TestsResults.xml -PassThru;
+          if (($res.FailedCount -gt 0) -or ($resScryptAnalyzer.Count -gt 0)) { throw "$($res.FailedCount) Pester tests failed. $($resScryptAnalyzer.Count) failed style warnings found."}
