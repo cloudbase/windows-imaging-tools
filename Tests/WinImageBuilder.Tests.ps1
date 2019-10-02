@@ -1,9 +1,9 @@
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-$moduleName = "WinImageBuilder"
+$moduleName = "WindowsImageBuilder"
 $moduleHome = Split-Path -Parent $here
 $fakeConfigPath = Join-Path $here "fake-config.ini"
-$modulePath = Join-Path $moduleHome "${moduleName}.psm1"
+$modulePath = Join-Path $moduleHome "${moduleName}.psd1"
 
 class PathShouldExist : System.Management.Automation.ValidateArgumentsAttribute {
     [void] Validate([object]$arguments, [System.Management.Automation.EngineIntrinsics]$engineIntrinsics) {
@@ -121,22 +121,6 @@ Describe "Test New-WindowsCloudImage" {
     }
 }
 
-
-Describe "Test Get-WimFileImagesInfo" {
-
-    Mock Get-WimInteropObject -Verifiable -ModuleName $moduleName {
-        $imagesMock = New-Object -TypeName PSObject
-        Add-Member -InputObject ([ref]$imagesMock).value `
-            -MemberType NoteProperty -Name "Images" -Value @{"Win"=1}
-        return $imagesMock
-    }
-
-    It "Should return fake images" {
-        Compare-HashTables (Get-WimFileImagesInfo "FakePath") @{
-            "Win"=1
-        } | Should Be $true
-    }
-}
 
 Describe "Test Resize-VHDImage" {
     function Get-VHD { }

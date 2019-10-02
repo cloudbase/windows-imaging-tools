@@ -15,10 +15,9 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2
 Import-Module Dism
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$localResourcesDir = "$scriptPath\UnattendResources"
-$kmsProductKeysFile = "$scriptPath\kms_product_keys.json"
+$localResourcesDir = (Resolve-Path "$scriptPath\..").Path
+$kmsProductKeysFile = "$localResourcesDir\windows-utils\KMS\kms_product_keys.json"
 Import-Module "$scriptPath\Config.psm1"
-Import-Module "$scriptPath\UnattendResources\ini.psm1"
 
 # Enforce Tls1.2, as GitHub and more websites require it.
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -52,7 +51,7 @@ $VirtIODriverMappings = @{
 
 $AvailableCompressionFormats = @("tar","gz","zip")
 
-. "$scriptPath\Interop.ps1"
+. "$scriptPath\Windows\Interop.ps1"
 
 class PathShouldExistAttribute : System.Management.Automation.ValidateArgumentsAttribute {
     [void] Validate([object]$arguments, [System.Management.Automation.EngineIntrinsics]$engineIntrinsics) {
@@ -324,8 +323,8 @@ function Generate-UnattendXml {
         $xsltArgs["productKey"] = $productKey
     }
 
-    Transform-Xml -xsltPath "$scriptPath\Unattend.xslt" -inXmlPath $inUnattendXmlPath `
-        -outXmlPath $outUnattendXmlPath -xsltArgs $xsltArgs
+    Transform-Xml -xsltPath "$localResourcesDir\windows-utils\UnattendTemplates\Unattend.xslt" `
+        -inXmlPath $inUnattendXmlPath -outXmlPath $outUnattendXmlPath -xsltArgs $xsltArgs
     Write-Log "Xml was generated."
 }
 
@@ -373,8 +372,9 @@ function Convert-VirtualDisk {
         $compressParam = "-c"
     }
     Write-Log "Converting virtual disk image from $vhdPath to $outPath..."
+    $qemuImgPath = Get-QemuImgPath
     Execute-Retry {
-        & "$scriptPath\bin\qemu-img.exe" convert $compressParam -O $format.ToLower() $vhdPath $outPath
+        & "${qemuImgPath}" convert $compressParam -O $format.ToLower() $vhdPath $outPath
         if($LASTEXITCODE) { throw "qemu-img failed to convert the virtual disk" }
     }
     Write-Log "Finish to convert virtual disk."
@@ -557,23 +557,6 @@ function Download-ZapFree {
     } else {
         Move-Item -Force -Path $ZapFree32Path -Destination $ZapFreePath
     }
-}
-
-function Generate-ConfigFile {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$resourcesDir,
-        [Parameter(Mandatory=$true)]
-        [hashtable]$values
-    )
-
-    Write-Log "Generate config file: $resourcesDir..."
-    $configIniPath = "$resourcesDir\config.ini"
-    Import-Module "$localResourcesDir\ini.psm1"
-    foreach ($i in $values.GetEnumerator()) {
-        Set-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key $i.Key -Value $i.Value
-    }
-    Write-Log "Config file was generated."
 }
 
 function Add-DriversToImage {
@@ -1017,11 +1000,15 @@ function Start-Executable {
 }
 
 function Get-7zipPath {
-    return Join-Path -Path "$localResourcesDir" -ChildPath "7za.exe"
+    return Join-Path -Path "$localResourcesDir\bin" -ChildPath "7za.exe"
 }
 
 function Get-PigzPath {
-    return Join-Path -Path "$localResourcesDir" -ChildPath "pigz.exe"
+    return Join-Path -Path "$localResourcesDir\bin" -ChildPath "pigz.exe"
+}
+
+function Get-QemuImgPath {
+    return Join-Path -Path "$localResourcesDir\bin" -ChildPath "qemu-img.exe"
 }
 
 function Resize-VHDImage {
@@ -1288,7 +1275,7 @@ function Set-WindowsWallpaper {
 
     Write-Log "Setting wallpaper..."
     $useWallpaperImage = $false
-    $wallpaperGPOPath = Join-Path $localResourcesDir "GPO"
+    $wallpaperGPOPath = Join-Path $localResourcesDir "windows-utils\GPO"
 
     if ($WallpaperPath -and $WallpaperSolidColor) {
         throw "WallpaperPath and WallpaperSolidColor cannot be set at the same time."
@@ -1296,7 +1283,7 @@ function Set-WindowsWallpaper {
     if ($WallpaperPath -or !($WallpaperSolidColor)) {
         if (!$WallpaperPath -or !(@('.jpg', '.jpeg') -contains `
                 (Get-Item $windowsImageConfig.wallpaper_path -ErrorAction SilentlyContinue).Extension)) {
-            $WallpaperPath = Join-Path $localResourcesDir "Wallpaper.jpg"
+            $WallpaperPath = Join-Path $localResourcesDir "windows-utils\Wallpaper\Wallpaper.jpg"
         }
         if (!(Test-Path $WallpaperPath)) {
             throw "Walpaper path ``$WallpaperPath`` does not exist."
@@ -1614,7 +1601,11 @@ function New-WindowsCloudImage {
             $winImagePath = "$($drives[1])\"
             $resourcesDir = "${winImagePath}UnattendResources"
             $outUnattendXmlPath = "${winImagePath}Unattend.xml"
-            $xmlunattendPath = Join-Path $scriptPath $windowsImageConfig['unattend_xml_path']
+            $xmlunattendPath = $windowsImageConfig['unattend_xml_path']
+            if (!(Test-Path $xmlunattendPath)) {
+                $xmlunattendPath = Join-Path $localResourcesDir ("windows-utils\UnattendTemplates\" `
+                    + $windowsImageConfig['unattend_xml_path'])
+            }
             $xmlParams = @{'InUnattendXmlPath' = $xmlunattendPath;
                            'OutUnattendXmlPath' = $outUnattendXmlPath;
                            'Image' = $image;
@@ -1964,7 +1955,8 @@ function Test-OfflineWindowsImage {
             Write-Log "${imagePath} has the correct ${fileExtension} extension."
         }
 
-        $qemuInfoOutput = & "$scriptPath\bin\qemu-img.exe" info --output=json $imagePath
+        $qemuImgPath = Get-QemuImgPath
+        $qemuInfoOutput = & "${qemuImgPath}" info --output=json $imagePath
         $qemuInfoJson = ConvertFrom-Json ($qemuInfoOutput -join "")
         $qemuImgFormat = $qemuInfoJson | Select-Object "Format"
         if ($qemuImgFormat.Format -ne $diskFormat) {
@@ -2040,5 +2032,5 @@ function Test-OfflineWindowsImage {
 
 
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
-    New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage, Get-WindowsImageConfig,
-    New-WindowsImageConfig, Test-OfflineWindowsImage
+    New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage, Test-OfflineWindowsImage,
+    Get-WindowsImageConfig, New-WindowsImageConfig, Set-IniFileValue, Get-IniFileValue, Remove-IniFileValue

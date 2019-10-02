@@ -409,7 +409,7 @@ function Enable-AlwaysActiveMode {
 
 try {
     Write-Log "StatusInitial" "Automated instance configuration started..."
-    Import-Module "$resourcesDir\ini.psm1"
+    Import-Module "$resourcesDir\PSModules\ini.psm1"
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "install_updates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "persist_drivers_install" -Default $true -AsBoolean
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean

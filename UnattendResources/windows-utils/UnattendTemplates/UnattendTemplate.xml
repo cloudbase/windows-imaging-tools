@@ -104,12 +104,6 @@
                     <Order>1</Order>
                 </AsynchronousCommand>
             </LogonCommands>
-            <FirstLogonCommands>
-                <SynchronousCommand wcm:action="add">
-                    <CommandLine>%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell -NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -File %SystemDrive%\UnattendResources\FirstLogon.ps1</CommandLine>
-                    <Order>1</Order>
-                </SynchronousCommand>
-            </FirstLogonCommands>
             <UserAccounts>
                 <!--
                     Password to be used only during initial provisioning.

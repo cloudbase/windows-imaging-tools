@@ -15,8 +15,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$localResourcesDir = "$scriptPath\UnattendResources"
-Import-Module "$localResourcesDir\ini.psm1"
+Import-Module "$scriptPath\ini.psm1"
 
 function Get-AvailableConfigOptions {
     return @(
@@ -306,4 +305,5 @@ function New-WindowsImageConfig {
     }
 }
 
-Export-ModuleMember Get-WindowsImageConfig, New-WindowsImageConfig
+Export-ModuleMember Get-WindowsImageConfig, New-WindowsImageConfig, Set-IniFileValue, Get-IniFileValue,
+    Remove-IniFileValue
