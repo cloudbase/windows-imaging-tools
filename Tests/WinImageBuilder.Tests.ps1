@@ -70,9 +70,9 @@ function Compare-HashTables ($tab1, $tab2) {
     return $true
 }
 
-function Get-VMSwitch {
+function Get-VMSwitch {}
 
-}
+function Optimize-VHD {}
 
 Import-Module $modulePath
 
@@ -94,7 +94,7 @@ Describe "Test New-WindowsCloudImage" {
     Mock Test-Path -Verifiable -ModuleName $moduleName { return $false }
     Mock Create-ImageVirtualDisk -Verifiable -ModuleName $moduleName `
         {
-            return @("drive1")
+            return @("C:", "D:")
         }
     Mock Generate-UnattendXml -Verifiable -ModuleName $moduleName { return 0 }
     Mock Copy-UnattendResources -Verifiable -ModuleName $moduleName { return 0 }
@@ -107,6 +107,8 @@ Describe "Test New-WindowsCloudImage" {
     Mock Check-EnablePowerShellInImage -Verifiable -ModuleName $moduleName { return 0 }
     Mock Set-WindowsWallpaper -Verifiable -ModuleName $moduleName { return 0 }
     Mock Enable-FeaturesInImage -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Clean-WindowsUpdates -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Optimize-Volume -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-PathWithoutExtension -Verifiable -ModuleName $moduleName { return "test" }
     Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
 
@@ -219,8 +221,6 @@ Describe "Test Resize-VHDImage with binary search" {
 
 
 Describe "Test New-WindowsOnlineImage" {
-    function Optimize-VHD { }
-
     Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
     Mock Is-Administrator -Verifiable -ModuleName $moduleName { return 0 }
     Mock Check-Prerequisites -Verifiable -ModuleName $moduleName { return 0 }
