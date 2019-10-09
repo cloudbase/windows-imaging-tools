@@ -367,6 +367,7 @@ function Convert-VirtualDisk {
     )
 
     Write-Log "Convert Virtual Disk: $vhdPath..."
+    $format = $format.ToLower()
     $compressParam = ""
     if ($format -eq "qcow2" -and $CompressQcow2) {
         Write-Log "Qcow2 compression has been enabled."
