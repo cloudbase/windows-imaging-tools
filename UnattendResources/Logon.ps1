@@ -420,6 +420,20 @@ function Set-CustomTimezone {
     Write-Log "Customization(1)" "Set timezone: ${CustomTimezone}"
 }
 
+function Set-CustomNtpServers {
+    Param(
+        [parameter(Mandatory=$true)]
+        [String]$CustomNtpServers
+    )
+
+    w32tm.exe /config /syncfromflags:manual /manualpeerlist:"${CustomNtpServers}"
+    if ($LastExitCode) {
+        throw "Failed to set custom ntp servers: ${CustomNtpServers}"
+    }
+    Set-Service "W32time" -StartupType Automatic
+    Write-Log "Customization(2)" "Set ntp servers: ${CustomNtpServers}"
+}
+
 try {
     Write-Log "StatusInitial" "Automated instance configuration started..."
     Import-Module "$resourcesDir\ini.psm1"
@@ -464,6 +478,9 @@ try {
     } catch{}
     try {
         $customTimezone = Get-IniFileValue -Path $configIniPath -Section "custom" -Key "time_zone"
+    } catch{}
+    try {
+        $customNtpServers = Get-IniFileValue -Path $configIniPath -Section "custom" -Key "ntp_servers"
     } catch{}
 
     if ($productKey) {
@@ -575,6 +592,10 @@ try {
 
     if ($customTimezone) {
         Set-CustomTimezone $customTimezone
+    }
+
+    if ($customNtpServers) {
+        Set-CustomNtpServers $customNtpServers
     }
 
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
