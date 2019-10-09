@@ -196,7 +196,9 @@ function Get-AvailableConfigOptions {
                            This is useful when updates or capabilities are installed offline."},
         @{"Name" = "clean_updates_online"; "GroupName" = "updates"; "DefaultValue" = $true; "AsBoolean" = $true;
           "Description" = "Clean up the updates / components by running a DISM Cleanup-Image command.
-                           This is useful when updates or other packages are installed when the instance is running."}
+                           This is useful when updates or other packages are installed when the instance is running."},
+        @{"Name" = "time_zone"; "GroupName" = "custom";
+          "Description" = "Set a custom timezone for the Windows image."}
     )
 }
 

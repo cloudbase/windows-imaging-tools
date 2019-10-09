@@ -407,6 +407,19 @@ function Enable-AlwaysActiveMode {
     Write-Log "AlwaysActive" "Always active mode was set."
 }
 
+function Set-CustomTimezone {
+    Param(
+        [parameter(Mandatory=$true)]
+        [String]$CustomTimezone
+    )
+
+    tzutil.exe /s "${CustomTimezone}"
+    if ($LastExitCode) {
+        throw "Failed to set custom timezone: ${CustomTimezone}"
+    }
+    Write-Log "Customization(1)" "Set timezone: ${CustomTimezone}"
+}
+
 try {
     Write-Log "StatusInitial" "Automated instance configuration started..."
     Import-Module "$resourcesDir\ini.psm1"
@@ -448,6 +461,9 @@ try {
     try {
         $cleanUpdatesOnline = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "clean_updates_online" `
             -Default $true -AsBoolean
+    } catch{}
+    try {
+        $customTimezone = Get-IniFileValue -Path $configIniPath -Section "custom" -Key "time_zone"
     } catch{}
 
     if ($productKey) {
@@ -555,6 +571,10 @@ try {
 
     if ($enableAlwaysActiveMode) {
         Enable-AlwaysActiveMode
+    }
+
+    if ($customTimezone) {
+        Set-CustomTimezone $customTimezone
     }
 
     $Host.UI.RawUI.WindowTitle = "Running Sysprep..."
