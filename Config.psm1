@@ -198,7 +198,9 @@ function Get-AvailableConfigOptions {
           "Description" = "Clean up the updates / components by running a DISM Cleanup-Image command.
                            This is useful when updates or other packages are installed when the instance is running."},
         @{"Name" = "time_zone"; "GroupName" = "custom";
-          "Description" = "Set a custom timezone for the Windows image."}
+          "Description" = "Set a custom timezone for the Windows image."},
+        @{"Name" = "ntp_servers"; "GroupName" = "custom";
+          "Description" = "Set custom ntp servers(space separated) for the Windows image"}
     )
 }
 
