@@ -162,6 +162,10 @@ function Install-WindowsUpdates {
             Restart-Computer -Force
             exit 0
          }
+    } elseif ((Get-RebootRequired)) {
+        Write-Log "Updates(reboot)" "No updates available, but a reboot is required. Rebooting..."
+        Restart-Computer -Force
+        exit 0
     }
     Write-Log "Updates" "All available updates were installed succesfully"
 }
@@ -183,7 +187,7 @@ function ExecRetry($command, $maxRetryCount=4, $retryInterval=4) {
                 throw
             } else {
                 if($_) {
-                Write-Warning $_
+                    Write-Warning $_
                 }
                 Start-Sleep $retryInterval
             }
@@ -290,7 +294,7 @@ function Enable-AdministratorAccount {
         Write-Log "Administrator" "Error: Account could not be enabled"
         throw "Resetting $username password failed."
     }
-        Write-Log "Administrator" "Account was enabled succesfully"
+    Write-Log "Administrator" "Account was enabled succesfully"
 }
 
 function Is-WindowsClient {
@@ -310,16 +314,18 @@ function Run-CustomScript {
         Write-Host "Executing script $fullScriptFilePath"
         & $fullScriptFilePath
         if ($LastExitCode -eq 1004) {
-            # exit this script
+            Write-Log "CustomScripts(${ScriptFileName})" "Required to exit"
             exit 0
         }
         if ($LastExitCode -eq 1005) {
             # exit this script and reboot
+            Write-Log "CustomScripts(${ScriptFileName})" "Required to reboot. Rebooting..."
             shutdown -r -t 0 -f
             exit 0
         }
         if ($LastExitCode -eq 1006) {
             # exit this script and shutdown
+            Write-Log "CustomScripts(${ScriptFileName})" "Required to shut down. Shutting down..."
             shutdown -s -t 0 -f
             exit 0
         }
@@ -384,6 +390,7 @@ function Disable-FirstLogonAnimation {
         New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
             -Name "EnableFirstLogonAnimation" -Value 0 -Type DWORD -Force
     }
+    Write-Log "FirstLogonAnimation" "First logon animation was disabled"
 }
 
 function Enable-AlwaysActiveMode {
@@ -432,6 +439,32 @@ function Set-CustomNtpServers {
     }
     Set-Service "W32time" -StartupType Automatic
     Write-Log "Customization(2)" "Set ntp servers: ${CustomNtpServers}"
+}
+
+function Enable-PingFirewallRules {
+    netsh.exe advfirewall firewall add rule name="Allow IPv4 ping requests" protocol="icmpv4:8,any" dir=in action=allow
+    if ($LASTEXITCODE) {
+        throw "Failed to enable IPv4 ping firewall rules"
+    }
+    netsh.exe advfirewall firewall add rule name="Allow IPv6 ping requests" protocol="icmpv6:8,any" dir=in action=allow
+    if ($LASTEXITCODE) {
+        throw "Failed to enable IPv6 ping firewall rules"
+    }
+    Write-Log "Ping" "Enabled ping for IPv4 and IPv6"
+}
+
+function Disable-IPv6TemporaryAddress {
+    Set-NetIPv6Protocol -RandomizeIdentifiers Disabled
+    Set-NetIPv6Protocol -UseTemporaryAddresses Disabled
+    Write-Log "IPv6" "RandomizeIdentifiers and UseTemporaryAddresses were disabled"
+}
+
+function Enable-ShutdownWithoutLogon {
+    Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\" `
+       -Name shutdownwithoutlogon -Value 1 -Type DWord
+    Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\" `
+       -Name ShutdownWarningDialogTimeout -Value 1 -Type DWord
+    Write-Log "ShutdownWithoutLogon" "Shutdown without logon was enabled"
 }
 
 try {
@@ -562,10 +595,7 @@ try {
     Release-IP
 
     if ($enableShutdownWithoutLogon) {
-        Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\" `
-           -Name shutdownwithoutlogon -Value 1 -Type DWord
-        Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\" `
-           -Name ShutdownWarningDialogTimeout -Value 1 -Type DWord
+        Enable-ShutdownWithoutLogon
     }
 
     if (Is-WindowsClient -and $disableFirstLogonAnimation) {
@@ -573,13 +603,11 @@ try {
     }
 
     if ($enablePing) {
-        netsh advfirewall firewall add rule name="Allow IPv4 ping requests" protocol="icmpv4:8,any" dir=in action=allow
-        netsh advfirewall firewall add rule name="Allow IPv6 ping requests" protocol="icmpv6:8,any" dir=in action=allow
+        Enable-PingFirewallRules
     }
 
     if ($useIpv6EUI64) {
-        Set-NetIPv6Protocol -RandomizeIdentifiers Disabled
-        Set-NetIPv6Protocol -UseTemporaryAddresses Disabled
+        Disable-IPv6TemporaryAddress
     }
 
     if (Is-WindowsClient -and $enableAdministrator) {
