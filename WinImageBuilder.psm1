@@ -826,6 +826,10 @@ function Add-VirtIODriversFromISO {
         [string]$isoPath
     )
     Write-Log "Adding Virtual IO Drivers from ISO: $isoPath..."
+    $isoPathBak = $isoPath + (Get-Random) + ".iso"
+    Copy-Item $isoPath $isoPathBak -Force
+    Write-Log "Using backed up ISO for safe dismount."
+    $isoPath = $isoPathBak
     $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($isoPath)
     try {
         if (Is-IsoFile $isoPath) {
@@ -857,6 +861,7 @@ function Add-VirtIODriversFromISO {
             $v.DetachVirtualDisk()
             $v.Close()
         }
+        Remove-Item -Force $isoPath
     }
     Write-Log "ISO Virtual Drivers have been adeed."
 }
