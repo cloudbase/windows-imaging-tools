@@ -718,10 +718,10 @@ function Get-VirtIODrivers {
             if (!(($map[0] -eq $MajorMinorVersion) -and ($map[1] -eq $isServer))) {
               continue
             }
-            $driverPath = "{0}\{1}\{2}\{3}" -f @($basePath,
-                                                 $driver,
-                                                 $osVersion,
-                                                 $architecture)
+            $driverPath = "{0}\{1}\{2}" -f @($driver,
+                                             $osVersion,
+                                             $architecture)
+            $driverPath = Join-Path $basePath $driverPath
             if (Test-Path $driverPath) {
                 $driverPaths += $driverPath
                 break
@@ -762,7 +762,8 @@ function Add-VirtIODrivers {
         throw "Unsupported Windows version for VirtIO drivers: {0}" `
             -f $image.ImageVersion
     }
-    $virtioDir = "{0}\{1}\{2}" -f $driversBasePath, $virtioVer, $image.ImageArchitecture
+    $virtioDir = "{0}\{1}" -f $virtioVer, $image.ImageArchitecture
+    $virtioDir = Join-Path $driversBasePath $virtioDir
     if (Test-Path $virtioDir) {
         Add-DriversToImage $vhdDriveLetter $virtioDir
         return
@@ -779,6 +780,77 @@ function Add-VirtIODrivers {
         }
     }
     Write-Log "Virtual IO Drivers was added."
+}
+
+function Mount-WindowsDiskImage {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]
+        $DiskImagePath,
+        $MountPoint
+    )
+
+    if (!$MountPoint) {
+        $MountPoint = Join-Path $env:TEMP (Get-Random)
+        $MountPoint += "\"
+    }
+
+    if (!(Test-Path $MountPoint)) {
+        New-Item -Type Directory -Path $MountPoint | Out-Null
+    }
+    $beforeIds = Get-WmiObject Win32_CDROMDrive
+    if ($beforeIds) {
+        $beforeIds = $beforeIds.Id
+    }
+    $image = Mount-DiskImage -ImagePath $DiskImagePath -NoDriveLetter -PassThru
+    Get-PSDrive | Out-Null
+    $afterIds = (Get-WmiObject Win32_CDROMDrive).Id
+    $imageDevicePath = $afterIds | Where-Object { $beforeIds -notcontains $_}
+    if (($imageDevicePath | Measure-Object).Count -eq 1) {
+        $volumeUniqueId = "\\?\{0}\" -f $imageDevicePath
+        $imageDevicePath = "\\.\{0}" -f $imageDevicePath
+        $volume = Get-Volume -UniqueId $volumeUniqueId
+    }
+    if (!$volume) {
+        $volume = Get-Volume -DiskImage $image | Where-Object { !$_.DriveLetter } | `
+            Select-Object -First 1
+        if (!$volume) {
+            throw "Failed to find associated volume for $DiskImagePath"
+        }
+        $imageDevicePath = $volume.UniqueId.Replace('?','.')
+        $imageDevicePath = $imageDevicePath.substring(0, $imageDevicePath.Length - 1)
+    }
+    $volumeId = $volume.UniqueId -replace '\\','\\'
+    $drive = Get-WmiObject Win32_Volume -Filter "DeviceID = '${volumeId}'" `
+        -ErrorAction Stop
+    $result = $drive.AddMountPoint($MountPoint)
+    if ($result.ReturnValue -ne 0) {
+        throw "Could not mount $DiskImagePath to ${MountPoint}. Error code: $($result.ReturnValue)"
+    }
+    Get-PSDrive | Out-Null
+    return @($MountPoint, $imageDevicePath)
+}
+
+function Dismount-WindowsDiskImage {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string] $MountPoint,
+        [parameter(Mandatory=$true)]
+        [string] $DevicePath,
+        [bool]$Clean = $false
+    )
+
+    if ($MountPoint[$MountPoint.Length -1] -ne "\") {
+        $MountPoint += "\"
+    }
+    $success = ([MountPoint]::DeleteVolumeMountPoint($MountPoint))
+    if ($success -ne $true) {
+        throw "Failed to unmount $MountPoint"
+    }
+    Dismount-DiskImage -DevicePath $DevicePath
+    if ($Clean) {
+        Remove-Item $MountPoint
+    }
 }
 
 function Add-VirtIODriversFromISO {
@@ -808,37 +880,18 @@ function Add-VirtIODriversFromISO {
         [string]$isoPath
     )
     Write-Log "Adding Virtual IO Drivers from ISO: $isoPath..."
-    $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($isoPath)
+    $mountInfo = Mount-WindowsDiskImage -DiskImagePath $isoPath
+    $driversBasePath = $mountInfo[0]
+    $mountedDevicePath = $mountInfo[1]
     try {
-        if (Is-IsoFile $isoPath) {
-            $v.AttachVirtualDisk()
-            # We call Get-PSDrive to refresh the list of active drives.
-            # Otherwise, "Test-Path $driversBasePath" will return $False
-            # http://www.vistax64.com/powershell/2653-powershell-does-not-update-subst-mapped-drives.html
-            Get-PSDrive | Out-Null
-            $devicePath = $v.GetVirtualDiskPhysicalPath()
-            $driversBasePath = Execute-Retry {
-                $res = (Get-DiskImage -DevicePath $devicePath `
-                    | Get-Volume).DriveLetter
-                if (!$res) {
-                    throw "Failed to mount ISO ${isoPath}"
-                }
-                return $res
-            }
-            $driversBasePath += ":"
-            Write-Log "Adding drivers from $driversBasePath"
-            Add-VirtIODrivers -vhdDriveLetter $vhdDriveLetter -image $image `
-                -driversBasePath $driversBasePath
-        } else {
-            throw "The $isoPath is not a valid iso path."
-        }
+        Write-Log "Adding drivers from $driversBasePath"
+        Add-VirtIODrivers -vhdDriveLetter $vhdDriveLetter -image $image `
+            -driversBasePath $driversBasePath
     } catch{
         throw $_
     } finally {
-        if ($v) {
-            $v.DetachVirtualDisk()
-            $v.Close()
-        }
+        Dismount-WindowsDiskImage -MountPoint $driversBasePath -Clean $true `
+            -DevicePath $mountedDevicePath
     }
     Write-Log "ISO Virtual Drivers have been adeed."
 }

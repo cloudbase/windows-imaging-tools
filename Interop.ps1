@@ -1348,8 +1348,24 @@ namespace WIMInterop {
 }
 "@
 
+$mountPointCode = @"
+    using System;
+    using System.Runtime.InteropServices;
+
+    public class MountPoint
+    {
+    [DllImport("kernel32.dll", CharSet=CharSet.Auto, SetLastError=true)]
+    public static extern bool DeleteVolumeMountPoint(string mountPoint);
+    }
+"@
+
 if (-not ([System.Management.Automation.PSTypeName]'WIMInterop.WimFile').Type)
 {
     Add-Type -TypeDefinition $code -ReferencedAssemblies "System.Xml","System.Linq","System.Xml.Linq"
+}
+
+if (-not ([System.Management.Automation.PSTypeName]'MountPoint::DeleteVolumeMountPoint').Type)
+{
+    Add-Type -TypeDefinition $mountPointCode
 }
 
