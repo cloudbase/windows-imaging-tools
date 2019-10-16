@@ -980,7 +980,6 @@ function Decompress-File {
             Write-Log "Decompressing tar ${imageName} to ${imageNameTar}"
             $tarCommand = @($7zip, "e", $imageName, "-y")
             Start-Executable -Command $tarCommand | Out-Null
-            Remove-Item -Force $imageName
             $imageName = $imageNameTar
         }
         if ($CompressionFormat -eq "gz") {
@@ -1000,7 +999,6 @@ function Decompress-File {
                 $zipCommand += "-p$ZipPassword"
             }
             Start-Executable -Command $zipCommand | Out-Null
-            Remove-Item -Force $imageName
             $imageName = $imageNameZip
         }
     } finally {
