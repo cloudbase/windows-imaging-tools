@@ -1782,12 +1782,22 @@ function New-WindowsFromGoldenImage {
         } | Out-Null
 
         Mount-VHD -Path $windowsImageConfig.gold_image_path -Passthru | Out-Null
-        Get-PSDrive | Out-Null
-
-        $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
-        $partition = Get-Partition -DiskNumber $driveNumber | Where-Object {@("Basic", "IFS") -contains $_.Type}
-        if (!$partition -or !$partition.DriveLetter) {
-            throw "Partition not found for mounted $($windowsImageConfig.gold_image_path)"
+        $driveNumber = Execute-Retry {
+            Get-PSDrive | Out-Null
+            $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
+            if ($driveNumber -eq $null) {
+                throw "Could not retrieve drive number for mounted vhd"
+            }
+            return $driveNumber
+        }
+        $partition = Execute-Retry {
+            Get-PSDrive | Out-Null
+            Set-Disk -Number $driveNumber -IsOffline $False
+            $partition = Get-Partition -DiskNumber $driveNumber | Where-Object {@("Basic", "IFS") -contains $_.Type}
+            if (!$partition -or !$partition.DriveLetter) {
+                throw "Partition not found for mounted $($windowsImageConfig.gold_image_path)"
+            }
+            return $partition
         }
         $driveLetterGold = $partition.DriveLetter + ":"
         Write-Log "The mount point for the gold image is: ${driveLetterGold}"
@@ -2024,6 +2034,8 @@ function Test-OfflineWindowsImage {
         try {
             Get-PSDrive | Out-Null
             $driveNumber = (Get-DiskImage -ImagePath $imagePath | Get-Disk).Number
+            Set-Disk -Number $driveNumber -IsOffline $False
+            Get-PSDrive | Out-Null
             $mountPoint = (Get-Partition -DiskNumber $driveNumber | `
                 Where-Object {@("Basic", "IFS") -contains $_.Type}).DriveLetter + ":"
 
