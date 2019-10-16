@@ -1782,12 +1782,22 @@ function New-WindowsFromGoldenImage {
         } | Out-Null
 
         Mount-VHD -Path $windowsImageConfig.gold_image_path -Passthru | Out-Null
-        Get-PSDrive | Out-Null
-
-        $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
-        $partition = Get-Partition -DiskNumber $driveNumber | Where-Object {@("Basic", "IFS") -contains $_.Type}
-        if (!$partition -or !$partition.DriveLetter) {
-            throw "Partition not found for mounted $($windowsImageConfig.gold_image_path)"
+        $driveNumber = Execute-Retry {
+            Get-PSDrive | Out-Null
+            $driveNumber = (Get-DiskImage -ImagePath $windowsImageConfig.gold_image_path | Get-Disk).Number
+            if ($driveNumber -eq $null) {
+                throw "Could not retrieve drive number for mounted vhd"
+            }
+            return $driveNumber
+        }
+        $partition = Execute-Retry {
+            Get-PSDrive | Out-Null
+            Set-Disk -Number $driveNumber -IsOffline $False
+            $partition = Get-Partition -DiskNumber $driveNumber | Where-Object {@("Basic", "IFS") -contains $_.Type}
+            if (!$partition -or !$partition.DriveLetter) {
+                throw "Partition not found for mounted $($windowsImageConfig.gold_image_path)"
+            }
+            return $partition
         }
         $driveLetterGold = $partition.DriveLetter + ":"
         Write-Log "The mount point for the gold image is: ${driveLetterGold}"
@@ -1878,6 +1888,15 @@ function New-WindowsFromGoldenImage {
                 -format "qcow2" -CompressQcow2 $windowsImageConfig.compress_qcow2
             Remove-Item -Force $imagePath
             $imagePath = $imagePathQcow2
+        }
+
+        if ($windowsImageConfig.image_type -eq "VMware") {
+            $imagePathVmdk = $barePath + ".vmdk"
+            Write-Log "Converting VHD to VMDK"
+            Convert-VirtualDisk -vhdPath $imagePath -outPath $imagePathVmdk `
+                -format "vmdk"
+            Remove-Item -Force $imagePath
+            $imagePath = $imagePathVmdk
         }
 
         if ($windowsImageConfig.compression_format) {
@@ -1977,6 +1996,10 @@ function Test-OfflineWindowsImage {
             $fileExtension = 'raw'
             $diskFormat = 'raw'
         }
+        if ($windowsImageConfig.image_type -eq "VMware") {
+            $fileExtension = 'vmdk'
+            $diskFormat = 'vmdk'
+        }
 
         if (!([System.IO.Path]::GetExtension($imagePath) -like ".${fileExtension}")) {
             throw "${imagePath} does not have ${fileExtension} extension."
@@ -2011,6 +2034,8 @@ function Test-OfflineWindowsImage {
         try {
             Get-PSDrive | Out-Null
             $driveNumber = (Get-DiskImage -ImagePath $imagePath | Get-Disk).Number
+            Set-Disk -Number $driveNumber -IsOffline $False
+            Get-PSDrive | Out-Null
             $mountPoint = (Get-Partition -DiskNumber $driveNumber | `
                 Where-Object {@("Basic", "IFS") -contains $_.Type}).DriveLetter + ":"
 
@@ -2025,7 +2050,7 @@ function Test-OfflineWindowsImage {
             }
 
             # Test if curtin modules are installed
-            if ($windowsImageConfig.install_maas_hooks -or $windowsImageConfig.image_type -eq "MAAS") {
+            if ($windowsImageConfig.install_maas_hooks) {
                 if (Test-Path (Join-Path $mountPoint "curtin")) {
                     Write-Log "Curtin hooks are installed."
                 } else {
@@ -2035,12 +2060,19 @@ function Test-OfflineWindowsImage {
 
             # Test if extra drivers are installed
             if ($windowsImageConfig.virtio_iso_path -or $windowsImageConfig.virtio_base_path `
-                    -or $windowsImageConfig.drivers_path -or $windowsImageConfig.image_type -eq "KVM") {
-                $extraDriversNr = (Get-Item "$mountPoint\Windows\INF\OEM*.inf" | Measure-Object).Count
-                if ($extraDriversNr) {
-                    Write-Log "Found ${extraDriversNr} extra drivers installed."
-                } else {
-                    throw "No extra drivers installed on the image."
+                    -or $windowsImageConfig.drivers_path) {
+                $dismDriversOutput = (& Dism.exe /image:$mountPoint /Get-Drivers /Format:Table)
+                $allDrivers = (Select-String "oem" -InputObject $dismDriversOutput -AllMatches).Matches.Count
+                $virtDrivers = (Select-String "Red Hat, Inc." -InputObject $dismDriversOutput -AllMatches).Matches.Count
+                $virtDrivers += (Select-String "QEMU" -InputObject $dismDriversOutput `
+                    -AllMatches -CaseSensitive).Matches.Count
+                Write-Log "Found ${allDrivers} drivers, from which ${virtDrivers} are VirtIO drivers."
+                $minDriversCount = 1
+                if ($windowsImageConfig.virtio_iso_path -or $windowsImageConfig.virtio_base_path) {
+                    $minDriversCount = $VirtIODrivers.Count - 1 + ($allDrivers - $virtDrivers)
+                }
+                if ($allDrivers -lt $minDriversCount) {
+                    throw "Expected ${minDriversCount} ! >= ${allDrivers} drivers installed on the image."
                 }
             }
         } finally {
