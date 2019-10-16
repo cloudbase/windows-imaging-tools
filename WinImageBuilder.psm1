@@ -1880,6 +1880,15 @@ function New-WindowsFromGoldenImage {
             $imagePath = $imagePathQcow2
         }
 
+        if ($windowsImageConfig.image_type -eq "VMware") {
+            $imagePathVmdk = $barePath + ".vmdk"
+            Write-Log "Converting VHD to VMDK"
+            Convert-VirtualDisk -vhdPath $imagePath -outPath $imagePathVmdk `
+                -format "vmdk"
+            Remove-Item -Force $imagePath
+            $imagePath = $imagePathVmdk
+        }
+
         if ($windowsImageConfig.compression_format) {
             Compress-Image -VirtualDiskPath $imagePath `
                 -ImagePath $windowsImageConfig['image_path'] `
@@ -1976,6 +1985,10 @@ function Test-OfflineWindowsImage {
         if ($windowsImageConfig.image_type -eq "MAAS") {
             $fileExtension = 'raw'
             $diskFormat = 'raw'
+        }
+        if ($windowsImageConfig.image_type -eq "VMware") {
+            $fileExtension = 'vmdk'
+            $diskFormat = 'vmdk'
         }
 
         if (!([System.IO.Path]::GetExtension($imagePath) -like ".${fileExtension}")) {
