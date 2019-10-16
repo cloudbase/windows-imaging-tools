@@ -2050,7 +2050,7 @@ function Test-OfflineWindowsImage {
             }
 
             # Test if curtin modules are installed
-            if ($windowsImageConfig.install_maas_hooks -or $windowsImageConfig.image_type -eq "MAAS") {
+            if ($windowsImageConfig.install_maas_hooks) {
                 if (Test-Path (Join-Path $mountPoint "curtin")) {
                     Write-Log "Curtin hooks are installed."
                 } else {
@@ -2060,12 +2060,19 @@ function Test-OfflineWindowsImage {
 
             # Test if extra drivers are installed
             if ($windowsImageConfig.virtio_iso_path -or $windowsImageConfig.virtio_base_path `
-                    -or $windowsImageConfig.drivers_path -or $windowsImageConfig.image_type -eq "KVM") {
-                $extraDriversNr = (Get-Item "$mountPoint\Windows\INF\OEM*.inf" | Measure-Object).Count
-                if ($extraDriversNr) {
-                    Write-Log "Found ${extraDriversNr} extra drivers installed."
-                } else {
-                    throw "No extra drivers installed on the image."
+                    -or $windowsImageConfig.drivers_path) {
+                $dismDriversOutput = (& Dism.exe /image:$mountPoint /Get-Drivers /Format:Table)
+                $allDrivers = (Select-String "oem" -InputObject $dismDriversOutput -AllMatches).Matches.Count
+                $virtDrivers = (Select-String "Red Hat, Inc." -InputObject $dismDriversOutput -AllMatches).Matches.Count
+                $virtDrivers += (Select-String "QEMU" -InputObject $dismDriversOutput `
+                    -AllMatches -CaseSensitive).Matches.Count
+                Write-Log "Found ${allDrivers} drivers, from which ${virtDrivers} are VirtIO drivers."
+                $minDriversCount = 1
+                if ($windowsImageConfig.virtio_iso_path -or $windowsImageConfig.virtio_base_path) {
+                    $minDriversCount = $VirtIODrivers.Count - 1 + ($allDrivers - $virtDrivers)
+                }
+                if ($allDrivers -lt $minDriversCount) {
+                    throw "Expected ${minDriversCount} ! >= ${allDrivers} drivers installed on the image."
                 }
             }
         } finally {
