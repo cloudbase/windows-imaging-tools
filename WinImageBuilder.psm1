@@ -213,6 +213,37 @@ function Apply-Image {
     if ($LASTEXITCODE) { throw "Dism apply-image failed" }
 }
 
+function Reset-BCDSearchOrder {
+    Param(
+        [parameter(Mandatory=$true)]
+        [string]$systemDrive,
+        [parameter(Mandatory=$true)]
+        [string]$windowsDrive,
+        [parameter(Mandatory=$true)]
+        [string]$diskLayout
+    )
+
+    if ($diskLayout -eq "BIOS") {
+        Write-Log "Resetting BCD boot border"
+        $ErrorActionPreference = "SilentlyContinue"
+        $bcdeditPath = "${windowsDrive}\windows\system32\bcdedit.exe"
+        if (!(Test-Path $bcdeditPath)) {
+            Write-Warning ('"{0}" not found, using online version' -f $bcdeditPath)
+            $bcdeditPath = "bcdedit.exe"
+        }
+
+        & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{bootmgr`} device locate
+        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: bootmgr device locate" }
+
+        & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} device locate
+        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default device locate" }
+
+        & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} osdevice locate
+        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default osdevice locate" }
+        $ErrorActionPreference = "Stop"
+    }
+}
+
 function Create-BCDBootConfig {
     Param(
         [parameter(Mandatory=$true)]
@@ -251,22 +282,9 @@ function Create-BCDBootConfig {
         throw "BCDBoot failed with error: $bcdbootOutput"
     }
 
-    if ($diskLayout -eq "BIOS") {
-        $bcdeditPath = "${windowsDrive}\windows\system32\bcdedit.exe"
-        if (!(Test-Path $bcdeditPath)) {
-            Write-Warning ('"{0}" not found, using online version' -f $bcdeditPath)
-            $bcdeditPath = "bcdedit.exe"
-        }
+    Reset-BCDSearchOrder -systemDrive $systemDrive -windowsDrive $windowsDrive `
+        -diskLayout $diskLayout
 
-        & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{bootmgr`} device locate
-        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: bootmgr device locate" }
-
-        & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} device locate
-        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default device locate" }
-
-        & $bcdeditPath /store ${systemDrive}\boot\BCD /set `{default`} osdevice locate
-        if ($LASTEXITCODE) { Write-Warning "BCDEdit failed: default osdevice locate" }
-    }
     $ErrorActionPreference = "Stop"
     Write-Log "BCDBoot config has been created."
 }
@@ -1762,6 +1780,7 @@ function New-WindowsFromGoldenImage {
     try {
         Execute-Retry {
             Resize-VHD -Path $windowsImageConfig.gold_image_path -SizeBytes $windowsImageConfig.disk_size
+            Set-VHD -Path $windowsImageConfig.gold_image_path -ResetDiskIdentifier -Force
         } | Out-Null
 
         Mount-VHD -Path $windowsImageConfig.gold_image_path -Passthru | Out-Null
@@ -1793,6 +1812,8 @@ function New-WindowsFromGoldenImage {
         }
 
         $resourcesDir = Join-Path -Path $driveLetterGold -ChildPath "UnattendResources"
+        Reset-BCDSearchOrder -systemDrive $driveLetterGold -windowsDrive $driveLetterGold `
+            -diskLayout $windowsImageConfig.disk_layout
         Copy-UnattendResources -resourcesDir $resourcesDir -imageInstallationType $windowsImageConfig.image_name `
                                -InstallMaaSHooks $windowsImageConfig.install_maas_hooks `
                                -VMwareToolsPath $windowsImageConfig.vmware_tools_path
