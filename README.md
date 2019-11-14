@@ -1,6 +1,6 @@
 Windows Imaging Tools
 ===============================
-[![Actions Status](https://github.com/cloudbase/windows-openstack-imaging-tools/workflows/Windows%20Image%20Builder%20code%20checks/badge.svg)](https://github.com/cloudbase/windows-openstack-imaging-tools/actions?workflow=Windows+Image+Builder+code+checks)
+[![Master branch](https://ci.appveyor.com/api/projects/status/github/cloudbase/windows-openstack-imaging-tools?branch=master&svg=true)](https://ci.appveyor.com/project/ader1990/windows-openstack-imaging-tools-w885m)
 
 Windows OpenStack Imaging Tools automates the generation of Windows images.<br/>
 The tools are a bundle of PowerShell modules and scripts.
