@@ -553,6 +553,34 @@ function Download-CloudbaseInit {
     }
 }
 
+function Download-QemuGuestAgent {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$QemuGuestAgentConfig,
+        [Parameter(Mandatory=$true)]
+        [string]$ResourcesDir,
+        [Parameter(Mandatory=$true)]
+        [string]$OsArch
+    )
+
+    $QemuGuestAgentUrl = $QemuGuestAgentConfig
+    if ($QemuGuestAgentConfig -eq 'True') {
+        $arch = "x86"
+        if ($OsArch -eq "AMD64") {
+            $arch = "x64"
+        }
+        $QemuGuestAgentUrl = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads" + `
+                             "/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-{0}.msi" -f $arch
+    }
+
+    Write-Log "Downloading QEMU guest agent installer from ${QemuGuestAgentUrl} ..."
+    $dst = Join-Path $ResourcesDir "qemu-ga.msi"
+    Execute-Retry {
+        (New-Object System.Net.WebClient).DownloadFile($QemuGuestAgentUrl, $dst)
+    }
+    Write-Log "QEMU guest agent installer path is: $dst"
+}
+
 function Download-ZapFree {
     Param(
         [Parameter(Mandatory=$true)]
@@ -1672,6 +1700,10 @@ function New-WindowsCloudImage {
             if ($windowsImageConfig.zero_unused_volume_sectors) {
                 Download-ZapFree $resourcesDir ([string]$image.ImageArchitecture)
             }
+            if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
+                Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
+                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture)
+            }
             Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
                                    -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
                                    -CloudbaseInitConfigPath $windowsImageConfig.cloudbase_init_config_path `
@@ -1848,6 +1880,10 @@ function New-WindowsFromGoldenImage {
         }
         if ($windowsImageConfig.zero_unused_volume_sectors) {
             Download-ZapFree $resourcesDir $imageInfo.imageArchitecture
+        }
+        if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
+            Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
+                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture
         }
         Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
                                -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `

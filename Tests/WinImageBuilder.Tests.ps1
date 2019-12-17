@@ -237,6 +237,7 @@ Describe "Test New-WindowsOnlineImage" {
 
     It "Should create an online image" {
         New-WindowsOnlineImage -ConfigFilePath $fakeConfigPath | Should -Contain 0
+        Remove-Item -Force -ErrorAction SilentlyContinue "${fakeConfigPath}.offline"
     }
 
     It "should run all mocked commands" {
