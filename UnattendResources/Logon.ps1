@@ -472,6 +472,35 @@ function Enable-ShutdownWithoutLogon {
     Write-Log "ShutdownWithoutLogon" "Shutdown without logon was enabled"
 }
 
+function Install-QemuGuestAgent {
+    $qemuServices = Get-Service "*qemu*"
+    if ($qemuServices -and $qemuServices.Count -eq 2) {
+        Write-Log "QemuGa" "Qemu Guest Agents are already installed."
+        return
+    }
+    $qemuGaMsiPath = Join-Path $resourcesDir "qemu-ga.msi"
+    $qemuGaMsiLog = Join-Path $resourcesDir "qemu-ga.log"
+
+    $params = '-i "{0}" /qn /log "{1}"' -f @($qemuGaMsiPath, $qemuGaMsiLog)
+    $exitCode = (Start-Process -FilePath msiexec.exe -ArgumentList $params -Wait -Passthru).ExitCode
+    if ($exitCode) {
+        throw "Failed to install Qemu Guest Agent. Exit code: ${exitCode}"
+    }
+
+    $qemuServices = Get-Service "*qemu*"
+
+    if ($qemuServices.Count -ne 2) {
+        throw "Failed to find both Qemu Guest Agent services"
+    }
+    $guestAgentService = $qemuServices | Where-Object {$_.Name -eq "QEMU-GA"}
+    $guestAgentVssService = $qemuServices | Where-Object {$_.Name -eq "QEMU Guest Agent VSS Provider"}
+    if (!$guestAgentService -or !$guestAgentVssService) {
+        throw "Failed to find GA and VSS services"
+    }
+    Write-Log "QemuGa" "Qemu Guest Agents installed successfully."
+}
+
+
 try {
     Write-Log "StatusInitial" "Automated instance configuration started..."
     $psVersion = "PS version {0}." -f $PSVersionTable.PSVersion.ToString()
@@ -532,9 +561,17 @@ try {
         $setCloudbaseInitDelayedStart = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "cloudbase_init_delayed_start" `
             -Default $false -AsBoolean
     } catch{}
+    try {
+        $installQemuGuestAgent = Get-IniFileValue -Path $configIniPath -Section "custom" -Key "install_qemu_ga" `
+            -Default "False"
+    } catch{}
 
     if ($productKey) {
         License-Windows $productKey
+    }
+
+    if ($installQemuGuestAgent -and $installQemuGuestAgent -ne 'False') {
+        Install-QemuGuestAgent
     }
 
     Run-CustomScript "RunBeforeWindowsUpdates.ps1"
