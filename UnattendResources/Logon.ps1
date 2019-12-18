@@ -486,16 +486,19 @@ try {
     $serialPortName = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "serial_logging_port"
     try {
         $runCloudbaseInitUnderLocalSystem = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" `
-            -Key "cloudbase_init_use_local_system"
+            -Key "cloudbase_init_use_local_system" -Default $false -AsBoolean
     } catch {}
     try {
-        $enableShutdownWithoutLogon = Get-IniFileValue -Path $configIniPath -Key "enable_shutdown_without_logon"
+        $enableShutdownWithoutLogon = Get-IniFileValue -Path $configIniPath -Key "enable_shutdown_without_logon" `
+            -Default $false -AsBoolean
     } catch {}
     try {
-        $enablePing = Get-IniFileValue -Path $configIniPath -Key "enable_ping_requests"
+        $enablePing = Get-IniFileValue -Path $configIniPath -Key "enable_ping_requests" `
+            -Default $false -AsBoolean
     } catch {}
     try {
-        $useIpv6EUI64 = Get-IniFileValue -Path $configIniPath -Key "enable_ipv6_eui64"
+        $useIpv6EUI64 = Get-IniFileValue -Path $configIniPath -Key "enable_ipv6_eui64" `
+            -Default $false -AsBoolean
     } catch {}
     try {
         $disableFirstLogonAnimation = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "disable_first_logon_animation" `
@@ -570,8 +573,10 @@ try {
         $msiexecArgumentList += " LOGGINGSERIALPORTNAME=$serialPortName"
     }
 
+    $cloudbaseInitUser = 'cloudbase-init'
     if ($runCloudbaseInitUnderLocalSystem) {
         $msiexecArgumentList += " RUN_SERVICE_AS_LOCAL_SYSTEM=1"
+        $cloudbaseInitUser = "LocalSystem"
     }
 
     $p = Start-Process -Wait -PassThru -FilePath msiexec -ArgumentList $msiexecArgumentList
@@ -580,14 +585,18 @@ try {
         throw "Installing $CloudbaseInitMsiPath failed. Log: $CloudbaseInitMsiLog"
     }
 
-    Copy-Item -Force $CloudbaseInitConfigPath "${cloudbaseInitInstallDir}\conf\cloudbase-init.conf" `
-              -ErrorAction SilentlyContinue
-    Copy-Item -Force $CloudbaseInitUnattendedConfigPath "${cloudbaseInitInstallDir}\conf\cloudbase-init-unattend.conf" `
-              -ErrorAction SilentlyContinue
+    if (Test-Path $CloudbaseInitConfigPath) {
+        Copy-Item -Force $CloudbaseInitConfigPath "${cloudbaseInitInstallDir}\conf\cloudbase-init.conf"
+        Write-Log "CustomCloudbaseInitConfig" $CloudbaseInitConfigPath
+    }
+    if (Test-Path $CloudbaseInitUnattendedConfigPath) {
+        Copy-Item -Force $CloudbaseInitUnattendedConfigPath "${cloudbaseInitInstallDir}\conf\cloudbase-init-unattend.conf"
+        Write-Log "CustomCloudbaseInitUnattendConfig" $CloudbaseInitUnattendedConfigPath
+    }
 
     $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
     & "${cloudbaseInitInstallDir}\bin\SetSetupComplete.cmd"
-    Write-Log "Cloudbase-Init" "Installed succesfully"
+    Write-Log "Cloudbase-Init" "Service installed succesfully under user ${cloudbaseInitUser}"
     Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
 
     Run-Defragment
