@@ -603,11 +603,13 @@ try {
 
     Release-IP
 
+    $windowsClient = Is-WindowsClient
+
     if ($enableShutdownWithoutLogon) {
         Enable-ShutdownWithoutLogon
     }
 
-    if (Is-WindowsClient -and $disableFirstLogonAnimation) {
+    if ($windowsClient -and $disableFirstLogonAnimation) {
         Disable-FirstLogonAnimation
     }
 
@@ -619,7 +621,7 @@ try {
         Disable-IPv6TemporaryAddress
     }
 
-    if (Is-WindowsClient -and $enableAdministrator) {
+    if ($windowsClient -and $enableAdministrator) {
         Enable-AdministratorAccount
     }
 
