@@ -76,7 +76,7 @@ function Optimize-SparseImage {
     if ( Test-Path $zapfree ) {
         Write-Host "Optimizing for sparse image..."
         & $zapfree -z $ENV:SystemDrive
-        Write-Log "ZapFree" "Image was zeroed succesfully"
+        Write-Log "ZapFree" "Image was zeroed successfully"
     } else {
         Write-Debug "No zapfree. Image not optimized."
     }
@@ -91,7 +91,7 @@ function Clean-UpdateResources {
     # Cleanup
     Remove-Item -Recurse -Force $resourcesDir
     Remove-Item -Force "$ENV:SystemDrive\Unattend.xml"
-    Write-Log "Cleanup(1)" "Image was cleaned up succesfully"
+    Write-Log "Cleanup(1)" "Image was cleaned up successfully"
 
 }
 
@@ -110,7 +110,7 @@ function Clean-WindowsUpdates {
         if ($LASTEXITCODE) {
             throw "Dism.exe clean failed"
         }
-        Write-Log "Cleanup" "Updates were cleaned up succesfully"
+        Write-Log "Cleanup" "Updates were cleaned up successfully"
     }
 }
 
@@ -121,7 +121,7 @@ function Run-Defragment {
     if ($LASTEXITCODE) {
         throw "Defrag.exe failed"
     }
-    Write-Log "Defragment" "Image was defragemented succesfully"
+    Write-Log "Defragment" "Image was defragemented successfully"
 }
 
 function Release-IP {
@@ -130,7 +130,7 @@ function Release-IP {
     if ($LASTEXITCODE) {
         throw "IPconfig release failed"
     }
-    Write-Log "Ipconfig" "IPs were released succesfully"
+    Write-Log "Ipconfig" "IPs were released successfully"
 }
 
 function Install-WindowsUpdates {
@@ -138,7 +138,7 @@ function Install-WindowsUpdates {
     $BaseOSKernelVersion = [System.Environment]::OSVersion.Version
     $OSKernelVersion = ($BaseOSKernelVersion.Major.ToString() + "." + $BaseOSKernelVersion.Minor.ToString())
 
-    #Note (cgalan): Some updates are black-listed as they are either failing to install or superseeded by the newer updates.
+    #Note (cgalan): Some updates are black-listed as they are either failing to install or superseded by the newer updates.
     $KBIdsBlacklist = @{
         "6.3" = @("KB2887595")
     }
@@ -158,7 +158,7 @@ function Install-WindowsUpdates {
             # to be retrieved on a changed system state and be applied correctly.
             Install-WindowsUpdate -Updates $updates[0..$maximumUpdates]
          } finally {
-            Write-Log "Updates(${availableUpdatesNumber})" "Available updates were installed succesfully. Rebooting..."
+            Write-Log "Updates(${availableUpdatesNumber})" "Available updates were installed successfully. Rebooting..."
             Restart-Computer -Force
             exit 0
          }
@@ -167,7 +167,7 @@ function Install-WindowsUpdates {
         Restart-Computer -Force
         exit 0
     }
-    Write-Log "Updates" "All available updates were installed succesfully"
+    Write-Log "Updates" "All available updates were installed successfully"
 }
 
 function ExecRetry($command, $maxRetryCount=4, $retryInterval=4) {
@@ -205,7 +205,7 @@ function Disable-Swap {
     if ($pageFileSetting) {
         $pageFileSetting.Delete()
     }
-    Write-Log "Swap" "Swap was disabled succesfully"
+    Write-Log "Swap" "Swap was disabled successfully"
 }
 
 function License-Windows {
@@ -220,6 +220,11 @@ function License-Windows {
     }
 
     if ($ProductKey -eq "default_kms_key") {
+        if (!([System.Environment]::OSVersion.Version.Major -gt 6 `
+            -or [System.Environment]::OSVersion.Version.Minor -ge 2)) {
+            Write-Log "License" 'KMS trial licensing reset not required. Running on Windows lte Windows 2008 R2'
+            return
+        }
         if ($slmgrOutput -like "*VOLUME_KMSCLIENT*") {
             $licensingOutput = cscript.exe "$env:windir\system32\slmgr.vbs" /upk
             if ($LASTEXITCODE) {
@@ -246,9 +251,9 @@ function License-Windows {
            Write-Log "License" "Error: Windows could not be licensed"
            throw $licensingOutput
        } else {
-           Write-Host "Windows has been succesfully licensed."
+           Write-Host "Windows has been successfully licensed."
        }
-        Write-Log "License" "Windows was licensed succesfully"
+        Write-Log "License" "Windows was licensed successfully"
     } else {
        Write-Host "Windows will not be licensed."
     }
@@ -294,7 +299,7 @@ function Enable-AdministratorAccount {
         Write-Log "Administrator" "Error: Account could not be enabled"
         throw "Resetting $username password failed."
     }
-    Write-Log "Administrator" "Account was enabled succesfully"
+    Write-Log "Administrator" "Account was enabled successfully"
 }
 
 function Is-WindowsClient {
@@ -331,9 +336,9 @@ function Run-CustomScript {
         }
         if ($LastExitCode -eq 1) {
             Write-Log "CustomScripts(${ScriptFileName})" "${ScriptFileName} failed to run"
-            throw "Script $ScriptFileName executed unsuccessfuly"
+            throw "Script $ScriptFileName executed unsuccessfully"
         }
-        Write-Log "CustomScripts(${ScriptFileName})" "${ScriptFileName} executed succesfully"
+        Write-Log "CustomScripts(${ScriptFileName})" "${ScriptFileName} executed successfully"
     }
 }
 
@@ -348,7 +353,7 @@ function Install-VMwareTools {
         Write-Log "VMwareTools" "Error: Tools could not be installed"
         throw "VMware tools setup failed" 
     }
-    Write-Log "VMwareTools" "Tools installed succesfully"
+    Write-Log "VMwareTools" "Tools installed successfully"
 }
 
 function Write-HostLog {
@@ -469,7 +474,12 @@ function Enable-ShutdownWithoutLogon {
 
 try {
     Write-Log "StatusInitial" "Automated instance configuration started..."
+    $psVersion = "PS version {0}." -f $PSVersionTable.PSVersion.ToString()
+    $windowsVersion = "Windows version {0}." -f [System.Environment]::OSVersion.Version.ToString()
+    Write-Log "WindowsInfo" "${windowsVersion} ${psVersion}"
+
     Import-Module "$resourcesDir\ini.psm1"
+
     $installUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "install_updates" -Default $false -AsBoolean
     $persistDrivers = Get-IniFileValue -Path $configIniPath -Section "sysprep" -Key "persist_drivers_install" -Default $true -AsBoolean
     $purgeUpdates = Get-IniFileValue -Path $configIniPath -Section "updates" -Key "purge_updates" -Default $false -AsBoolean
@@ -596,7 +606,7 @@ try {
 
     $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
     & "${cloudbaseInitInstallDir}\bin\SetSetupComplete.cmd"
-    Write-Log "Cloudbase-Init" "Service installed succesfully under user ${cloudbaseInitUser}"
+    Write-Log "Cloudbase-Init" "Service installed successfully under user ${cloudbaseInitUser}"
     Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
 
     Run-Defragment
@@ -651,7 +661,7 @@ try {
     Run-CustomScript "RunBeforeSysprep.ps1"
     Optimize-SparseImage
     & "$ENV:SystemRoot\System32\Sysprep\Sysprep.exe" `/generalize `/oobe `/shutdown `/unattend:"$unattendedXmlPath"
-    Write-Log "Sysprep" "Sysprep initiated succesfully"
+    Write-Log "Sysprep" "Sysprep initiated successfully"
     Run-CustomScript "RunAfterSysprep.ps1"
     Clean-UpdateResources
     Write-Log "StatusFinal" "Waiting for sysprep to stop machine..."
