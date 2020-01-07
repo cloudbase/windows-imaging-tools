@@ -553,6 +553,34 @@ function Download-CloudbaseInit {
     }
 }
 
+function Download-QemuGuestAgent {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$QemuGuestAgentConfig,
+        [Parameter(Mandatory=$true)]
+        [string]$ResourcesDir,
+        [Parameter(Mandatory=$true)]
+        [string]$OsArch
+    )
+
+    $QemuGuestAgentUrl = $QemuGuestAgentConfig
+    if ($QemuGuestAgentConfig -eq 'True') {
+        $arch = "x86"
+        if ($OsArch -eq "AMD64") {
+            $arch = "x64"
+        }
+        $QemuGuestAgentUrl = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads" + `
+                             "/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-{0}.msi" -f $arch
+    }
+
+    Write-Log "Downloading QEMU guest agent installer from ${QemuGuestAgentUrl} ..."
+    $dst = Join-Path $ResourcesDir "qemu-ga.msi"
+    Execute-Retry {
+        (New-Object System.Net.WebClient).DownloadFile($QemuGuestAgentUrl, $dst)
+    }
+    Write-Log "QEMU guest agent installer path is: $dst"
+}
+
 function Download-ZapFree {
     Param(
         [Parameter(Mandatory=$true)]
@@ -826,6 +854,10 @@ function Add-VirtIODriversFromISO {
         [string]$isoPath
     )
     Write-Log "Adding Virtual IO Drivers from ISO: $isoPath..."
+    $isoPathBak = $isoPath + (Get-Random) + ".iso"
+    Copy-Item $isoPath $isoPathBak -Force
+    Write-Log "Using backed up ISO for safe dismount."
+    $isoPath = $isoPathBak
     $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($isoPath)
     try {
         if (Is-IsoFile $isoPath) {
@@ -857,6 +889,7 @@ function Add-VirtIODriversFromISO {
             $v.DetachVirtualDisk()
             $v.Close()
         }
+        Remove-Item -Force $isoPath
     }
     Write-Log "ISO Virtual Drivers have been adeed."
 }
@@ -1185,7 +1218,9 @@ function Run-Sysprep {
         [string]$VMSwitch,
         [ValidateSet("1", "2")]
         [string]$Generation = "1",
-        [switch]$DisableSecureBoot
+        [switch]$DisableSecureBoot,
+        [switch]$NoWait,
+        [string]$CustomIso
     )
 
     Write-Log "Creating VM $Name attached to $VMSwitch"
@@ -1206,11 +1241,16 @@ function Run-Sysprep {
     if ($DisableSecureBoot -and $Generation -eq "2") {
          Set-VMFirmware -VMName $Name -EnableSecureBoot Off
     }
+    if ($CustomIso) {
+        Add-VMDvdDrive -VMName $Name -Path $CustomIso
+    }
     Write-Log "Starting $Name"
     Start-VM $Name | Out-Null
     Start-Sleep 5
-    Wait-ForVMShutdown $Name
-    Remove-VM $Name -Confirm:$false -Force
+    if (!$NoWait) {
+        Wait-ForVMShutdown $Name
+        Remove-VM $Name -Confirm:$false -Force
+    }
 }
 
 function Convert-KvpData($xmlData) {
@@ -1660,6 +1700,10 @@ function New-WindowsCloudImage {
             if ($windowsImageConfig.zero_unused_volume_sectors) {
                 Download-ZapFree $resourcesDir ([string]$image.ImageArchitecture)
             }
+            if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
+                Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
+                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture)
+            }
             Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
                                    -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
                                    -CloudbaseInitConfigPath $windowsImageConfig.cloudbase_init_config_path `
@@ -1837,6 +1881,10 @@ function New-WindowsFromGoldenImage {
         if ($windowsImageConfig.zero_unused_volume_sectors) {
             Download-ZapFree $resourcesDir $imageInfo.imageArchitecture
         }
+        if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
+            Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
+                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture
+        }
         Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
                                -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
                                -CloudbaseInitConfigPath $windowsImageConfig.cloudbase_init_config_path `
@@ -1920,8 +1968,57 @@ function New-WindowsFromGoldenImage {
     }
 }
 
+function Get-WinRMSession {
+    param(
+        [string]$VmName,
+        [string]$Username,
+        [string]$Password
+    )
 
-function Test-OfflineWindowsImage {
+    $maxIpRetries = 30
+    $ipRetries = 0
+    $ip = ""
+    $currentSession = ""
+    while ($ipRetries -lt $maxIpRetries) {
+        $ipAddresses = Get-VMNetworkAdapter -VMName $vmName | Where-Object `
+            { $_.Status -and $_.IPAddresses } | `
+            Select-Object -First 1 | Select-Object -Property IPAddresses
+        if ($ipAddresses -and $ipAddresses.IPAddresses) {
+            $ip = $ipAddresses.IPAddresses | Where-Object { ([ipaddress]$_).AddressFamily -eq "InterNetwork" }
+            if ($ip) {
+                $secureWinAdminPass = $Password | ConvertTo-SecureString -AsPlainText -Force
+                $authCredentials = New-Object -TypeName `
+                    System.Management.Automation.PSCredential -ArgumentList $Username, $secureWinAdminPass
+                $sessionOptions = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck
+                $currentSession = ""
+                try {
+                    $currentSession = New-PSSession -ComputerName $ip -UseSSL `
+                        -SessionOption $sessionOptions -Authentication Basic -Credential $authCredentials
+                } catch {
+                    Write-Log "Could not create WinRM HTTPS session to IP ${ip}"
+                }
+                if (!$currentSession) {
+                    try {
+                        $currentSession = New-PSSession -ComputerName $ip -Credential $authCredentials `
+                            -Authentication Basic
+                    } catch {
+                        Write-Log "Could not create WinRM HTTP session to IP ${ip}"
+                    }
+                }
+                if ($currentSession) {
+                    break
+                }
+            }
+        } else {
+            Write-Log "Could not retrieve IPv4 IP for ${vmName}"
+        }
+        $ipRetries += 1
+        Start-Sleep 30
+    }
+    return $currentSession
+}
+
+function Test-WindowsImage {
     <#
     .SYNOPSIS
      This function verifies if a Windows image has been properly generated according to
@@ -1942,7 +2039,9 @@ function Test-OfflineWindowsImage {
     [CmdletBinding()]
     Param(
         [parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [string]$ConfigFilePath
+        [string]$ConfigFilePath,
+        [switch]$Online,
+        [string]$CustomIso
     )
 
     Write-Log "Offline Windows image validation started."
@@ -1954,6 +2053,7 @@ function Test-OfflineWindowsImage {
     }
 
     $imageChain = @()
+    $vmName = "WindowsOnlineImage-Test" + (Get-Random)
     $imagePath = $windowsImageConfig.image_path
 
     try {
@@ -2078,7 +2178,56 @@ function Test-OfflineWindowsImage {
         } finally {
             Dismount-VHD $imagePath
         }
+        Write-Log "Offline Windows image validation finished."
+
+        if (!$Online) {
+            return
+        }
+
+        Write-Log "Online Windows image validation started."
+        # Run the online testing
+        # A vm will be created using the backing VHDX from the previous stage.
+        # The VM will have a config drive attached and cloudbase-init will run automatically.
+        # After the instance gets an IP, that IP will be retrieved and a WINRM session will be created
+        # using a known username and password.
+        # Afterwards, cloudbase-init logs will be checked, a report wil be created with the image details and
+        # a custom test script will be run.
+        # The VM will be removed after the testing process is finished.
+        if($windowsImageConfig.disk_layout -eq "UEFI") {
+            $generation = "2"
+        } else {
+            $generation = "1"
+        }
+
+        Run-Sysprep -Name $vmName -Memory $windowsImageConfig.ram_size -vhdPath $imagePath `
+            -VMSwitch $windowsImageConfig.external_switch -CpuCores $windowsImageConfig.cpu_count `
+            -Generation $generation -NoWait:$true -DisableSecureBoot:$windowsImageConfig.disable_secure_boot `
+            -CustomIso $CustomIso
+
+        $currentSession = Get-WinRMSession -VMName $vmName -Username "Administrator" `
+            -Password $windowsImageConfig.administrator_password
+        if (!$currentSession) {
+            throw "Could not connect via WinRM to VM ${vmName}"
+        } else {
+            Write-Log "Connected via WinRM to VM ${vmName}"
+        }
+
+        $cloudbaseInitLogs = Invoke-Command -Session $currentSession {
+            $cbsInitLogPath = 'C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log'
+            $logContent = Get-Content -Raw $cbsInitLogPath
+            $afterLoading = $logContent.IndexOf("Config Drive found on")
+            $logContent.substring($afterLoading)
+        }
+        Remove-PSSession $currentSession -ErrorAction SilentlyContinue
+        if ($cloudbaseInitLogs -like "*error*" -or $cloudbaseInitLogs -like "*fail*") {
+            Write-Log "Cloudbase-Init logs contain errors: ${cloudbaseInitLogs}"
+        } else {
+            Write-Log "Cloudbase-Init ran successfuly: ${cloudbaseInitLogs}"
+        }
+        Write-Log "Online Windows image validation finished."
     } finally {
+        Stop-VM -Name $vmName -TurnOff -ErrorAction SilentlyContinue
+        Remove-VM -Force -Confirm:$false -Name $vmName -ErrorAction SilentlyContinue
         [array]::Reverse($imageChain)
         foreach ($chainItem in $imageChain) {
             if ($chainItem -ne $windowsImageConfig.image_path) {
@@ -2086,11 +2235,10 @@ function Test-OfflineWindowsImage {
                 Remove-Item -Force $chainItem -ErrorAction SilentlyContinue
             }
         }
-        Write-Log "Offline Windows image validation finished."
     }
 }
 
 
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
     New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage, Get-WindowsImageConfig,
-    New-WindowsImageConfig, Test-OfflineWindowsImage
+    New-WindowsImageConfig, Test-WindowsImage
