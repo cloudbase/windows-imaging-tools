@@ -1591,13 +1591,15 @@ function New-WindowsCloudImage {
         $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
         $mountedWindowsIso = $null
         if ($windowsImageConfig.wim_file_path.EndsWith('.iso')) {
-            $windowsImageConfig.wim_file_path = get-command $windowsImageConfig.wim_file_path -erroraction ignore `
-                | Select-Object -ExpandProperty Source
+            $windowsImageConfig.wim_file_path = Get-Command $windowsImageConfig.wim_file_path `
+                -ErrorAction Ignore | Select-Object -ExpandProperty Source
             if($windowsImageConfig.wim_file_path -eq $null){
-                throw ("Unable to find source iso. Either specify the full path or add the folder containing the iso to the path variable")
+                throw ("Unable to find source iso. Either specify the full path or add " + `
+                       "the folder containing the iso to the path variable")
             }
             $mountedWindowsIso = [WIMInterop.VirtualDisk]::OpenVirtualDisk($windowsImageConfig.wim_file_path)
             $mountedWindowsIso.AttachVirtualDisk()
+            Get-PSDrive | Out-Null
             $devicePath = $mountedWindowsIso.GetVirtualDiskPhysicalPath()
             $basePath = ((Get-DiskImage -DevicePath $devicePath `
                     | Get-Volume).DriveLetter) + ":"
