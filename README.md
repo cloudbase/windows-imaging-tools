@@ -1,73 +1,58 @@
-Windows Imaging Tools
-===============================
+Windows Image Builder
+=====================
 [![Master branch](https://ci.appveyor.com/api/projects/status/github/cloudbase/windows-openstack-imaging-tools?branch=master&svg=true)](https://ci.appveyor.com/project/ader1990/windows-openstack-imaging-tools-w885m)
 
-Windows OpenStack Imaging Tools automates the generation of Windows images.<br/>
-The tools are a bundle of PowerShell modules and scripts.
+Windows Image Builder is a PowerShell module for easy Windows image generation.<br/>
 
 The supported target environments for the Windows images are:
 * OpenStack with KVM, Hyper-V, VMware and baremetal hypervisor types
 * MAAS with KVM, Hyper-V, VMware and baremetal
+* All platforms supported by [cloudbase-init](https://github.com/cloudbase/cloudbase-init)
 
-The generation environment needs to be a Windows one, with Hyper-V virtualization enabled.<br/>
+To generate images, a modern Windows environment is required, with Hyper-V virtualization enabled.<br/>
 If you plan to run the online Windows setup step on another system / hypervisor, the Hyper-V virtualization is not required.
 
-The following versions of Windows images (both x86 / x64, if existent) to be generated are supported:
-* Windows Server 2008 / 2008 R2
+The following versions of Windows images are supported:
+* Windows Server 2016 / 2019
 * Windows Server 2012 / 2012 R2
-* Windows Server 2016 
+* Windows Server 2008 / 2008 R2
 * Windows 7 / 8 / 8.1 / 10
 
-To generate Windows Nano Server 2016, please use the following repository:
-
-https://github.com/cloudbase/cloudbase-init-offline-install
-
-## Workflow of Windows imaging tools
+## How Windows Image Builder works
 <img src="https://user-images.githubusercontent.com/1412442/29972658-8fd4d36a-8f35-11e7-80bd-cea90e48e8ba.png" width="750">
-
-
 
 ## Fast path to create a Windows image
 
 ### Requirements:
 
 * A Windows host, with Hyper-V virtualization enabled, PowerShell >=v4 support<br/>
-and Windows Assessment and Deployment Kit (ADK)
+and Windows Assessment and Deployment Kit (ADK). Windows Server 2016 or 2019 is recommended.
 * A Windows installation ISO or DVD
 * Windows compatible drivers, if required by the target environment
-* Git environment
+* Internet connection for access to Windows Update Servers
 
 ### Steps to generate the Windows image
-* Clone this repository
-* Mount or extract the Windows ISO file
-* Download and / or extract the Windows compatible drivers
-* If the target environment is MAAS or the image generation is configured to install updates,<br/>
-the windows-curtin-hooks and WindowsUpdates git submodules are required.<br/>
-Run `git submodule update --init` to retrieve them
-* Import the WinImageBuilder.psm1 module
+* Install WindowsImageBuilder PS module from [PSGallery](https://www.powershellgallery.com/packages/WindowsImageBuilder)
+* Import the WindowsImageBuilder module
 * Use the New-WindowsCloudImage or New-WindowsOnlineCloudImage methods with <br/> the appropriate configuration file
 
-### PowerShell image generation example for OpenStack KVM (host requires Hyper-V enabled)
+### PowerShell image generation example for OpenStack Hyper-V
 ```powershell
-git clone https://github.com/cloudbase/windows-openstack-imaging-tools.git
-pushd windows-openstack-imaging-tools
-Import-Module .\WinImageBuilder.psm1
-Import-Module .\Config.psm1
-Import-Module .\UnattendResources\ini.psm1
-# Create a config.ini file using the built in function, then set them accordingly to your needs
+# Install WindowsImageBuilder module from PSGallery
+Install-Module WindowsImageBuilder
+
+# Import the module
+Import-Module WindowsImageBuilder
+
+# Create a boilerplate Windows image configuration file
 $ConfigFilePath = ".\config.ini"
 New-WindowsImageConfig -ConfigFilePath $ConfigFilePath
 
-# To automate the config options setting:
-Set-IniFileValue -Path (Resolve-Path $ConfigFilePath) -Section "DEFAULT" `
-                                      -Key "wim_file_path" `
-                                      -Value "D:\Sources\install.wim"
-# Use the desired command with the config file you just created
+# Customize config.ini with the Windows ISO path
+Set-IniFileValue -Path $ConfigFilePath -Section "DEFAULT"
+    -Key "wim_file_path" -Value "<windows_iso_path>"
 
 New-WindowsOnlineImage -ConfigFilePath $ConfigFilePath
-
-popd
-
 ```
 
 ## Image generation workflow
@@ -76,10 +61,10 @@ popd
 
 This command does not require Hyper-V to be enabled, but the generated image<br/>
 is not ready to be deployed, as it needs to be started manually on another hypervisor.<br/>
-The image is ready to be used when it shuts down.
+The image is ready to be used when the instance shuts down.
 
 You can find a PowerShell example to generate a raw OpenStack Ironic image that also works on KVM<br/>
-in `Examples/create-windows-cloud-image.ps1`
+in [create-windows-cloud-image.ps1](Examples/create-windows-cloud-image.ps1).
 
 ### New-WindowsOnlineImage
 This command requires Hyper-V to be enabled, a VMSwitch to be configured for external<br/>
@@ -90,7 +75,7 @@ start a Hyper-V instance using the base image. After the Hyper-V instance shuts 
 the resulting VHDX is shrinked to a minimum size and converted to the required format.
 
 You can find a PowerShell example to generate a raw OpenStack Ironic image that also works on KVM<br/>
-in `Examples/create-windows-online-cloud-image.ps1`
+in [create-windows-online-cloud-image.ps1](Examples/create-windows-online-cloud-image.ps1).
 
 ## Frequently Asked Questions (FAQ)
 
