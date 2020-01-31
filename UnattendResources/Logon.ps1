@@ -528,6 +528,10 @@ try {
     try {
         $customNtpServers = Get-IniFileValue -Path $configIniPath -Section "custom" -Key "ntp_servers"
     } catch{}
+    try {
+        $setCloudbaseInitDelayedStart = Get-IniFileValue -Path $configIniPath -Section "cloudbase_init" -Key "cloudbase_init_delayed_start" `
+            -Default $false -AsBoolean
+    } catch{}
 
     if ($productKey) {
         License-Windows $productKey
@@ -604,8 +608,16 @@ try {
         Write-Log "CustomCloudbaseInitUnattendConfig" $CloudbaseInitUnattendedConfigPath
     }
 
-    $Host.UI.RawUI.WindowTitle = "Running SetSetupComplete..."
-    & "${cloudbaseInitInstallDir}\bin\SetSetupComplete.cmd"
+    if (!$setCloudbaseInitDelayedStart) {
+        Write-Log "Cloudbase-InitSetupComplete" "Cloudbase-Init service set to start using SetupComplete"
+        & "${cloudbaseInitInstallDir}\bin\SetSetupComplete.cmd"
+    } else {
+        cmd /c "sc config cloudbase-init start= delayed-auto"
+        if ($LASTEXITCODE) {
+            throw "Cloudbase-Init service startup type could not be set to delayed-auto"
+        }
+        Write-Log "Cloudbase-InitDelayedStart" "Cloudbase-Init service startup type set to delayed-auto"
+    }
     Write-Log "Cloudbase-Init" "Service installed successfully under user ${cloudbaseInitUser}"
     Run-CustomScript "RunAfterCloudbaseInitInstall.ps1"
 

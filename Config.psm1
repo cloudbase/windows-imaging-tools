@@ -150,6 +150,8 @@ function Get-AvailableConfigOptions {
         @{"Name" = "cloudbase_init_use_local_system"; "GroupName" = "cloudbase_init"; "AsBoolean" = $true; "DefaultValue" = $false;
           "Description" = "If set, the Cloudbase-Init service will be run under Local System account.
                            By default, a user named cloudbase-init with admin rights is created and used."},
+        @{"Name" = "cloudbase_init_delayed_start"; "GroupName" = "cloudbase_init"; "AsBoolean" = $true; "DefaultValue" = $false;
+          "Description" = "If set, the Cloudbase-Init service startup type will be set to delayed-auto"},
         @{"Name" = "enable_custom_wallpaper"; "DefaultValue" = $true; "AsBoolean" = $true;
           "Description" = "If set to true, a custom wallpaper will be set according to the values of configuration options
                            wallpaper_path and wallpaper_solid_color"},
