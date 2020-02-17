@@ -39,8 +39,8 @@ In PoC environments, disable apparmor for libvirtd. Do **NOT** do this in produc
     kubectl cluster-info --context kind-kind
     kubectl create namespace kubevirt
 
-    kubectl apply -f "${KUBEVIRT_DOWNLOAD_ROOT_URL}/${KUBEVIRT_RELEASE}/kubevirt-operator.yaml"
-    kubectl apply -f "${KUBEVIRT_DOWNLOAD_ROOT_URL}/${KUBEVIRT_RELEASE}/kubevirt-cr.yaml"
+    kubectl apply -f "${KUBEVIRT_DOWNLOAD_ROOT_URL}/${KUBEVIRT_VERSION}/kubevirt-operator.yaml"
+    kubectl apply -f "${KUBEVIRT_DOWNLOAD_ROOT_URL}/${KUBEVIRT_VERSION}/kubevirt-cr.yaml"
 
     kubectl -n kubevirt wait kv kubevirt --for condition=Available
     # run it again if it times out until the condition is met
@@ -65,9 +65,11 @@ This step is performed on the Windows Image builder environments, which is requi
 
 ### Upload the image to KubeVirt
 
-KubeVirt has a nice add-on, called Containerized Data Importer (CDI), which helps a lot with importing the images.
+KubeVirt has a nice add-on, called Containerized Data Importer (CDI), which helps a lot with importing the Windows image.
+It imports the image as a Persistent Volume. This volume can be used to create only one Windows image (the volume is similar to an
+OpenStack Cinder volume).
 ```bash
-    # create the storage setup where the images are uploaded
+    # create the storage setup where the Windows backing disks are uploaded
     wget https://raw.githubusercontent.com/kubevirt/kubevirt.github.io/master/labs/manifests/storage-setup.yml
     kubectl create -f storage-setup.yml
 
@@ -77,24 +79,27 @@ KubeVirt has a nice add-on, called Containerized Data Importer (CDI), which help
     kubectl create -f "${CDI_DOWNLOAD_ROOT_URL}/${CDI_VERSION}/cdi-operator.yaml"
     kubectl create -f "${CDI_DOWNLOAD_ROOT_URL}/${CDI_VERSION}/cdi-cr.yaml"
 
-    # download the spec for Windows image upload
+    # download the spec for Windows disk upload
     wget https://raw.githubusercontent.com/ader1990/kubevirt.github.io/source/labs/manifests/pvc_windows.yml
 
     # MANUAL STEP
     # Replace WINDOWS_IMAGE_ENDPOINT from the pvc_windows.yml spec with the path where your Windows image resides
     # The WINDOWS_IMAGE_ENDPOINT should be in the format: http://my-webserver/my-windows-image.raw.tar.gz
     # For obvious legal reasons, the WINDOWS_IMAGE_ENDPOINT should not be publicly available
-    
-    # import the Windows image
+
+    # import the Windows Persistent Volume
     kubectl create -f pvc_windows.yml
-    # wait for the image to be imported
+    # wait for the volume to be imported
     kubectl logs -f importer-windows
+
+    # get details on the volume
+    kubectl describe pvc windows
 ```
 More information here: https://kubevirt.io/labs/kubernetes/lab2.html.
 
 ### Start a Windows VM in KubeVirt
 
-Start the Windows instance using the image uploaded at the previous step.
+Start the Windows instance using the persistent volume uploaded at the previous step.
 
 ```bash
     VM_NAME="windowsvm1"
@@ -113,7 +118,26 @@ Start the Windows instance using the image uploaded at the previous step.
     # if running from a GUI terminal, you can open the VNC console
     virtctl vnc $VM_NAME
 
-    # other useful commands
+    # Get the VM IP
     kubectl get vmis
+
+    # connect to the Windows VM using WinRM
+    # You first need to manually enter the Kind control plane container
+    # docker exec -it <container id of Kind control plane> /bin/bash
+
+    # Inside the Kind container run:
+    VM_IP="the IP shown in the output of the previous command: kubectl get vmis"
+    VM_USERNAME="Administrator"
+    VM_PASSWORD="StrongPassw0rd"
+
+    apt update && apt install python python-pip -y
+    pip install pywinrm
+
+    curl -o wsmancmd.py https://raw.githubusercontent.com/ader1990/winrm-scripts/master/wsmancmd.py
+    python wsmancmd.py -U "https://$VM_IP:5986/wsman" -v ignore -u "$VM_USERNAME" -p "$VM_PASSWORD" 'dir D:'
+    # exit from the Kind control plane
+    exit
+
+    # remove the VM
     kubectl delete vm $VM_NAME
 ```
