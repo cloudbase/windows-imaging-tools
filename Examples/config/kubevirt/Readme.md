@@ -58,6 +58,18 @@ Cloudbase-Init custom config files enable the ConfigDrive and NoCloud metadata s
 
 As the target hypervisor is QEMU-KVM, the VirtIO are required.
 
+In this folder, you have a `kubevirt-image-config.ini`, where you need to set the following values manually:
+
+    * wim_file_path (The local path of the Windows ISO. The ISO will be mounted by the image builder.)
+    * image_name (The full name of the SKU from the mounted Windows ISO. Example: Windows Server 2019 SERVERSTANDARDCORE)
+    * image_path (local path where the image will be generated. Example: C:\winimage.raw)
+    * virtio_iso_path (local path of the Fedora VirtIO drivers ISO)
+    * msi_path (local path of Cloudbase-Init installer with patch https://review.opendev.org/#/c/478515.
+      An already built zipped installer can be downloaded from the Artifacts tab here:
+      https://github.com/ader1990/cloudbase-init-installer-1/runs/450692211?check_suite_focus=true)
+    * cloudbase_init_config_path - full path to the cloudbase-init.conf file from this folder
+    * cloudbase_init_unattended_config_path - full path to the cloudbase-init-unattend.conf file from this folder
+
 This step is performed on the Windows Image builder environments, which is required to be a Windows machine with Hyper-V support.
 ```powershell
     New-WindowsOnlineImage -ConfigFilePath "kubevirt-image-config.ini"
