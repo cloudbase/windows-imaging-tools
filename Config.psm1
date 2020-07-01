@@ -40,7 +40,8 @@ function Get-AvailableConfigOptions {
         @{"Name" = "disk_layout"; "DefaultValue" = "BIOS";
           "Description" = "This parameter can be set to either BIOS or UEFI."},
         @{"Name" = "product_key";
-          "Description" = "The product key for the selected OS."},
+          "Description" = "The product key for the selected OS. If the value is default_kms_key and the Windows image is
+                           ServerStandard or ServerDatacenter (Core), the appropiate KMS key will be used."},
         @{"Name" = "extra_features";
           "Description" = "A comma separated array of extra features that will be enabled on the resulting image.
                            These features need to be present in the ISO file."},
@@ -57,7 +58,8 @@ function Get-AvailableConfigOptions {
           "Description" = "Select between tar, gz, zip formats or any combination between these."},
         @{"Name" = "zip_password";
           "Description" = "If this parameter is set, after the image is generated,
-                           a password protected zip archive with the image will be created."},
+                           a password protected zip archive with the image will be created. 
+                           compression_format must contain zip in order for this parameter to be used"},
         @{"Name" = "gold_image"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "It will stop the image generation after the updates are installed and cleaned."},
         @{"Name" = "gold_image_path";
@@ -99,7 +101,9 @@ function Get-AvailableConfigOptions {
         @{"Name" = "ram_size"; "GroupName" = "vm"; "DefaultValue" = "2147483648";
           "Description" = "RAM (in bytes) assigned to the VM used to generate the image."},
         @{"Name" = "disk_size"; "GroupName" = "vm"; "DefaultValue" = "42949672960";
-          "Description" = "Disk space (in bytes) assigned to the VM used to generate the image."},
+          "Description" = "Disk space (in bytes) assigned to the boot disk for the VM used to generate the image."},
+        @{"Name" = "shrink_image_to_minimum_size"; "DefaultValue" = $true; "AsBoolean" = $true
+          "Description" = "Whether to shrink the image partition and disk after the image generation is complete."},
         @{"Name" = "virtio_iso_path"; "GroupName" = "drivers";
           "Description" = "The path to the ISO file containing the VirtIO drivers."},
         @{"Name" = "virtio_base_path"; "GroupName" = "drivers";
@@ -138,7 +142,19 @@ function Get-AvailableConfigOptions {
                            If set to null, the first serial port (if any) from the generation VM will be used"},
         @{"Name" = "msi_path"; "GroupName" = "cloudbase_init";
           "Description" = "If set, the Cloudbase-Init msi at this path will be used.
-                          The path needs to be a locally accesible file path."},
+                          The path needs to be a locally accessible file path."},
+        @{"Name" = "cloudbase_init_config_path"; "GroupName" = "cloudbase_init";
+          "Description" = "If set, the cloudbase-init.conf is replaced with the file at the path."},
+        @{"Name" = "cloudbase_init_unattended_config_path"; "GroupName" = "cloudbase_init";
+          "Description" = "If set, the cloudbase-init-unattend.conf is replaced with the file at the path."},
+        @{"Name" = "cloudbase_init_use_local_system"; "GroupName" = "cloudbase_init"; "AsBoolean" = $true; "DefaultValue" = $false;
+          "Description" = "If set, the Cloudbase-Init service will be run under Local System account.
+                           By default, a user named cloudbase-init with admin rights is created and used."},
+        @{"Name" = "cloudbase_init_delayed_start"; "GroupName" = "cloudbase_init"; "AsBoolean" = $true; "DefaultValue" = $false;
+          "Description" = "If set, the Cloudbase-Init service startup type will be set to delayed-auto"},
+        @{"Name" = "enable_custom_wallpaper"; "DefaultValue" = $true; "AsBoolean" = $true;
+          "Description" = "If set to true, a custom wallpaper will be set according to the values of configuration options
+                           wallpaper_path and wallpaper_solid_color"},
         @{"Name" = "wallpaper_path";
           "Description" = "If set, it will replace the Cloudbase Solutions wallpaper to the one specified.
                            The wallpaper needs to be a valid .jpg/.jpeg image."},
@@ -147,6 +163,8 @@ function Get-AvailableConfigOptions {
                            Currently, the only allowed solid color is '0 0 0' (black).
                            If both wallpaper_path and wallpaper_solid_color are set,
                            the script will throw an error."},
+        @{"Name" = "disable_first_logon_animation"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set, the animation displayed during the first login on Windows Client versions will be disabled."},
         @{"Name" = "compress_qcow2"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true and the target image format is QCOW2, the image conversion will
                            use qemu-img built-in compression. The compressed qcow2 image will be smaller, but the conversion
@@ -154,12 +172,37 @@ function Get-AvailableConfigOptions {
         @{"Name" = "zero_unused_volume_sectors"; "DefaultValue" = $false; "AsBoolean" = $true;
           "Description" = "If set to true, during final cleanup, https://github.com/felfert/ntfszapfree will be used to zero unused space.
                            This helps qemu-img to minimize image size. In order to benefit from this, an additional invocation
-                           of qemu-img convert has to be performed after the initial run of the image has shutdown."},
+                           of qemu-img convert must be performed after the initial run of the image has shutdown."},
         @{"Name" = "extra_packages";
           "Description" = "A comma separated list of extra packages (referenced by filepath)
                            to slipstream into the underlying image.
-                           This allows additional local packages, like security updates, to be added to the image."}
-
+                           This allows additional local packages, like security updates, to be added to the image."},
+        @{"Name" = "extra_packages_ignore_errors"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "Ignore failures from DISM when installing extra_packages, such as when
+                           updates are skipped which are not applicable to the image."},
+        @{"Name" = "enable_shutdown_without_logon"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "Enables shutdown of the Windows instance from the logon console."},
+        @{"Name" = "enable_ping_requests"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true, firewall rules will be added to enable ping requests (ipv4 and ipv6)."},
+        @{"Name" = "enable_ipv6_eui64"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true, use EUI-64 derived IDs and disable privacy extensions for IPv6.
+                           If set to false, the IPv6 protocol might not work on OpenStack or CloudStack.
+                           See https://github.com/cloudbase/windows-openstack-imaging-tools/issues/192"},
+        @{"Name" = "enable_active_mode"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true, it will set the High Performance mode and some power mode
+                           and registry tweaks to prevent the machine from sleeping / hibernating."},
+        @{"Name" = "disable_secure_boot"; "GroupName" = "vm"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true and the disk layout is UEFI, the secure boot firmware option will be disabled."},
+        @{"Name" = "clean_updates_offline"; "GroupName" = "updates"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "Clean up the updates / components by running a DISM Cleanup-Image command.
+                           This is useful when updates or capabilities are installed offline."},
+        @{"Name" = "clean_updates_online"; "GroupName" = "updates"; "DefaultValue" = $true; "AsBoolean" = $true;
+          "Description" = "Clean up the updates / components by running a DISM Cleanup-Image command.
+                           This is useful when updates or other packages are installed when the instance is running."},
+        @{"Name" = "time_zone"; "GroupName" = "custom";
+          "Description" = "Set a custom timezone for the Windows image."},
+        @{"Name" = "ntp_servers"; "GroupName" = "custom";
+          "Description" = "Set custom ntp servers(space separated) for the Windows image"}
     )
 }
 

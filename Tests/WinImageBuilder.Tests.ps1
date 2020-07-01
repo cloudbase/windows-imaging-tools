@@ -70,9 +70,9 @@ function Compare-HashTables ($tab1, $tab2) {
     return $true
 }
 
-function Get-VMSwitch {
+function Get-VMSwitch {}
 
-}
+function Optimize-VHD {}
 
 Import-Module $modulePath
 
@@ -94,7 +94,7 @@ Describe "Test New-WindowsCloudImage" {
     Mock Test-Path -Verifiable -ModuleName $moduleName { return $false }
     Mock Create-ImageVirtualDisk -Verifiable -ModuleName $moduleName `
         {
-            return @("drive1")
+            return @("C:", "D:")
         }
     Mock Generate-UnattendXml -Verifiable -ModuleName $moduleName { return 0 }
     Mock Copy-UnattendResources -Verifiable -ModuleName $moduleName { return 0 }
@@ -107,9 +107,10 @@ Describe "Test New-WindowsCloudImage" {
     Mock Check-EnablePowerShellInImage -Verifiable -ModuleName $moduleName { return 0 }
     Mock Set-WindowsWallpaper -Verifiable -ModuleName $moduleName { return 0 }
     Mock Enable-FeaturesInImage -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Clean-WindowsUpdates -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Optimize-Volume -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-PathWithoutExtension -Verifiable -ModuleName $moduleName { return "test" }
-    Mock Move-Item -Verifiable -ModuleName $moduleName { return 0 }
-
+    Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
 
     It "Should create a windows image" {
         New-WindowsCloudImage -ConfigFilePath $fakeConfigPath | Should -Contain 0
@@ -142,7 +143,6 @@ Describe "Test Resize-VHDImage" {
     function Mount-VHD { }
     function Resize-VHD { }
     function Dismount-VHD { }
-    function Optimize-VHD { }
     Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-VHD -Verifiable -ModuleName $moduleName { return @{"Size" = 100; "MinimumSize" = 10} }
     Mock Mount-VHD -Verifiable -ModuleName $moduleName {
@@ -163,12 +163,10 @@ Describe "Test Resize-VHDImage" {
     }
     Mock Get-Volume -Verifiable -ModuleName $moduleName { return @{"DriveLetter" = "F"} }
     Mock Optimize-Volume -Verifiable -ModuleName $moduleName { return }
-    Mock Get-PartitionSupportedSize -Verifiable -ModuleName $moduleName { return @{"SizeMin" = 100} }
+    Mock Get-PartitionSupportedSize -Verifiable -ModuleName $moduleName { return @{"SizeMin" = 100; "SizeMax" = 1000} }
     Mock Resize-Partition -Verifiable -ModuleName $moduleName { return 0 }
     Mock Resize-VHD -Verifiable -ModuleName $moduleName { return 0 }
     Mock Dismount-VHD -Verifiable -ModuleName $moduleName { return 0 }
-    Mock Get-Item -Verifiable -ModuleName $moduleName { return @{"Length"=100} }
-    Mock Optimize-VHD -Verifiable -ModuleName $moduleName { return 0 }
 
     It "Should resize a vhd image" {
         Resize-VHDImage -VirtualDiskPath "fakePath" `
@@ -177,6 +175,47 @@ Describe "Test Resize-VHDImage" {
 
     It "should run all mocked commands" {
         Assert-VerifiableMock
+    }
+}
+
+Describe "Test Resize-VHDImage with binary search" {
+    function Get-VHD { }
+    function Mount-VHD { }
+    function Resize-VHD { }
+    function Dismount-VHD { }
+    Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Get-VHD -Verifiable -ModuleName $moduleName { return @{"Size" = 100; "MinimumSize" = 10} }
+    Mock Mount-VHD -Verifiable -ModuleName $moduleName {
+        $b = New-Object System.Management.Automation.PSObject
+        $b | Add-Member -MemberType NoteProperty -Name "Number" -Value 1 -Force
+        return $b
+    }
+    Mock Get-Disk -Verifiable -ModuleName $moduleName {
+        $b = New-Object System.Management.Automation.PSObject
+        $b | Add-Member -MemberType NoteProperty -Name "DiskId" -Value 1 -Force
+        return $b
+    }
+    Mock Get-Partition -Verifiable -ModuleName $moduleName {
+        $b = New-Object System.Management.Automation.PSObject
+        $b | Add-Member -MemberType NoteProperty -Name "DriveLetter" -Value "L" -Force
+        $b | Add-Member -MemberType NoteProperty -Name "Size" -Value 90 -Force
+       return $b
+    }
+    Mock Get-Volume -Verifiable -ModuleName $moduleName { return @{"DriveLetter" = "F"} }
+    Mock Optimize-Volume -Verifiable -ModuleName $moduleName { return }
+    Mock Get-PartitionSupportedSize -Verifiable -ModuleName $moduleName { return @{"SizeMin" = 10GB; "SizeMax" = 1000GB} }
+    Mock Resize-Partition -Verifiable -ModuleName $moduleName { throw "Failure to resize" }
+    Mock Resize-VHD -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Dismount-VHD -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Start-Sleep -Verifiable -ModuleName $moduleName { return }
+
+    It "Should resize a vhd image" {
+        Resize-VHDImage -VirtualDiskPath "fakePath" `
+            -FreeSpace 100 | Should -Contain 0
+    }
+
+    It "should run all mocked commands" {
+        Assert-MockCalled -Times 10 -CommandName "Resize-Partition" -ModuleName $moduleName
     }
 }
 
@@ -193,6 +232,7 @@ Describe "Test New-WindowsOnlineImage" {
     Mock Get-Random -Verifiable -ModuleName $moduleName { return 1 }
     Mock Remove-Item -Verifiable -ModuleName $moduleName { return 0 }
     Mock Compress-Image -Verifiable -ModuleName $moduleName { return 0 }
+    Mock Optimize-VHD -Verifiable -ModuleName $moduleName { return 0 }
     Mock Get-VMSwitch -Verifiable -ModuleName $moduleName { return @{"Name"="external";"SwitchType"="External"} }
 
     It "Should create an online image" {
@@ -202,4 +242,6 @@ Describe "Test New-WindowsOnlineImage" {
     It "should run all mocked commands" {
         Assert-VerifiableMock
     }
+
+    Remove-Item -Force -ErrorAction SilentlyContinue "${fakeConfigPath}.offline"
 }
