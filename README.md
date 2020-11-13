@@ -16,6 +16,7 @@ The following versions of Windows images (both x86 / x64, if existent) to be gen
 * Windows Server 2008 / 2008 R2
 * Windows Server 2012 / 2012 R2
 * Windows Server 2016 
+* Windows Server 2019
 * Windows 7 / 8 / 8.1 / 10
 
 To generate Windows Nano Server 2016, please use the following repository:
