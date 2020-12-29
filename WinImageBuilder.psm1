@@ -147,7 +147,7 @@ function Create-ImageVirtualDisk {
         [string]$VhdPath,
         [parameter(Mandatory=$true)]
         [long]$Size,
-        [parameter(Mandatory=$true)]
+        [parameter(Mandatory=$false)]
         [string]$DiskLayout
     )
 
@@ -178,11 +178,16 @@ function Create-ImageVirtualDisk {
             $windowsPart = New-Partition -DiskNumber $diskNum -UseMaximumSize `
                 -GptType "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}" `
                 -AssignDriveLetter
-        } else {
+        } elseif ($DiskLayout -eq "BIOS") {
             # BIOS
             Initialize-Disk -Number $diskNum -PartitionStyle MBR
             $windowsPart = New-Partition -DiskNumber $diskNum -UseMaximumSize `
                 -AssignDriveLetter -IsActive
+            $systemPart = $windowsPart
+        } else {
+            # Data disk
+            Initialize-Disk -Number $diskNum
+            $windowsPart = New-Partition -DiskNumber $diskNum -UseMaximumSize -AssignDriveLetter
             $systemPart = $windowsPart
         }
 
@@ -2098,6 +2103,68 @@ function Test-OfflineWindowsImage {
 }
 
 
+function New-VolumeImage {
+    <#
+    .SYNOPSIS
+     This function generates a volume image using Hyper-V to initialize the disk.
+    .DESCRIPTION
+     This command requires Hyper-V to be enabled.
+    #>
+    Param(
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$ConfigFilePath
+    )
+    $windowsImageConfig = Get-WindowsImageConfig -ConfigFilePath $ConfigFilePath
+
+    Write-Log "Volume image generation started."
+    Is-Administrator
+
+    Check-Prerequisites
+    if (Test-Path $windowsImageConfig.image_path) {
+        Write-Log "Found already existing image file. Removing it..." -ForegroundColor Yellow
+        Remove-Item -Force $windowsImageConfig.image_path
+        Write-Log "Already existent image file has been removed." -ForegroundColor Yellow
+    }
+
+    $barePath = Get-PathWithoutExtension $windowsImageConfig.image_path 3
+    $virtualDiskPath = $barePath + ".vhdx"
+    Create-ImageVirtualDisk -VhdPath $virtualDiskPath -Size $windowsImageConfig.disk_size
+    Detach-VirtualDisk $virtualDiskPath
+
+    try {
+        if ($windowsImageConfig.image_type -eq "MAAS") {
+            $imagePath = $barePath + ".raw"
+            Write-Log "Converting VHD to RAW"
+            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $imagePath -format "raw"
+            Remove-Item -Force $virtualDiskPath
+        }
+
+        if ($windowsImageConfig.image_type -ceq "VMware") {
+            $imagePath = $barePath + ".vmdk"
+            Write-Log "Converting VHD to VMDK"
+            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $imagePath -format "vmdk"
+            Remove-Item -Force $virtualDiskPath
+        }
+
+        if ($windowsImageConfig.image_type -eq "KVM") {
+            $imagePath = $barePath + ".qcow2"
+            Write-Log "Converting VHD to Qcow2"
+            Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $imagePath -format "qcow2" `
+                -CompressQcow2 $windowsImageConfig.compress_qcow2
+            Remove-Item -Force $virtualDiskPath
+        }
+    } catch {
+        Write-Log $_
+        if ($windowsImageConfig.image_path -and (Test-Path $windowsImageConfig.image_path)) {
+            Remove-Item -Force $windowsImageConfig.image_path -ErrorAction SilentlyContinue
+        }
+        Throw
+    }
+
+    Write-Log "Volume image generation finished. Image path: $($windowsImageConfig.image_path)"
+}
+
+
 Export-ModuleMember New-WindowsCloudImage, Get-WimFileImagesInfo, New-MaaSImage, Resize-VHDImage,
     New-WindowsOnlineImage, Add-VirtIODriversFromISO, New-WindowsFromGoldenImage, Get-WindowsImageConfig,
-    New-WindowsImageConfig, Test-OfflineWindowsImage
+    New-WindowsImageConfig, Test-OfflineWindowsImage, New-VolumeImage
