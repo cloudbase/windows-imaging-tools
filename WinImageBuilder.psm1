@@ -38,16 +38,20 @@ Don't forget to reboot after you install the Hyper-V role.
 $VirtIODrivers = @("balloon", "netkvm", "pvpanic", "qemupciserial", "qxl",
              "qxldod", "vioinput", "viorng", "vioscsi", "vioserial", "viostor")
 
+
+$MAX_BUILD_NUMBER = [System.Double]::PositiveInfinity
 $VirtIODriverMappings = @{
-    "2k8" = @(60, 1);
-    "2k8r2" = @(61, 1);
-    "w7" = @(61, 0);
-    "2k12" = @(62, 1);
-    "w8" = @(62, 0);
-    "2k12r2" = @(63, 1);
-    "w8.1" = @(63, 0);
-    "2k16" = @(100, 1);
-    "w10" = @(100, 0);
+    # MinimumBuild, MaximumBuild, IsServerVersion
+    "2k8" = @(6000, 6003, $true);
+    "2k8r2" = @(7600, 8400, $true);
+    "w7" = @(7600, 8400, $false);
+    "2k12" = @(9200, 9200, $true);
+    "w8" = @(9200, 9200, $false);
+    "2k12r2" = @(9600, 9900, $true);
+    "w8.1" = @(9600, 9900, $false);
+    "2k16" = @(14393, 16299, $true);
+    "w10" = @(10240, $MAX_BUILD_NUMBER, $false);
+    "2k19" = @(17763, $MAX_BUILD_NUMBER, $true);
 }
 
 $AvailableCompressionFormats = @("tar","gz","zip")
@@ -717,9 +721,9 @@ function Is-ServerInstallationType {
 function Get-VirtIODrivers {
     Param(
         [parameter(Mandatory=$true)]
-        [int]$MajorMinorVersion,
+        [int]$BuildNumber,
         [parameter(Mandatory=$true)]
-        [int]$IsServer,
+        [bool]$IsServer,
         [parameter(Mandatory=$true)]
         [string]$BasePath,
         [parameter(Mandatory=$true)]
@@ -733,7 +737,11 @@ function Get-VirtIODrivers {
     foreach ($driver in $VirtioDrivers) {
         foreach ($osVersion in $VirtIODriverMappings.Keys) {
             $map = $VirtIODriverMappings[$osVersion]
-            if (!(($map[0] -eq $MajorMinorVersion) -and ($map[1] -eq $isServer))) {
+            $minBuildNumber = $map[0]
+            $maxBuildNumber = $map[1]
+            $isServerVersion = $map[2]
+            if (!(($BuildNumber -ge $minBuildNumber -and $BuildNumber -le $maxBuildNumber) `
+                -and ($isServerVersion -eq $isServer))) {
               continue
             }
             $driverPath = "{0}\{1}\{2}\{3}" -f @($basePath,
@@ -748,11 +756,11 @@ function Get-VirtIODrivers {
     }
     if (!$driverPaths -and $RecursionDepth -lt 1) {
         # Note(avladu): Fallback to 2012r2/w8.1 if no drivers are found
-        $driverPaths = Get-VirtIODrivers -MajorMinorVersion 63 -IsServer $IsServer `
+        $driverPaths = Get-VirtIODrivers -BuildNumber 9600 -IsServer $IsServer `
             -BasePath $BasePath -Architecture $Architecture -RecursionDepth 1
     }
-    return $driverPaths
     Write-Log "Finished to get IO Drivers."
+    return $driverPaths
 }
 
 function Add-VirtIODrivers {
@@ -787,9 +795,9 @@ function Add-VirtIODrivers {
     }
 
     # For VirtIO ISO with drivers version higher than 1.8.x
-    $majorMinorVersion = [string]$image.ImageVersion.Major + [string]$image.ImageVersion.Minor
-    $virtioDriversPaths = Get-VirtIODrivers -MajorMinorVersion $majorMinorVersion `
-        -IsServer ([int](Is-ServerInstallationType $image)) -BasePath $driversBasePath `
+    $buildNumber = [int]$image.ImageVersion.Build
+    $virtioDriversPaths = Get-VirtIODrivers -BuildNumber $buildNumber `
+        -IsServer ([bool](Is-ServerInstallationType $image)) -BasePath $driversBasePath `
         -Architecture $image.ImageArchitecture
     foreach ($virtioDriversPath in $virtioDriversPaths) {
         if (Test-Path $virtioDriversPath) {
@@ -1272,6 +1280,7 @@ function Get-ImageInformation {
         $imageVersion = @{
             "Major" = $osVersion[0];
             "Minor" = $osVersion[1];
+            "Build" = $osVersion[2];
         }
     } else {
         throw "Unable to determine OS Version"
