@@ -40,7 +40,7 @@ $wimFilePath = "D:\Sources\install.wim"
 $virtIOISOPath = "C:\images\virtio.iso"
 # Note(avladu): Do not use stable 0.1.126 version because of this bug https://github.com/crobinso/virtio-win-pkg-scripts/issues/10
 # Note (atira): Here https://fedorapeople.org/groups/virt/virtio-win/CHANGELOG you can see the changelog for the VirtIO drivers
-$virtIODownloadLink = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.141-1/virtio-win-0.1.141.iso"
+$virtIODownloadLink = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.215-2/virtio-win-0.1.215.iso"
 
 # Download the VirtIO drivers ISO from Fedora
 (New-Object System.Net.WebClient).DownloadFile($virtIODownloadLink, $virtIOISOPath)

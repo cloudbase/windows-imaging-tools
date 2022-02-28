@@ -64,7 +64,7 @@ if (!(Test-Path $wimFilePath)) {
 
 # VirtIO ISO contains all the synthetic drivers for the KVM hypervisor
 $virtIOISOPath = Join-Path $BaseImageDir "virtio.iso"
-$virtIODownloadLink = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.160-1/virtio-win-0.1.160.iso"
+$virtIODownloadLink = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.215-2/virtio-win-0.1.215.iso"
 
 # Download the VirtIO drivers ISO from Fedora
 Write-Host "Downloading ${virtIODownloadLink} to ${virtIOISOPath}"
