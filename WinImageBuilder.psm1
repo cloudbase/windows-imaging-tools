@@ -51,7 +51,7 @@ $VirtIODriverMappings = @{
     "w8.1" = @(9600, 9900, $false);
     "2k16" = @(14393, 16299, $true);
     "w10" = @(10240, $MAX_BUILD_NUMBER, $false);
-    "w11" = @(10240, $MAX_BUILD_NUMBER, $false);
+    "w11" = @(22000, $MAX_BUILD_NUMBER, $false);
     "2k19" = @(17763, $MAX_BUILD_NUMBER, $true);
 }
 
@@ -784,9 +784,14 @@ function Add-VirtIODrivers {
         $virtioVer = "WIN8"
     } elseif (($image.ImageVersion.Major -eq 10 -and $image.ImageVersion.Minor -eq 0)) {
         $virtioVer = "w10"
-    } elseif (($image.ImageVersion.Major -eq 11 -and $image.ImageVersion.Minor -eq 0) `
+    } elseif (($image.ImageVersion.Major -eq 10 -and $image.ImageVersion.Minor -eq 0) `
         -or $image.ImageVersion.Major -gt 10) {
-        $virtioVer = "w11"
+        if ($image.ImageVersion.Build -lt $VirtIODriverMappings["w11"][0]) {
+            $virtioVer = "w10"
+        }
+        else{
+            $virtioVer = "w11"
+        }
     }else {
         throw "Unsupported Windows version for VirtIO drivers: {0}" `
             -f $image.ImageVersion
