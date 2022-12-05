@@ -451,7 +451,7 @@ function Enable-PingFirewallRules {
     if ($LASTEXITCODE) {
         throw "Failed to enable IPv4 ping firewall rules"
     }
-    netsh.exe advfirewall firewall add rule name="Allow IPv6 ping requests" protocol="icmpv6:8,any" dir=in action=allow
+    netsh.exe advfirewall firewall add rule name="Allow IPv6 ping requests" protocol="icmpv6:128,any" dir=in action=allow
     if ($LASTEXITCODE) {
         throw "Failed to enable IPv6 ping firewall rules"
     }
