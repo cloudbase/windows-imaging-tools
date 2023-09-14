@@ -565,6 +565,10 @@ try {
         $installQemuGuestAgent = Get-IniFileValue -Path $configIniPath -Section "custom" -Key "install_qemu_ga" `
             -Default "False"
     } catch{}
+	try {
+        $install_net_3_5 = Get-IniFileValue -Path $configIniPath -Section "DEFAULT" -Key "install_net_3_5" `
+            -Default "False"
+    } catch {}
 
     if ($productKey) {
         License-Windows $productKey
@@ -572,6 +576,10 @@ try {
 
     if ($installQemuGuestAgent -and $installQemuGuestAgent -ne 'False') {
         Install-QemuGuestAgent
+    }
+
+	if ($install_net_3_5 -and $install_net_3_5 -ne 'False') {
+        Install-WindowsFeature NET-Framework-Features
     }
 
     Run-CustomScript "RunBeforeWindowsUpdates.ps1"
