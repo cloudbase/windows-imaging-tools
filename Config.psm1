@@ -67,6 +67,9 @@ function Get-AvailableConfigOptions {
                            It should be a valid VHDX path."},
         @{"Name" = "vmware_tools_path";
           "Description" = "This is a full path to the VMware-tools.exe version that you want to install."},
+        @{"Name" = "install_net_3_5"; "DefaultValue" = $false; "AsBoolean" = $true;
+          "Description" = "If set to true, .NET Framework 3.5 will be installed before the windows updates.
+							This feature applies only ot Windows server 2012 R2."},
         @{"Name" = "custom_resources_path";
           "Description" = "This is the full path of a folder with custom resources which will be used by
                            the custom scripts.
