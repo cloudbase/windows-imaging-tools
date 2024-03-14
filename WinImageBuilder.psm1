@@ -1730,7 +1730,7 @@ function New-WindowsCloudImage {
                     -driversBasePath $windowsImageConfig.virtio_base_path
             }
             if ($windowsImageConfig.extra_features) {
-                Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features
+                Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features.split(",")
             }
             if ($windowsImageConfig.extra_packages) {
                 foreach ($package in $windowsImageConfig.extra_packages.split(",")) {
