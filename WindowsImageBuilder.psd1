@@ -25,7 +25,7 @@
 RootModule = 'WinImageBuilder.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.0'
+ModuleVersion = '1.1.0'
 
 # ID used to uniquely identify this module
 GUID = '6a64b662-7f53-425a-9777-ee61284407da'
