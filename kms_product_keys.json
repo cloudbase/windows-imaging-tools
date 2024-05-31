@@ -37,6 +37,12 @@
                     "Windows Server 2019 SERVERDATACENTER": "WMDGN-G9PQG-XVVXX-R3X43-63DFG",
                     "Windows Server 2019 SERVERSTANDARDCORE": "N69G4-B89J2-4G8F4-WWYCC-J464C",
                     "Windows Server 2019 SERVERSTANDARD": "N69G4-B89J2-4G8F4-WWYCC-J464C"
+                },
+                "20348": {
+                    "Windows Server 2022 SERVERDATACENTERCORE": "WX4NM-KYWYW-QJJR4-XV3QB-6VM33",
+                    "Windows Server 2022 SERVERDATACENTER": "WX4NM-KYWYW-QJJR4-XV3QB-6VM33",
+                    "Windows Server 2022 SERVERSTANDARDCORE": "VDYBN-27WPP-V4HQT-9VMD4-VMK7H",
+                    "Windows Server 2022 SERVERSTANDARD": "VDYBN-27WPP-V4HQT-9VMD4-VMK7H"
                 }
             }
         }
