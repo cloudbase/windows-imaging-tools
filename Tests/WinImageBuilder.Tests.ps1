@@ -74,7 +74,10 @@ function Get-VMSwitch {}
 
 function Optimize-VHD {}
 
-Import-Module $modulePath
+$LastErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Stop"
+Import-Module "${modulePath}"
+$ErrorActionPreference = $LastErrorActionPreference
 
 Describe "Test New-WindowsCloudImage" {
     Mock Write-Host -Verifiable -ModuleName $moduleName { return 0 }
