@@ -52,7 +52,8 @@ $VirtIODriverMappings = @{
     "2k16" = @(14393, 16299, $true);
     "w10" = @(10240, $MAX_BUILD_NUMBER, $false);
     "2k19" = @(17763, 19999, $true);
-    "2k22" = @(20348, $MAX_BUILD_NUMBER, $true);
+    "2k22" = @(20348, 25999, $true);
+    "2k25" = @(26100, $MAX_BUILD_NUMBER, $true);
 }
 
 $AvailableCompressionFormats = @("tar","gz","zip")
