@@ -282,12 +282,16 @@ function Create-BCDBootConfig {
        }
     } else {
        $bcdbootOutput = & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+       # Retry using the local bcdboot path
+       if ($LASTEXITCODE) {
+           Write-Log "Retrying with bcdboot.exe from host"
+           $bcdbootOutput = & $bcdbootLocalPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+       }
     }
     if ($LASTEXITCODE) {
         $ErrorActionPreference = "Stop"
         throw "BCDBoot failed with error: $bcdbootOutput"
     }
-
     Reset-BCDSearchOrder -systemDrive $systemDrive -windowsDrive $windowsDrive `
         -diskLayout $diskLayout
 
