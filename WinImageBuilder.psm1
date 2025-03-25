@@ -274,19 +274,24 @@ function Create-BCDBootConfig {
     # Note: older versions of bcdboot.exe don't have a /f argument
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -lt 2) {
        $bcdbootOutput = & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v
+       # Note(avladu): Retry using the local bcdboot path
+       # when generating Win7 images on Win10 / Server 2k16 hosts
+       if ($LASTEXITCODE) {
+           Write-Log "Retrying with bcdboot.exe from host"
+           $bcdbootOutput = & $bcdbootLocalPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
+       }
     } else {
        $bcdbootOutput = & $bcdbootPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
-    }
-    if ($LASTEXITCODE) {
        # Retry using the local bcdboot path
-       Write-Log "Retrying with bcdboot.exe from host"
-       $bcdbootOutput = & $bcdbootLocalPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
        if ($LASTEXITCODE) {
-         $ErrorActionPreference = "Stop"
-         throw "BCDBoot failed with error: $bcdbootOutput"
+           Write-Log "Retrying with bcdboot.exe from host"
+           $bcdbootOutput = & $bcdbootLocalPath ${windowsDrive}\windows /s ${systemDrive} /v /f $diskLayout
        }
     }
-
+    if ($LASTEXITCODE) {
+        $ErrorActionPreference = "Stop"
+        throw "BCDBoot failed with error: $bcdbootOutput"
+    }
     Reset-BCDSearchOrder -systemDrive $systemDrive -windowsDrive $windowsDrive `
         -diskLayout $diskLayout
 
