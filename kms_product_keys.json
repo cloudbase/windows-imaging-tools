@@ -43,6 +43,12 @@
                     "Windows Server 2022 SERVERDATACENTER": "WX4NM-KYWYW-QJJR4-XV3QB-6VM33",
                     "Windows Server 2022 SERVERSTANDARDCORE": "VDYBN-27WPP-V4HQT-9VMD4-VMK7H",
                     "Windows Server 2022 SERVERSTANDARD": "VDYBN-27WPP-V4HQT-9VMD4-VMK7H"
+                },
+                "26100": {
+                    "Windows Server 2025 SERVERDATACENTERCORE": "D764K-2NDRG-47T6Q-P8T8W-YP6DF",
+                    "Windows Server 2025 SERVERDATACENTER": "D764K-2NDRG-47T6Q-P8T8W-YP6DF",
+                    "Windows Server 2025 SERVERSTANDARDCORE": "TVRH6-WHNXV-R9WG3-9XRFY-MY832",
+                    "Windows Server 2025 SERVERSTANDARD": "TVRH6-WHNXV-R9WG3-9XRFY-MY832"
                 }
             }
         }

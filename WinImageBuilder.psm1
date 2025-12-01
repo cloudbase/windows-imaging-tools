@@ -570,17 +570,35 @@ function Download-QemuGuestAgent {
         [Parameter(Mandatory=$true)]
         [string]$ResourcesDir,
         [Parameter(Mandatory=$true)]
-        [string]$OsArch
+        [string]$OsArch,
+        [Parameter(Mandatory=$false)]
+        [string]$CustomUrl,
+        [Parameter(Mandatory=$false)]
+        [string]$Checksum
     )
 
     $QemuGuestAgentUrl = $QemuGuestAgentConfig
-    if ($QemuGuestAgentConfig -eq 'True') {
+    $useCustomConfig = $false
+    
+    # Check if custom URL and checksum are provided (new behavior)
+    if ($CustomUrl -and $Checksum) {
+        $useCustomConfig = $true
+        $QemuGuestAgentUrl = $CustomUrl
+        Write-Log "Using custom QEMU Guest Agent configuration with checksum verification"
+    }
+    # Legacy behavior: if install_qemu_ga is True, use default URL
+    elseif ($QemuGuestAgentConfig -eq 'True') {
         $arch = "x86"
         if ($OsArch -eq "AMD64") {
             $arch = "x64"
         }
         $QemuGuestAgentUrl = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads" + `
                              "/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-{0}.msi" -f $arch
+        Write-Log "Using default QEMU Guest Agent URL (legacy behavior)"
+    }
+    # Legacy behavior: custom URL provided directly in install_qemu_ga
+    else {
+        Write-Log "Using custom QEMU Guest Agent URL from install_qemu_ga parameter"
     }
 
     Write-Log "Downloading QEMU guest agent installer from ${QemuGuestAgentUrl} ..."
@@ -588,6 +606,18 @@ function Download-QemuGuestAgent {
     Execute-Retry {
         (New-Object System.Net.WebClient).DownloadFile($QemuGuestAgentUrl, $dst)
     }
+    
+    # Verify checksum if provided
+    if ($useCustomConfig -and $Checksum) {
+        Write-Log "Verifying QEMU Guest Agent installer checksum..."
+        $fileHash = Get-FileHash -Path $dst -Algorithm SHA256
+        if ($fileHash.Hash -ne $Checksum) {
+            Remove-Item -Path $dst -Force
+            throw "QEMU Guest Agent installer checksum verification failed. Expected: $Checksum, Got: $($fileHash.Hash)"
+        }
+        Write-Log "Checksum verification successful"
+    }
+    
     Write-Log "QEMU guest agent installer path is: $dst"
 }
 
@@ -1712,7 +1742,8 @@ function New-WindowsCloudImage {
             }
             if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
                 Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
-                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture)
+                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture) `
+                    -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum
             }
             Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
                                    -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
@@ -1893,7 +1924,8 @@ function New-WindowsFromGoldenImage {
         }
         if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
             Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
-                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture
+                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture `
+                -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum
         }
         Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
                                -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `

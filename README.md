@@ -18,6 +18,7 @@ The following versions of Windows images (both x86 / x64, if existent) to be gen
 * Windows Server 2016 
 * Windows Server 2019
 * Windows Server 2022
+* Windows Server 2025
 * Windows 7 / 8 / 8.1 / 10 / 11
 
 To generate Windows Nano Server 2016, please use the following repository:
@@ -93,6 +94,62 @@ the resulting VHDX is shrinked to a minimum size and converted to the required f
 
 You can find a PowerShell example to generate a raw OpenStack Ironic image that also works on KVM<br/>
 in `Examples/create-windows-online-cloud-image.ps1`
+
+## QEMU Guest Agent Configuration
+
+### Overview
+
+The QEMU Guest Agent installation supports multiple configuration modes with optional SHA256 checksum verification for enhanced security, while maintaining full backward compatibility.
+
+### Configuration Options
+
+#### 1. Default Installation (Simple)
+```ini
+[custom]
+install_qemu_ga=True
+```
+Uses the default version from the VirtIO archive.
+
+#### 2. Custom URL (Legacy)
+```ini
+[custom]
+install_qemu_ga=https://example.com/custom-qemu-ga.msi
+```
+
+#### 3. Secure Installation with Checksum (Recommended)
+```ini
+[custom]
+install_qemu_ga=True
+
+[virtio_qemu_guest_agent]
+url=https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-VERSION/qemu-ga-x64.msi
+checksum=<SHA256_CHECKSUM>
+```
+
+**Important**: Both `url` and `checksum` must be specified together to enable checksum verification.
+
+### Getting the SHA256 Checksum
+
+**Windows (PowerShell)**:
+```powershell
+Get-FileHash -Path "qemu-ga-x64.msi" -Algorithm SHA256
+```
+
+**Linux/macOS**:
+```bash
+sha256sum qemu-ga-x64.msi
+```
+
+### Benefits of Checksum Verification
+
+- **Security**: Verifies downloaded file integrity
+- **Control**: Know exactly which version will be installed
+- **Protection**: Prevents man-in-the-middle attacks
+- **Compliance**: Facilitates security audits
+
+### Future Enhancements
+
+A planned feature will add `use_qemu_ga_from_virtio_drivers=True` to automatically match the QEMU Guest Agent version with the installed VirtIO drivers, ensuring version consistency.
 
 ## Frequently Asked Questions (FAQ)
 

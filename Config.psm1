@@ -115,12 +115,19 @@ function Get-AvailableConfigOptions {
         @{"Name" = "install_qemu_ga"; "GroupName" = "custom";"DefaultValue" = "False";
           "Description" = "Installs QEMU guest agent services from the Fedora VirtIO website.
                            Defaults to 'False' (no installation will be performed).
-                           If set to 'True', the following MSI installer will be downloaded and installed:
-                             * for x86: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-x86.msi
-                             * for x64: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-x64.msi
+                           If set to 'True', the default MSI installer will be downloaded and installed.
                            The value can be changed to a custom URL, to allow other QEMU guest agent versions to be installed.
+                           For more control over the installation (URL and checksum verification), use the [virtio_qemu_guest_agent] section.
                            Note: QEMU guest agent requires VirtIO drivers to be present on the image.
                           "},
+        @{"Name" = "url"; "GroupName" = "virtio_qemu_guest_agent";
+          "Description" = "Custom URL for downloading QEMU Guest Agent MSI installer.
+                           If specified along with checksum, this will override the default behavior.
+                           Example: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-x64.msi"},
+        @{"Name" = "checksum"; "GroupName" = "virtio_qemu_guest_agent";
+          "Description" = "SHA256 checksum for the QEMU Guest Agent MSI installer.
+                           Must be specified together with url for custom installation.
+                           This ensures the integrity and security of the downloaded installer."},
         @{"Name" = "drivers_path"; "GroupName" = "drivers";
           "Description" = "The location where additional drivers that are needed for the image are located."},
         @{"Name" = "install_updates"; "GroupName" = "updates"; "DefaultValue" = $false; "AsBoolean" = $true;
