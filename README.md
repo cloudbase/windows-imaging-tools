@@ -98,9 +98,23 @@ in `Examples/create-windows-online-cloud-image.ps1`
 
 ### Overview
 
-The QEMU Guest Agent installation supports optional SHA256 checksum verification for enhanced security, while maintaining full backward compatibility.
+The QEMU Guest Agent installation supports multiple configuration modes:
 
-### Configuration Options
+- **Source selection**: Install from VirtIO ISO, web download, or automatic fallback
+- **Checksum verification**: Optional SHA256 verification for enhanced security
+- **Full backward compatibility**: All existing configurations continue to work
+
+### Installation Source Options
+
+The `source` parameter in the `[virtio_qemu_guest_agent]` section controls where the QEMU Guest Agent is obtained from:
+
+| Value | Description | Requires VirtIO ISO | Behavior |
+|-------|-------------|---------------------|----------|
+| `web` | Download from internet (default) | No | Downloads from fedorapeople.org |
+| `iso` | Extract from VirtIO ISO only | **Yes** | Fails if ISO not available or MSI not found |
+| `auto` | Try ISO first, fallback to web | No | Intelligent: uses ISO if available, otherwise downloads |
+
+### Configuration Examples
 
 #### 1. Default Installation (Simple)
 
@@ -109,27 +123,85 @@ The QEMU Guest Agent installation supports optional SHA256 checksum verification
 install_qemu_ga=True
 ```
 
-Uses the default version from the VirtIO archive.
+Uses the default version from the VirtIO archive (web download).
 
-#### 2. Custom URL (Legacy)
+#### 2. Extract from VirtIO ISO (Offline Mode)
 
 ```ini
+[drivers]
+virtio_iso_path=/path/to/virtio-win.iso
+
 [custom]
-install_qemu_ga=https://example.com/custom-qemu-ga.msi
+install_qemu_ga=True
+
+[virtio_qemu_guest_agent]
+source=iso
 ```
 
-#### 3. Secure Installation with Checksum (Recommended)
+Extracts the QEMU Guest Agent from the VirtIO ISO. Useful for offline environments.
+
+#### 3. Automatic Mode (Recommended)
+
+```ini
+[drivers]
+virtio_iso_path=/path/to/virtio-win.iso
+
+[custom]
+install_qemu_ga=True
+
+[virtio_qemu_guest_agent]
+source=auto
+```
+
+Tries ISO extraction first, automatically falls back to web download if needed.
+
+#### 4. Secure Installation with Checksum
 
 ```ini
 [custom]
 install_qemu_ga=True
 
 [virtio_qemu_guest_agent]
+source=web
 url=https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-VERSION/qemu-ga-x64.msi
 checksum=<SHA256_CHECKSUM>
 ```
 
-**Important**: Both `url` and `checksum` must be specified together to enable checksum verification.
+Downloads from a custom URL with SHA256 checksum verification. Both `url` and `checksum` must be specified together.
+
+#### 5. Legacy Custom URL
+
+```ini
+[custom]
+install_qemu_ga=https://example.com/custom-qemu-ga.msi
+```
+
+Downloads from a custom URL without checksum verification (backward compatibility).
+
+### Priority Order
+
+The system follows this priority order:
+
+1. **Custom URL + Checksum** (if both provided) → Always used, `source` is ignored
+2. **Source-based installation**:
+   - `source=iso` → Extract from ISO only (error if fails)
+   - `source=auto` → Try ISO, fallback to web
+   - `source=web` → Download from internet
+3. **Legacy behavior** (backward compatibility):
+   - `install_qemu_ga=True` → Default URL
+   - `install_qemu_ga=<URL>` → Custom URL without checksum
+
+### VirtIO ISO Structure
+
+When using `source=iso` or `source=auto`, the system searches for the QEMU Guest Agent MSI in these locations:
+
+- `guest-agent/qemu-ga-x86_64.msi` (for 64-bit) ✓ **Most common**
+- `guest-agent/qemu-ga-i386.msi` (for 32-bit) ✓ **Most common**
+- `guest-agent/qemu-ga-x64.msi` (alternative naming)
+- `guest-agent/qemu-ga-x86.msi` (alternative naming)
+- Additional fallback paths and recursive search
+
+The system automatically detects and uses the correct MSI file based on the image architecture.
 
 ### Getting the SHA256 Checksum
 
@@ -143,12 +215,51 @@ Get-FileHash -Path "qemu-ga-x64.msi" -Algorithm SHA256
 sha256sum qemu-ga-x64.msi
 ```
 
-### Benefits of Checksum Verification
+### Benefits
 
-- **Security**: Verifies downloaded file integrity
-- **Control**: Know exactly which version will be installed
-- **Protection**: Prevents man-in-the-middle attacks
-- **Compliance**: Facilitates security audits
+- **Offline environments**: Use `source=iso` for air-gapped systems
+- **Faster builds**: Avoid network downloads with local ISO
+- **Version consistency**: Match guest agent with VirtIO drivers version
+- **Security**: SHA256 checksum verification prevents tampering
+- **Flexibility**: `source=auto` works both online and offline
+- **Bandwidth savings**: Reuse ISO for multiple image builds
+
+### Best Practices
+
+1. **Use `source=auto` for flexibility**: Works both online and offline
+2. **Use `source=iso` for strict offline environments**: Ensures no internet access is attempted
+3. **Use `source=web` with checksum**: For maximum security when downloading
+4. **Match versions**: Keep guest agent version consistent with VirtIO drivers
+
+### Technical Details
+
+**ISO Mounting Process**:
+1. Creates a temporary backup copy of the ISO
+2. Mounts the ISO using Windows VirtualDisk API
+3. Searches for the QEMU Guest Agent MSI
+4. Copies the MSI to the resources directory
+5. Safely dismounts and cleans up the temporary ISO
+
+**Architecture Mapping**:
+
+| Windows Architecture | ISO Filename |
+|---------------------|--------------|
+| AMD64 (64-bit) | `qemu-ga-x86_64.msi` |
+| x86 (32-bit) | `qemu-ga-i386.msi` |
+
+### Troubleshooting
+
+**Q: The build fails with "QEMU Guest Agent MSI not found in VirtIO ISO"**
+
+A: Your VirtIO ISO might have a different structure. Use `source=auto` to fall back to web download, or `source=web` to skip ISO extraction entirely.
+
+**Q: I want to force internet download even though I have an ISO**
+
+A: Set `source=web` in the configuration.
+
+**Q: How do I ensure version consistency between VirtIO drivers and guest agent?**
+
+A: Use `source=iso` to extract the guest agent from the same VirtIO ISO used for drivers.
 
 ## Frequently Asked Questions (FAQ)
 
