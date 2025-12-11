@@ -120,6 +120,12 @@ function Get-AvailableConfigOptions {
                            For more control over the installation (URL and checksum verification), use the [virtio_qemu_guest_agent] section.
                            Note: QEMU guest agent requires VirtIO drivers to be present on the image.
                           "},
+        @{"Name" = "source"; "GroupName" = "virtio_qemu_guest_agent"; "DefaultValue" = "web";
+          "Description" = "Source for QEMU Guest Agent installation. Options:
+                           'iso' - Extract from VirtIO ISO (requires virtio_iso_path to be set),
+                           'web' - Download from Internet (default behavior),
+                           'auto' - Try ISO first, fallback to web if extraction fails.
+                           Default: 'web'"},
         @{"Name" = "url"; "GroupName" = "virtio_qemu_guest_agent";
           "Description" = "Custom URL for downloading QEMU Guest Agent MSI installer.
                            If specified along with checksum, this will override the default behavior.

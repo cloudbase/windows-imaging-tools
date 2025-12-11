@@ -563,6 +563,83 @@ function Download-CloudbaseInit {
     }
 }
 
+function Copy-QemuGuestAgentFromISO {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$IsoPath,
+        [Parameter(Mandatory=$true)]
+        [string]$ResourcesDir,
+        [Parameter(Mandatory=$true)]
+        [string]$OsArch
+    )
+
+    Write-Log "Extracting QEMU Guest Agent from VirtIO ISO: $IsoPath..."
+    
+    $arch = "x86"
+    if ($OsArch -eq "AMD64") {
+        $arch = "x64"
+    }
+    
+    $isoPathBak = $IsoPath + (Get-Random) + ".iso"
+    Copy-Item $IsoPath $isoPathBak -Force
+    Write-Log "Using backed up ISO for safe dismount."
+    $IsoPath = $isoPathBak
+    
+    $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($IsoPath)
+    try {
+        if (Is-IsoFile $IsoPath) {
+            $v.AttachVirtualDisk()
+            Get-PSDrive | Out-Null
+            $devicePath = $v.GetVirtualDiskPhysicalPath()
+            $isoDriveLetter = Execute-Retry {
+                $res = (Get-DiskImage -DevicePath $devicePath | Get-Volume).DriveLetter
+                if (!$res) {
+                    throw "Failed to mount ISO ${IsoPath}"
+                }
+                return $res
+            }
+            $isoDriveLetter += ":"
+            
+            Write-Log "Searching for QEMU Guest Agent in VirtIO ISO at ${isoDriveLetter}..."
+            
+            $possiblePaths = @(
+                "${isoDriveLetter}\guest-agent\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\guest-agent\qemu-ga-${arch}\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\qemu-ga-${arch}.msi"
+            )
+            
+            $qemuGaMsiPath = $null
+            foreach ($path in $possiblePaths) {
+                Write-Log "Checking path: $path"
+                if (Test-Path $path) {
+                    $qemuGaMsiPath = $path
+                    Write-Log "Found QEMU Guest Agent at: $path"
+                    break
+                }
+            }
+            
+            if (!$qemuGaMsiPath) {
+                throw "QEMU Guest Agent MSI not found in VirtIO ISO for architecture: $arch. Searched paths: $($possiblePaths -join ', ')"
+            }
+            
+            $dst = Join-Path $ResourcesDir "qemu-ga.msi"
+            Copy-Item -Path $qemuGaMsiPath -Destination $dst -Force
+            Write-Log "QEMU Guest Agent copied successfully to: $dst"
+            
+        } else {
+            throw "The $IsoPath is not a valid ISO path."
+        }
+    } catch {
+        throw $_
+    } finally {
+        if ($v) {
+            $v.DetachVirtualDisk()
+            $v.Close()
+        }
+        Remove-Item -Force $IsoPath
+    }
+}
+
 function Download-QemuGuestAgent {
     Param(
         [Parameter(Mandatory=$true)]
@@ -574,20 +651,73 @@ function Download-QemuGuestAgent {
         [Parameter(Mandatory=$false)]
         [string]$CustomUrl,
         [Parameter(Mandatory=$false)]
-        [string]$Checksum
+        [string]$Checksum,
+        [Parameter(Mandatory=$false)]
+        [string]$Source = "web",
+        [Parameter(Mandatory=$false)]
+        [string]$VirtioIsoPath
     )
 
-    $QemuGuestAgentUrl = $QemuGuestAgentConfig
     $useCustomConfig = $false
     
-    # Check if custom URL and checksum are provided (new behavior)
+    # Priority 1: Check if custom URL and checksum are provided (highest priority)
     if ($CustomUrl -and $Checksum) {
         $useCustomConfig = $true
-        $QemuGuestAgentUrl = $CustomUrl
         Write-Log "Using custom QEMU Guest Agent configuration with checksum verification"
+        Write-Log "Downloading QEMU guest agent installer from ${CustomUrl} ..."
+        $dst = Join-Path $ResourcesDir "qemu-ga.msi"
+        Execute-Retry {
+            (New-Object System.Net.WebClient).DownloadFile($CustomUrl, $dst)
+        }
+        
+        Write-Log "Verifying QEMU Guest Agent installer checksum..."
+        $fileHash = Get-FileHash -Path $dst -Algorithm SHA256
+        if ($fileHash.Hash -ne $Checksum) {
+            Remove-Item -Path $dst -Force
+            throw "QEMU Guest Agent installer checksum verification failed. Expected: $Checksum, Got: $($fileHash.Hash)"
+        }
+        Write-Log "Checksum verification successful"
+        Write-Log "QEMU guest agent installer path is: $dst"
+        return
     }
+    
+    # Priority 2: Handle source-based installation
+    $Source = $Source.ToLower()
+    
+    # Source: iso - Extract from VirtIO ISO only
+    if ($Source -eq "iso") {
+        if (!$VirtioIsoPath -or !(Test-Path $VirtioIsoPath)) {
+            throw "Source is set to 'iso' but VirtIO ISO path is not provided or does not exist: $VirtioIsoPath"
+        }
+        Write-Log "Source set to 'iso': Extracting QEMU Guest Agent from VirtIO ISO"
+        Copy-QemuGuestAgentFromISO -IsoPath $VirtioIsoPath -ResourcesDir $ResourcesDir -OsArch $OsArch
+        return
+    }
+    
+    # Source: auto - Try ISO first, fallback to web
+    if ($Source -eq "auto") {
+        if ($VirtioIsoPath -and (Test-Path $VirtioIsoPath)) {
+            try {
+                Write-Log "Source set to 'auto': Trying to extract QEMU Guest Agent from VirtIO ISO first"
+                Copy-QemuGuestAgentFromISO -IsoPath $VirtioIsoPath -ResourcesDir $ResourcesDir -OsArch $OsArch
+                Write-Log "Successfully extracted QEMU Guest Agent from VirtIO ISO"
+                return
+            } catch {
+                Write-Log "Failed to extract QEMU Guest Agent from VirtIO ISO: $_"
+                Write-Log "Falling back to web download..."
+            }
+        } else {
+            Write-Log "Source set to 'auto' but VirtIO ISO not available, using web download"
+        }
+    }
+    
+    # Source: web (default) or fallback from auto
+    Write-Log "Using web download for QEMU Guest Agent"
+    
+    $QemuGuestAgentUrl = $QemuGuestAgentConfig
+    
     # Legacy behavior: if install_qemu_ga is True, use default URL
-    elseif ($QemuGuestAgentConfig -eq 'True') {
+    if ($QemuGuestAgentConfig -eq 'True') {
         $arch = "x86"
         if ($OsArch -eq "AMD64") {
             $arch = "x64"
@@ -605,17 +735,6 @@ function Download-QemuGuestAgent {
     $dst = Join-Path $ResourcesDir "qemu-ga.msi"
     Execute-Retry {
         (New-Object System.Net.WebClient).DownloadFile($QemuGuestAgentUrl, $dst)
-    }
-    
-    # Verify checksum if provided
-    if ($useCustomConfig -and $Checksum) {
-        Write-Log "Verifying QEMU Guest Agent installer checksum..."
-        $fileHash = Get-FileHash -Path $dst -Algorithm SHA256
-        if ($fileHash.Hash -ne $Checksum) {
-            Remove-Item -Path $dst -Force
-            throw "QEMU Guest Agent installer checksum verification failed. Expected: $Checksum, Got: $($fileHash.Hash)"
-        }
-        Write-Log "Checksum verification successful"
     }
     
     Write-Log "QEMU guest agent installer path is: $dst"
@@ -1743,7 +1862,8 @@ function New-WindowsCloudImage {
             if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
                 Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
                     -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture) `
-                    -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum
+                    -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum `
+                    -Source $windowsImageConfig.source -VirtioIsoPath $windowsImageConfig.virtio_iso_path
             }
             Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
                                    -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
@@ -1925,7 +2045,8 @@ function New-WindowsFromGoldenImage {
         if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
             Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
                 -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture `
-                -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum
+                -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum `
+                -Source $windowsImageConfig.source -VirtioIsoPath $windowsImageConfig.virtio_iso_path
         }
         Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
                                -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
