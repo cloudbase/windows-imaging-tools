@@ -704,8 +704,6 @@ function Download-QemuGuestAgent {
         [string]$VirtioIsoPath
     )
 
-    Write-Log "Download-QemuGuestAgent called with Source='$Source', VirtioIsoPath='$VirtioIsoPath'"
-    
     $useCustomConfig = $false
     
     # Priority 1: Check if custom URL and checksum are provided (highest priority)
@@ -1908,7 +1906,6 @@ function New-WindowsCloudImage {
                 Download-ZapFree $resourcesDir ([string]$image.ImageArchitecture)
             }
             if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
-                Write-Log "QEMU GA config - source: '$($windowsImageConfig.source)', virtio_iso_path: '$($windowsImageConfig.virtio_iso_path)'"
                 Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
                     -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture) `
                     -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum `
@@ -2092,7 +2089,6 @@ function New-WindowsFromGoldenImage {
             Download-ZapFree $resourcesDir $imageInfo.imageArchitecture
         }
         if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
-            Write-Log "QEMU GA config - source: '$($windowsImageConfig.source)', virtio_iso_path: '$($windowsImageConfig.virtio_iso_path)'"
             Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
                 -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture `
                 -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum `

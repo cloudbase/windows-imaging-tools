@@ -177,6 +177,191 @@ A planned feature will add `use_qemu_ga_from_virtio_drivers=True` to automatical
   * https://ask.cloudbase.it/question/1227/nano-server-wont-boot/
   * https://ask.cloudbase.it/question/1179/win2012-boot-error-on-openstack-in-vmware-env/
 
+## QEMU Guest Agent Installation from VirtIO ISO
+
+### Overview
+
+This feature allows you to install the QEMU Guest Agent directly from a VirtIO ISO file instead of downloading it from the internet. This is particularly useful for:
+
+- **Offline environments** where internet access is restricted
+- **Faster builds** by avoiding network downloads
+- **Version consistency** ensuring the guest agent matches your VirtIO drivers version
+- **Bandwidth savings** when building multiple images
+
+### Configuration
+
+#### New Parameter: `source`
+
+The `source` parameter in the `[virtio_qemu_guest_agent]` section controls where the QEMU Guest Agent is obtained from.
+
+```ini
+[virtio_qemu_guest_agent]
+source=<value>
+```
+
+#### Available Options
+
+| Value | Description | Requires VirtIO ISO | Behavior |
+|-------|-------------|---------------------|----------|
+| `web` | Download from internet (default) | No | Downloads from fedorapeople.org |
+| `iso` | Extract from VirtIO ISO only | **Yes** | Fails if ISO not available or MSI not found |
+| `auto` | Try ISO first, fallback to web | No | Intelligent: uses ISO if available, otherwise downloads |
+
+### Usage Examples
+
+#### Example 1: Extract from VirtIO ISO (Offline Mode)
+
+```ini
+[drivers]
+virtio_iso_path=C:\ISOs\virtio-win-0.1.240.iso
+
+[custom]
+install_qemu_ga=True
+
+[virtio_qemu_guest_agent]
+source=iso
+```
+
+**Behavior**: The QEMU Guest Agent will be extracted from the VirtIO ISO. If the ISO is not found or doesn't contain the guest agent, the build will fail with a clear error message.
+
+#### Example 2: Automatic Mode (Recommended)
+
+```ini
+[drivers]
+virtio_iso_path=C:\ISOs\virtio-win-0.1.240.iso
+
+[custom]
+install_qemu_ga=True
+
+[virtio_qemu_guest_agent]
+source=auto
+```
+
+**Behavior**: The system will first try to extract from the ISO. If that fails (ISO not found, MSI not in ISO, etc.), it will automatically fall back to downloading from the internet.
+
+#### Example 3: Web Download Only (Default)
+
+```ini
+[custom]
+install_qemu_ga=True
+
+[virtio_qemu_guest_agent]
+source=web
+```
+
+**Behavior**: Always downloads from the internet, even if a VirtIO ISO is available. This is the default behavior for backward compatibility.
+
+#### Example 4: Custom URL with Checksum (Highest Priority)
+
+```ini
+[custom]
+install_qemu_ga=True
+
+[virtio_qemu_guest_agent]
+source=web
+url=https://example.com/qemu-ga-x64.msi
+checksum=abc123def456...
+```
+
+**Behavior**: When both `url` and `checksum` are provided, they take priority over the `source` parameter. The MSI will be downloaded from the custom URL and verified with SHA256 checksum.
+
+### Priority Order
+
+The system follows this priority order:
+
+1. **Custom URL + Checksum** (if both provided) → Always used, `source` is ignored
+2. **Source-based installation**:
+   - `source=iso` → Extract from ISO only (error if fails)
+   - `source=auto` → Try ISO, fallback to web
+   - `source=web` → Download from internet
+3. **Legacy behavior** (backward compatibility):
+   - `install_qemu_ga=True` → Default URL
+   - `install_qemu_ga=<URL>` → Custom URL without checksum
+
+### VirtIO ISO Structure
+
+The system searches for the QEMU Guest Agent MSI in the following locations within the VirtIO ISO:
+
+- `guest-agent/qemu-ga-x86_64.msi` (for 64-bit) ✓ **Most common**
+- `guest-agent/qemu-ga-i386.msi` (for 32-bit) ✓ **Most common**
+- `guest-agent/qemu-ga-x64.msi` (alternative naming)
+- `guest-agent/qemu-ga-x86.msi` (alternative naming)
+- Additional fallback paths and recursive search
+
+The system will automatically detect and use the correct MSI file based on the image architecture.
+
+### Error Handling
+
+#### Source = iso
+
+If the ISO is not found or doesn't contain the guest agent:
+
+```
+ERROR: Source is set to 'iso' but VirtIO ISO path is not provided or does not exist: C:\path\to\virtio-win.iso
+```
+
+or
+
+```
+ERROR: QEMU Guest Agent MSI not found in VirtIO ISO for architecture: x64. 
+Searched paths: E:\guest-agent\qemu-ga-x86_64.msi, ...
+Please check the ISO structure and update the search paths if needed.
+```
+
+#### Source = auto
+
+If extraction from ISO fails, the system automatically falls back to web download:
+
+```
+Failed to extract QEMU Guest Agent from VirtIO ISO: <error details>
+Falling back to web download...
+Using web download for QEMU Guest Agent
+Downloading QEMU guest agent installer from https://fedorapeople.org/...
+```
+
+### Backward Compatibility
+
+All existing configurations continue to work without modification:
+
+- Configurations without the `[virtio_qemu_guest_agent]` section use the default `source=web`
+- The `install_qemu_ga=True` behavior is unchanged (downloads from default URL)
+- Custom URLs specified in `install_qemu_ga=<URL>` still work
+
+### Best Practices
+
+1. **Use `source=auto` for flexibility**: Works both online and offline
+2. **Use `source=iso` for strict offline environments**: Ensures no internet access is attempted
+3. **Use `source=web` for consistency**: Always gets the same version from the internet
+4. **Combine with checksum verification**: For maximum security when using custom URLs
+
+### Technical Details
+
+#### ISO Mounting
+
+The system:
+1. Creates a temporary backup copy of the ISO
+2. Mounts the ISO using Windows VirtualDisk API
+3. Searches for the QEMU Guest Agent MSI
+4. Copies the MSI to the resources directory
+5. Safely dismounts and cleans up the temporary ISO
+
+#### Architecture Mapping
+
+| Windows Architecture | ISO Filename |
+|---------------------|--------------|
+| AMD64 (64-bit) | `qemu-ga-x86_64.msi` |
+| x86 (32-bit) | `qemu-ga-i386.msi` |
+
+### Troubleshooting
+
+**Q: The build fails with "QEMU Guest Agent MSI not found in VirtIO ISO"**
+
+A: Your VirtIO ISO might have a different structure. Check the ISO content and verify the guest agent MSI is present. You can use `source=auto` to fall back to web download, or use `source=web` to skip ISO extraction entirely.
+
+**Q: I want to force internet download even though I have an ISO**
+
+A: Set `source=web` in the configuration.
+
 ## For developers
 
 ### Running unit tests
