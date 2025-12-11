@@ -99,107 +99,15 @@ in `Examples/create-windows-online-cloud-image.ps1`
 
 ### Overview
 
-The QEMU Guest Agent installation supports multiple configuration modes with optional SHA256 checksum verification for enhanced security, while maintaining full backward compatibility.
+The QEMU Guest Agent installation supports multiple configuration modes:
 
-### Configuration Options
+- **Source selection**: Install from VirtIO ISO, web download, or automatic fallback
+- **Checksum verification**: Optional SHA256 verification for enhanced security
+- **Full backward compatibility**: All existing configurations continue to work
 
-#### 1. Default Installation (Simple)
-```ini
-[custom]
-install_qemu_ga=True
-```
-Uses the default version from the VirtIO archive.
+### Installation Source Options
 
-#### 2. Custom URL (Legacy)
-```ini
-[custom]
-install_qemu_ga=https://example.com/custom-qemu-ga.msi
-```
-
-#### 3. Secure Installation with Checksum (Recommended)
-```ini
-[custom]
-install_qemu_ga=True
-
-[virtio_qemu_guest_agent]
-url=https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-VERSION/qemu-ga-x64.msi
-checksum=<SHA256_CHECKSUM>
-```
-
-**Important**: Both `url` and `checksum` must be specified together to enable checksum verification.
-
-### Getting the SHA256 Checksum
-
-**Windows (PowerShell)**:
-```powershell
-Get-FileHash -Path "qemu-ga-x64.msi" -Algorithm SHA256
-```
-
-**Linux/macOS**:
-```bash
-sha256sum qemu-ga-x64.msi
-```
-
-### Benefits of Checksum Verification
-
-- **Security**: Verifies downloaded file integrity
-- **Control**: Know exactly which version will be installed
-- **Protection**: Prevents man-in-the-middle attacks
-- **Compliance**: Facilitates security audits
-
-### Future Enhancements
-
-A planned feature will add `use_qemu_ga_from_virtio_drivers=True` to automatically match the QEMU Guest Agent version with the installed VirtIO drivers, ensuring version consistency.
-
-## Frequently Asked Questions (FAQ)
-
-### The image generation never stops
-  * Make sure that the Hyper-V VMSwitch is correctly configured and it allows Internet connectivity<br/>
-  if you have configured the image generation to install the Windows updates.
-  * Check in the associated Hyper-V VM that the Logon.ps1 script has not failed.<br/>
-  If the script failed, there should be a PowerShell window showing the error message.
-
-### I booted an instance with the image and I got a BSOD
-  * This is the most common scenario that one can encounter and it is easily fixable.
-  * If you boot on KVM hypervisor, make sure that you configure the correct path for the ISO/folder with VirtIO drivers.<br/>
-  The configuration options are `virtio_iso_path` and `virtio_base_path`.
-  * On the KVM hypervisor side, make sure you start the KVM vm process with the `--enable-kvm` flag.
-  * If you boot on a baremetal machine, make sure that either the basic Windows installation has the storage drivers builtin<br/>
-  or that you specify the proper path to drivers folder for the `drivers_path` configuration option.
-
-### I booted an instance with the image and I got a forever Windows loading screen
-  * This usually happens when the hypervisor does not expose the CPU flags required for that specific Windows version.
-  * For example, with Windows 10, you can check https://www.microsoft.com/en-us/windows/windows-10-specifications <br/>
-  and make sure that the CPU flags are exposed by your hypervisor of choice.
-
-### Useful links on ask.cloudbase.it
-  * https://ask.cloudbase.it/question/2365/windows-server-2016-standard-image-wont-boot-blue-windows-icon-hangs/
-  * https://ask.cloudbase.it/question/1227/nano-server-wont-boot/
-  * https://ask.cloudbase.it/question/1179/win2012-boot-error-on-openstack-in-vmware-env/
-
-## QEMU Guest Agent Installation from VirtIO ISO
-
-### Overview
-
-This feature allows you to install the QEMU Guest Agent directly from a VirtIO ISO file instead of downloading it from the internet. This is particularly useful for:
-
-- **Offline environments** where internet access is restricted
-- **Faster builds** by avoiding network downloads
-- **Version consistency** ensuring the guest agent matches your VirtIO drivers version
-- **Bandwidth savings** when building multiple images
-
-### Configuration
-
-#### New Parameter: `source`
-
-The `source` parameter in the `[virtio_qemu_guest_agent]` section controls where the QEMU Guest Agent is obtained from.
-
-```ini
-[virtio_qemu_guest_agent]
-source=<value>
-```
-
-#### Available Options
+The `source` parameter in the `[virtio_qemu_guest_agent]` section controls where the QEMU Guest Agent is obtained from:
 
 | Value | Description | Requires VirtIO ISO | Behavior |
 |-------|-------------|---------------------|----------|
@@ -207,13 +115,22 @@ source=<value>
 | `iso` | Extract from VirtIO ISO only | **Yes** | Fails if ISO not available or MSI not found |
 | `auto` | Try ISO first, fallback to web | No | Intelligent: uses ISO if available, otherwise downloads |
 
-### Usage Examples
+### Configuration Examples
 
-#### Example 1: Extract from VirtIO ISO (Offline Mode)
+#### 1. Default Installation (Simple)
+
+```ini
+[custom]
+install_qemu_ga=True
+```
+
+Uses the default version from the VirtIO archive (web download).
+
+#### 2. Extract from VirtIO ISO (Offline Mode)
 
 ```ini
 [drivers]
-virtio_iso_path=C:\ISOs\virtio-win-0.1.240.iso
+virtio_iso_path=/path/to/virtio-win.iso
 
 [custom]
 install_qemu_ga=True
@@ -222,13 +139,13 @@ install_qemu_ga=True
 source=iso
 ```
 
-**Behavior**: The QEMU Guest Agent will be extracted from the VirtIO ISO. If the ISO is not found or doesn't contain the guest agent, the build will fail with a clear error message.
+Extracts the QEMU Guest Agent from the VirtIO ISO. Useful for offline environments.
 
-#### Example 2: Automatic Mode (Recommended)
+#### 3. Automatic Mode (Recommended)
 
 ```ini
 [drivers]
-virtio_iso_path=C:\ISOs\virtio-win-0.1.240.iso
+virtio_iso_path=/path/to/virtio-win.iso
 
 [custom]
 install_qemu_ga=True
@@ -237,21 +154,9 @@ install_qemu_ga=True
 source=auto
 ```
 
-**Behavior**: The system will first try to extract from the ISO. If that fails (ISO not found, MSI not in ISO, etc.), it will automatically fall back to downloading from the internet.
+Tries ISO extraction first, automatically falls back to web download if needed.
 
-#### Example 3: Web Download Only (Default)
-
-```ini
-[custom]
-install_qemu_ga=True
-
-[virtio_qemu_guest_agent]
-source=web
-```
-
-**Behavior**: Always downloads from the internet, even if a VirtIO ISO is available. This is the default behavior for backward compatibility.
-
-#### Example 4: Custom URL with Checksum (Highest Priority)
+#### 4. Secure Installation with Checksum
 
 ```ini
 [custom]
@@ -259,11 +164,20 @@ install_qemu_ga=True
 
 [virtio_qemu_guest_agent]
 source=web
-url=https://example.com/qemu-ga-x64.msi
-checksum=abc123def456...
+url=https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-VERSION/qemu-ga-x64.msi
+checksum=<SHA256_CHECKSUM>
 ```
 
-**Behavior**: When both `url` and `checksum` are provided, they take priority over the `source` parameter. The MSI will be downloaded from the custom URL and verified with SHA256 checksum.
+Downloads from a custom URL with SHA256 checksum verification. Both `url` and `checksum` must be specified together.
+
+#### 5. Legacy Custom URL
+
+```ini
+[custom]
+install_qemu_ga=https://example.com/custom-qemu-ga.msi
+```
+
+Downloads from a custom URL without checksum verification (backward compatibility).
 
 ### Priority Order
 
@@ -327,12 +241,33 @@ All existing configurations continue to work without modification:
 - The `install_qemu_ga=True` behavior is unchanged (downloads from default URL)
 - Custom URLs specified in `install_qemu_ga=<URL>` still work
 
+### Getting the SHA256 Checksum
+
+**Windows (PowerShell)**:
+```powershell
+Get-FileHash -Path "qemu-ga-x64.msi" -Algorithm SHA256
+```
+
+**Linux/macOS**:
+```bash
+sha256sum qemu-ga-x64.msi
+```
+
+### Benefits
+
+- **Offline environments**: Use `source=iso` for air-gapped systems
+- **Faster builds**: Avoid network downloads with local ISO
+- **Version consistency**: Match guest agent with VirtIO drivers version
+- **Security**: SHA256 checksum verification prevents tampering
+- **Flexibility**: `source=auto` works both online and offline
+- **Bandwidth savings**: Reuse ISO for multiple image builds
+
 ### Best Practices
 
 1. **Use `source=auto` for flexibility**: Works both online and offline
 2. **Use `source=iso` for strict offline environments**: Ensures no internet access is attempted
-3. **Use `source=web` for consistency**: Always gets the same version from the internet
-4. **Combine with checksum verification**: For maximum security when using custom URLs
+3. **Use `source=web` with checksum**: For maximum security when downloading
+4. **Match versions**: Keep guest agent version consistent with VirtIO drivers
 
 ### Technical Details
 
@@ -356,11 +291,41 @@ The system:
 
 **Q: The build fails with "QEMU Guest Agent MSI not found in VirtIO ISO"**
 
-A: Your VirtIO ISO might have a different structure. Check the ISO content and verify the guest agent MSI is present. You can use `source=auto` to fall back to web download, or use `source=web` to skip ISO extraction entirely.
+A: Your VirtIO ISO might have a different structure. Use `source=auto` to fall back to web download, or `source=web` to skip ISO extraction entirely.
 
 **Q: I want to force internet download even though I have an ISO**
 
 A: Set `source=web` in the configuration.
+
+**Q: How do I ensure version consistency between VirtIO drivers and guest agent?**
+
+A: Use `source=iso` to extract the guest agent from the same VirtIO ISO used for drivers.
+
+## Frequently Asked Questions (FAQ)
+
+### The image generation never stops
+  * Make sure that the Hyper-V VMSwitch is correctly configured and it allows Internet connectivity<br/>
+  if you have configured the image generation to install the Windows updates.
+  * Check in the associated Hyper-V VM that the Logon.ps1 script has not failed.<br/>
+  If the script failed, there should be a PowerShell window showing the error message.
+
+### I booted an instance with the image and I got a BSOD
+  * This is the most common scenario that one can encounter and it is easily fixable.
+  * If you boot on KVM hypervisor, make sure that you configure the correct path for the ISO/folder with VirtIO drivers.<br/>
+  The configuration options are `virtio_iso_path` and `virtio_base_path`.
+  * On the KVM hypervisor side, make sure you start the KVM vm process with the `--enable-kvm` flag.
+  * If you boot on a baremetal machine, make sure that either the basic Windows installation has the storage drivers builtin<br/>
+  or that you specify the proper path to drivers folder for the `drivers_path` configuration option.
+
+### I booted an instance with the image and I got a forever Windows loading screen
+  * This usually happens when the hypervisor does not expose the CPU flags required for that specific Windows version.
+  * For example, with Windows 10, you can check https://www.microsoft.com/en-us/windows/windows-10-specifications <br/>
+  and make sure that the CPU flags are exposed by your hypervisor of choice.
+
+### Useful links on ask.cloudbase.it
+  * https://ask.cloudbase.it/question/2365/windows-server-2016-standard-image-wont-boot-blue-windows-icon-hangs/
+  * https://ask.cloudbase.it/question/1227/nano-server-wont-boot/
+  * https://ask.cloudbase.it/question/1179/win2012-boot-error-on-openstack-in-vmware-env/
 
 ## For developers
 
