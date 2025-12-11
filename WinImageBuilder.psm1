@@ -575,9 +575,12 @@ function Copy-QemuGuestAgentFromISO {
 
     Write-Log "Extracting QEMU Guest Agent from VirtIO ISO: $IsoPath..."
     
-    $arch = "x86"
+    # Map architecture to ISO file naming convention
+    $arch = "i386"
+    $archAlt = "x86"
     if ($OsArch -eq "AMD64") {
-        $arch = "x64"
+        $arch = "x86_64"
+        $archAlt = "x64"
     }
     
     $isoPathBak = $IsoPath + (Get-Random) + ".iso"
@@ -602,12 +605,41 @@ function Copy-QemuGuestAgentFromISO {
             
             Write-Log "Searching for QEMU Guest Agent in VirtIO ISO at ${isoDriveLetter}..."
             
+            # List root directory content for debugging
+            Write-Log "Listing ISO root directory content:"
+            try {
+                $rootItems = Get-ChildItem -Path "${isoDriveLetter}\" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+                Write-Log "Root items: $($rootItems -join ', ')"
+            } catch {
+                Write-Log "Could not list root directory: $_"
+            }
+            
+            # Check if guest-agent directory exists and list its content
+            if (Test-Path "${isoDriveLetter}\guest-agent") {
+                Write-Log "guest-agent directory found, listing content:"
+                try {
+                    $gaItems = Get-ChildItem -Path "${isoDriveLetter}\guest-agent" -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+                    foreach ($item in $gaItems) {
+                        Write-Log "  - $item"
+                    }
+                } catch {
+                    Write-Log "Could not list guest-agent directory: $_"
+                }
+            }
+            
+            # Try multiple possible paths with both naming conventions
             $possiblePaths = @(
                 "${isoDriveLetter}\guest-agent\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\guest-agent\qemu-ga-${archAlt}.msi",
                 "${isoDriveLetter}\guest-agent\qemu-ga-${arch}\qemu-ga-${arch}.msi",
-                "${isoDriveLetter}\qemu-ga-${arch}.msi"
+                "${isoDriveLetter}\guest-agent\${arch}\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\qemu-ga\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\${arch}\qemu-ga-${arch}.msi"
             )
             
+            # Also try to find any MSI file containing "qemu-ga" and the architecture
+            Write-Log "Searching for QEMU Guest Agent MSI files..."
             $qemuGaMsiPath = $null
             foreach ($path in $possiblePaths) {
                 Write-Log "Checking path: $path"
@@ -618,8 +650,22 @@ function Copy-QemuGuestAgentFromISO {
                 }
             }
             
+            # If not found in standard paths, try to search recursively
             if (!$qemuGaMsiPath) {
-                throw "QEMU Guest Agent MSI not found in VirtIO ISO for architecture: $arch. Searched paths: $($possiblePaths -join ', ')"
+                Write-Log "Not found in standard paths, searching recursively..."
+                try {
+                    $foundFiles = Get-ChildItem -Path "${isoDriveLetter}\" -Recurse -Filter "*qemu-ga*${arch}*.msi" -ErrorAction SilentlyContinue
+                    if ($foundFiles) {
+                        $qemuGaMsiPath = $foundFiles[0].FullName
+                        Write-Log "Found QEMU Guest Agent via recursive search at: $qemuGaMsiPath"
+                    }
+                } catch {
+                    Write-Log "Recursive search failed: $_"
+                }
+            }
+            
+            if (!$qemuGaMsiPath) {
+                throw "QEMU Guest Agent MSI not found in VirtIO ISO for architecture: $arch. Searched paths: $($possiblePaths -join ', '). Please check the ISO structure and update the search paths if needed."
             }
             
             $dst = Join-Path $ResourcesDir "qemu-ga.msi"
