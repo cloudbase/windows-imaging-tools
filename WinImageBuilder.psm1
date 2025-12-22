@@ -570,24 +570,53 @@ function Download-QemuGuestAgent {
         [Parameter(Mandatory=$true)]
         [string]$ResourcesDir,
         [Parameter(Mandatory=$true)]
-        [string]$OsArch
+        [string]$OsArch,
+        [Parameter(Mandatory=$false)]
+        [string]$CustomUrl,
+        [Parameter(Mandatory=$false)]
+        [string]$Checksum
     )
 
-    $QemuGuestAgentUrl = $QemuGuestAgentConfig
-    if ($QemuGuestAgentConfig -eq 'True') {
-        $arch = "x86"
-        if ($OsArch -eq "AMD64") {
-            $arch = "x64"
+    $useCustomConfig = $false
+    
+    # Priority 1: Check if custom URL and checksum are provided (highest priority)
+    if ($CustomUrl -and $Checksum) {
+        $useCustomConfig = $true
+        Write-Log "Using custom QEMU Guest Agent configuration with checksum verification"
+        Write-Log "Downloading QEMU guest agent installer from ${CustomUrl} ..."
+        $dst = Join-Path $ResourcesDir "qemu-ga.msi"
+        Execute-Retry {
+            (New-Object System.Net.WebClient).DownloadFile($CustomUrl, $dst)
         }
-        $QemuGuestAgentUrl = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads" + `
-                             "/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-{0}.msi" -f $arch
+        
+        # Verify SHA256 checksum
+        Write-Log "Verifying SHA256 checksum..."
+        $fileHash = (Get-FileHash -Path $dst -Algorithm SHA256).Hash
+        if ($fileHash -ne $Checksum) {
+            throw "SHA256 checksum verification failed. Expected: $Checksum, Got: $fileHash"
+        }
+        Write-Log "SHA256 checksum verification successful"
     }
+    
+    # Priority 2: Use legacy behavior (backward compatibility)
+    if (!$useCustomConfig) {
+        $QemuGuestAgentUrl = $QemuGuestAgentConfig
+        if ($QemuGuestAgentConfig -eq 'True') {
+            $arch = "x86"
+            if ($OsArch -eq "AMD64") {
+                $arch = "x64"
+            }
+            $QemuGuestAgentUrl = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads" + `
+                                 "/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-{0}.msi" -f $arch
+        }
 
-    Write-Log "Downloading QEMU guest agent installer from ${QemuGuestAgentUrl} ..."
-    $dst = Join-Path $ResourcesDir "qemu-ga.msi"
-    Execute-Retry {
-        (New-Object System.Net.WebClient).DownloadFile($QemuGuestAgentUrl, $dst)
+        Write-Log "Downloading QEMU guest agent installer from ${QemuGuestAgentUrl} ..."
+        $dst = Join-Path $ResourcesDir "qemu-ga.msi"
+        Execute-Retry {
+            (New-Object System.Net.WebClient).DownloadFile($QemuGuestAgentUrl, $dst)
+        }
     }
+    
     Write-Log "QEMU guest agent installer path is: $dst"
 }
 
@@ -1712,7 +1741,8 @@ function New-WindowsCloudImage {
             }
             if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
                 Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
-                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture)
+                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture) `
+                    -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum
             }
             Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
                                    -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
@@ -1893,7 +1923,8 @@ function New-WindowsFromGoldenImage {
         }
         if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
             Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
-                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture
+                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture `
+                -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum
         }
         Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
                                -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
