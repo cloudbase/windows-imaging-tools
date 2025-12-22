@@ -563,6 +563,129 @@ function Download-CloudbaseInit {
     }
 }
 
+function Copy-QemuGuestAgentFromISO {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$IsoPath,
+        [Parameter(Mandatory=$true)]
+        [string]$ResourcesDir,
+        [Parameter(Mandatory=$true)]
+        [string]$OsArch
+    )
+
+    Write-Log "Extracting QEMU Guest Agent from VirtIO ISO: $IsoPath..."
+    
+    # Map architecture to ISO file naming convention
+    $arch = "i386"
+    $archAlt = "x86"
+    if ($OsArch -eq "AMD64") {
+        $arch = "x86_64"
+        $archAlt = "x64"
+    }
+    
+    $isoPathBak = $IsoPath + (Get-Random) + ".iso"
+    Copy-Item $IsoPath $isoPathBak -Force
+    Write-Log "Using backed up ISO for safe dismount."
+    $IsoPath = $isoPathBak
+    
+    $v = [WIMInterop.VirtualDisk]::OpenVirtualDisk($IsoPath)
+    try {
+        if (Is-IsoFile $IsoPath) {
+            $v.AttachVirtualDisk()
+            Get-PSDrive | Out-Null
+            $devicePath = $v.GetVirtualDiskPhysicalPath()
+            $isoDriveLetter = Execute-Retry {
+                $res = (Get-DiskImage -DevicePath $devicePath | Get-Volume).DriveLetter
+                if (!$res) {
+                    throw "Failed to mount ISO ${IsoPath}"
+                }
+                return $res
+            }
+            $isoDriveLetter += ":"
+            
+            Write-Log "Searching for QEMU Guest Agent in VirtIO ISO at ${isoDriveLetter}..."
+            
+            # List root directory content for debugging
+            Write-Log "Listing ISO root directory content:"
+            try {
+                $rootItems = Get-ChildItem -Path "${isoDriveLetter}\" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+                Write-Log "Root items: $($rootItems -join ', ')"
+            } catch {
+                Write-Log "Could not list root directory: $_"
+            }
+            
+            # Check if guest-agent directory exists and list its content
+            if (Test-Path "${isoDriveLetter}\guest-agent") {
+                Write-Log "guest-agent directory found, listing content:"
+                try {
+                    $gaItems = Get-ChildItem -Path "${isoDriveLetter}\guest-agent" -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+                    foreach ($item in $gaItems) {
+                        Write-Log "  - $item"
+                    }
+                } catch {
+                    Write-Log "Could not list guest-agent directory: $_"
+                }
+            }
+            
+            # Try multiple possible paths with both naming conventions
+            $possiblePaths = @(
+                "${isoDriveLetter}\guest-agent\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\guest-agent\qemu-ga-${archAlt}.msi",
+                "${isoDriveLetter}\guest-agent\qemu-ga-${arch}\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\guest-agent\${arch}\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\qemu-ga\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\qemu-ga-${arch}.msi",
+                "${isoDriveLetter}\${arch}\qemu-ga-${arch}.msi"
+            )
+            
+            # Also try to find any MSI file containing "qemu-ga" and the architecture
+            Write-Log "Searching for QEMU Guest Agent MSI files..."
+            $qemuGaMsiPath = $null
+            foreach ($path in $possiblePaths) {
+                Write-Log "Checking path: $path"
+                if (Test-Path $path) {
+                    $qemuGaMsiPath = $path
+                    Write-Log "Found QEMU Guest Agent at: $path"
+                    break
+                }
+            }
+            
+            # If not found in standard paths, try to search recursively
+            if (!$qemuGaMsiPath) {
+                Write-Log "Not found in standard paths, searching recursively..."
+                try {
+                    $foundFiles = Get-ChildItem -Path "${isoDriveLetter}\" -Recurse -Filter "*qemu-ga*${arch}*.msi" -ErrorAction SilentlyContinue
+                    if ($foundFiles) {
+                        $qemuGaMsiPath = $foundFiles[0].FullName
+                        Write-Log "Found QEMU Guest Agent via recursive search at: $qemuGaMsiPath"
+                    }
+                } catch {
+                    Write-Log "Recursive search failed: $_"
+                }
+            }
+            
+            if (!$qemuGaMsiPath) {
+                throw "QEMU Guest Agent MSI not found in VirtIO ISO for architecture: $arch. Searched paths: $($possiblePaths -join ', '). Please check the ISO structure and update the search paths if needed."
+            }
+            
+            $dst = Join-Path $ResourcesDir "qemu-ga.msi"
+            Copy-Item -Path $qemuGaMsiPath -Destination $dst -Force
+            Write-Log "QEMU Guest Agent copied successfully to: $dst"
+            
+        } else {
+            throw "The $IsoPath is not a valid ISO path."
+        }
+    } catch {
+        throw $_
+    } finally {
+        if ($v) {
+            $v.DetachVirtualDisk()
+            $v.Close()
+        }
+        Remove-Item -Force $IsoPath
+    }
+}
+
 function Download-QemuGuestAgent {
     Param(
         [Parameter(Mandatory=$true)]
@@ -570,24 +693,89 @@ function Download-QemuGuestAgent {
         [Parameter(Mandatory=$true)]
         [string]$ResourcesDir,
         [Parameter(Mandatory=$true)]
-        [string]$OsArch
+        [string]$OsArch,
+        [Parameter(Mandatory=$false)]
+        [string]$CustomUrl,
+        [Parameter(Mandatory=$false)]
+        [string]$Checksum,
+        [Parameter(Mandatory=$false)]
+        [string]$Source = "web",
+        [Parameter(Mandatory=$false)]
+        [string]$VirtioIsoPath
     )
 
-    $QemuGuestAgentUrl = $QemuGuestAgentConfig
-    if ($QemuGuestAgentConfig -eq 'True') {
-        $arch = "x86"
-        if ($OsArch -eq "AMD64") {
-            $arch = "x64"
+    $useCustomConfig = $false
+    
+    # Priority 1: Check if custom URL and checksum are provided (highest priority)
+    if ($CustomUrl -and $Checksum) {
+        $useCustomConfig = $true
+        Write-Log "Using custom QEMU Guest Agent configuration with checksum verification"
+        Write-Log "Downloading QEMU guest agent installer from ${CustomUrl} ..."
+        $dst = Join-Path $ResourcesDir "qemu-ga.msi"
+        Execute-Retry {
+            (New-Object System.Net.WebClient).DownloadFile($CustomUrl, $dst)
         }
-        $QemuGuestAgentUrl = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads" + `
-                             "/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-{0}.msi" -f $arch
+        
+        # Verify SHA256 checksum
+        Write-Log "Verifying SHA256 checksum..."
+        $fileHash = (Get-FileHash -Path $dst -Algorithm SHA256).Hash
+        if ($fileHash -ne $Checksum) {
+            throw "SHA256 checksum verification failed. Expected: $Checksum, Got: $fileHash"
+        }
+        Write-Log "SHA256 checksum verification successful"
     }
+    
+    # Priority 2: Source-based installation (iso/web/auto)
+    if (!$useCustomConfig) {
+        $useSourceConfig = $false
+        
+        # Check if source is set to 'iso' or 'auto'
+        if ($Source -eq "iso" -or $Source -eq "auto") {
+            if ($VirtioIsoPath -and (Test-Path $VirtioIsoPath)) {
+                Write-Log "Source set to '$Source': Attempting to extract QEMU Guest Agent from VirtIO ISO"
+                try {
+                    Copy-QemuGuestAgentFromISO -IsoPath $VirtioIsoPath -ResourcesDir $ResourcesDir -OsArch $OsArch
+                    $useSourceConfig = $true
+                } catch {
+                    if ($Source -eq "iso") {
+                        # If source is explicitly 'iso', fail with error
+                        throw "Failed to extract QEMU Guest Agent from VirtIO ISO: $_"
+                    } else {
+                        # If source is 'auto', log the error and fall back to web download
+                        Write-Log "Failed to extract QEMU Guest Agent from VirtIO ISO: $_"
+                        Write-Log "Falling back to web download..."
+                    }
+                }
+            } else {
+                if ($Source -eq "iso") {
+                    throw "Source is set to 'iso' but VirtIO ISO path is not provided or does not exist: $VirtioIsoPath"
+                } else {
+                    Write-Log "VirtIO ISO not available, falling back to web download"
+                }
+            }
+        }
+        
+        # Priority 3: Use web download (legacy behavior or fallback from 'auto')
+        if (!$useSourceConfig) {
+            Write-Log "Using web download for QEMU Guest Agent"
+            $QemuGuestAgentUrl = $QemuGuestAgentConfig
+            if ($QemuGuestAgentConfig -eq 'True') {
+                $arch = "x86"
+                if ($OsArch -eq "AMD64") {
+                    $arch = "x64"
+                }
+                $QemuGuestAgentUrl = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads" + `
+                                     "/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-{0}.msi" -f $arch
+            }
 
-    Write-Log "Downloading QEMU guest agent installer from ${QemuGuestAgentUrl} ..."
-    $dst = Join-Path $ResourcesDir "qemu-ga.msi"
-    Execute-Retry {
-        (New-Object System.Net.WebClient).DownloadFile($QemuGuestAgentUrl, $dst)
+            Write-Log "Downloading QEMU guest agent installer from ${QemuGuestAgentUrl} ..."
+            $dst = Join-Path $ResourcesDir "qemu-ga.msi"
+            Execute-Retry {
+                (New-Object System.Net.WebClient).DownloadFile($QemuGuestAgentUrl, $dst)
+            }
+        }
     }
+    
     Write-Log "QEMU guest agent installer path is: $dst"
 }
 
@@ -1712,7 +1900,9 @@ function New-WindowsCloudImage {
             }
             if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
                 Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
-                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture)
+                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture) `
+                    -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum `
+                    -Source $windowsImageConfig.source -VirtioIsoPath $windowsImageConfig.virtio_iso_path
             }
             Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
                                    -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
@@ -1893,7 +2083,9 @@ function New-WindowsFromGoldenImage {
         }
         if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
             Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
-                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture
+                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture `
+                -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum `
+                -Source $windowsImageConfig.source -VirtioIsoPath $windowsImageConfig.virtio_iso_path
         }
         Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
                                -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
