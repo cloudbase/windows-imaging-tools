@@ -158,47 +158,71 @@ function Create-ImageVirtualDisk {
     )
 
     Write-Log "Creating Virtual Disk Image: $VhdPath..."
+    
+    # Create the virtual disk using WIMInterop
     $v = [WIMInterop.VirtualDisk]::CreateVirtualDisk($VhdPath, $Size)
+    
     try {
         $v.AttachVirtualDisk()
-        $path = $v.GetVirtualDiskPhysicalPath()
-        # -match creates an env variable called $Matches
-        $path -match "\\\\.\\PHYSICALDRIVE(?<num>\d+)" | Out-Null
-        $diskNum = $Matches["num"]
-        $volumeLabel = "OS"
+
+        # Modern and Safe Disk Detection
+        # Instead of parsing the path string, we ask the OS for the disk object directly.
+        $disk = Execute-Retry -Command {
+            $d = Get-DiskImage -ImagePath $VhdPath | Get-Disk
+            if (-not $d) { throw "Disk not detected by system yet, waiting..." }
+            return $d
+        } -maxRetryCount 5 -retryInterval 2
+
+        $diskNum = $disk.Number
+        Write-Log "Disk attached as Disk Number: $diskNum"
+
+        # Ensure the disk is clean to avoid initialization errors
+        Clear-Disk -Number $diskNum -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
 
         if ($DiskLayout -eq "UEFI") {
+            # UEFI Layout (GPT)
             Initialize-Disk -Number $diskNum -PartitionStyle GPT
-            # EFI partition
+            
+            # 1. EFI System Partition (ESP)
             $systemPart = New-Partition -DiskNumber $diskNum -Size 200MB `
                 -GptType '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' `
                 -AssignDriveLetter
-            & format.com "$($systemPart.DriveLetter):" /FS:FAT32 /Q /Y | Out-Null
-            if ($LASTEXITCODE) {
-                throw "Format failed"
-            }
-            # MSR partition
+            
+            # Use native PowerShell cmdlet instead of format.com for better performance
+            Format-Volume -Partition $systemPart -FileSystem FAT32 -NewFileSystemLabel "System" -Force -Confirm:$false | Out-Null
+
+            # 2. Microsoft Reserved Partition (MSR)
             New-Partition -DiskNumber $diskNum -Size 128MB `
                 -GptType '{e3c9e316-0b5c-4db8-817d-f92df00215ae}' | Out-Null
-            # Windows partition
+            
+            # 3. Windows Partition
             $windowsPart = New-Partition -DiskNumber $diskNum -UseMaximumSize `
                 -GptType "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}" `
                 -AssignDriveLetter
         } else {
-            # BIOS
+            # BIOS Layout (MBR)
             Initialize-Disk -Number $diskNum -PartitionStyle MBR
+            
             $windowsPart = New-Partition -DiskNumber $diskNum -UseMaximumSize `
                 -AssignDriveLetter -IsActive
+            
+            # In BIOS mode, the System and Windows partitions are the same
             $systemPart = $windowsPart
         }
 
-        Format-Volume -DriveLetter $windowsPart.DriveLetter `
-            -FileSystem NTFS -NewFileSystemLabel $volumeLabel `
+        # Format the OS Partition (NTFS)
+        Format-Volume -Partition $windowsPart -FileSystem NTFS -NewFileSystemLabel "OS" `
             -Force -Confirm:$false | Out-Null
+
         return @("$($systemPart.DriveLetter):", "$($windowsPart.DriveLetter):")
+
+    } catch {
+        Write-Error "Virtual Disk creation error: $_"
+        throw
     } finally {
-        Write-Log "Successfuly created disk: $VhdPath"
-        $v.Close()
+        Write-Log "Successfully created disk: $VhdPath"
+        # Close the handle if it exists
+        if ($v) { $v.Close() }
     }
 }
 
