@@ -116,8 +116,8 @@ function Get-AvailableConfigOptions {
           "Description" = "Installs QEMU guest agent services from the Fedora VirtIO website.
                            Defaults to 'False' (no installation will be performed).
                            If set to 'True', the following MSI installer will be downloaded and installed:
-                             * for x86: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-x86.msi
-                             * for x64: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-x64.msi
+                             * for x86: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-qemu-ga/qemu-ga-i386.msi
+                             * for x64: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-qemu-ga/qemu-ga-x86-64.msi
                            The value can be changed to a custom URL, to allow other QEMU guest agent versions to be installed.
                            Note: QEMU guest agent requires VirtIO drivers to be present on the image.
                           "},
