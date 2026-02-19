@@ -768,24 +768,28 @@ function Get-VirtIODrivers {
     )
 
     Write-Log "Getting Virtual IO Drivers: $BasePath..."
-    $driverPaths = @()
-    foreach ($driver in $VirtioDrivers) {
-        foreach ($osVersion in $VirtIODriverMappings.Keys) {
-            $map = $VirtIODriverMappings[$osVersion]
+    $osVersion = $null
+    foreach ($entry in $VirtIODriverMappings.Keys) {
+            $map = $VirtIODriverMappings[$entry]
             $minBuildNumber = $map[0]
             $maxBuildNumber = $map[1]
             $isServerVersion = $map[2]
-            if (!(($BuildNumber -ge $minBuildNumber -and $BuildNumber -le $maxBuildNumber) `
-                -and ($isServerVersion -eq $isServer))) {
-              continue
+            if (($BuildNumber -ge $minBuildNumber -and $BuildNumber -le $maxBuildNumber) `
+                -and ($isServerVersion -eq $isServer)) {
+                $osVersion = $entry
+                break
             }
+    }
+
+    $driverPaths = @()
+    if ($osVersion) {
+        foreach ($driver in $VirtioDrivers) {
             $driverPath = "{0}\{1}\{2}\{3}" -f @($basePath,
                                                  $driver,
                                                  $osVersion,
                                                  $architecture)
             if (Test-Path $driverPath) {
                 $driverPaths += $driverPath
-                break
             }
         }
     }
