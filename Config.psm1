@@ -31,12 +31,14 @@ function Get-AvailableConfigOptions {
         @{"Name" = "virtual_disk_format"; "DefaultValue" = "VHDX";
           "Description" = "Select between VHD, VHDX, QCOW2, VMDK or RAW formats."},
         @{"Name" = "image_type"; "DefaultValue" = "HYPER-V";
-          "Description" = "This parameter allows to choose between MAAS, KVM, VMware and Hyper-V specific images.
+          "Description" = "This parameter allows to choose between MAAS, KVM, Nutanix, VMware and Hyper-V specific images.
                            For HYPER-V, cloudbase-init will be installed and the generated image should be in vhd or vhdx format.
                            For MAAS, in addition to cloudbase-init, the curtin tools are installed
                            and the generated image should be in raw.tgz format.
                            For KVM, in addition to cloudbase-init, the VirtIO drivers are installed
-                           and the generated image should be in qcow2 format."},
+                           and the generated image should be in qcow2 format.
+                           For Nutanix, in addition to cloudbase-init, the Nutanix VirtIO drivers
+                           are installed and the generated image should be in qcow2 format."},
         @{"Name" = "disk_layout"; "DefaultValue" = "BIOS";
           "Description" = "This parameter can be set to either BIOS or UEFI."},
         @{"Name" = "product_key";
@@ -108,10 +110,12 @@ function Get-AvailableConfigOptions {
         @{"Name" = "shrink_image_to_minimum_size"; "DefaultValue" = $true; "AsBoolean" = $true
           "Description" = "Whether to shrink the image partition and disk after the image generation is complete."},
         @{"Name" = "virtio_iso_path"; "GroupName" = "drivers";
-          "Description" = "The path to the ISO file containing the VirtIO drivers."},
+          "Description" = "The path to the ISO file containing the VirtIO drivers.
+                           For Nutanix images, virtio_iso_path must point to the Nutanix VirtIO drivers ISO."},
         @{"Name" = "virtio_base_path"; "GroupName" = "drivers";
           "Description" = "The location where the VirtIO drivers are found.
-                           For example, the location of a mounted VirtIO ISO. VirtIO versions supported >=0.1.6.x"},
+                           For example, the location of a mounted VirtIO ISO. VirtIO versions supported >=0.1.6.x
+                           For Nutanix images, virtio_base_path must point to the Nutanix VirtIO drivers."},
         @{"Name" = "install_qemu_ga"; "GroupName" = "custom";"DefaultValue" = "False";
           "Description" = "Installs QEMU guest agent services from the Fedora VirtIO website.
                            Defaults to 'False' (no installation will be performed).
