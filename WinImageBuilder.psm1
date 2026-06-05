@@ -571,11 +571,17 @@ function Download-QemuGuestAgent {
         [Parameter(Mandatory=$true)]
         [string]$ResourcesDir,
         [Parameter(Mandatory=$true)]
-        [string]$OsArch
+        [string]$OsArch,
+        [Parameter(Mandatory=$false)]
+        [string]$CustomUrl,
+        [Parameter(Mandatory=$false)]
+        [string]$Checksum
     )
 
     $QemuGuestAgentUrl = $QemuGuestAgentConfig
-    if ($QemuGuestAgentConfig -eq 'True') {
+    if ($CustomUrl) {
+        $QemuGuestAgentUrl = $CustomUrl
+    } elseif ($QemuGuestAgentConfig -eq 'True') {
         $arch = "x86"
         if ($OsArch -eq "AMD64") {
             $arch = "x64"
@@ -589,6 +595,21 @@ function Download-QemuGuestAgent {
     Execute-Retry {
         (New-Object System.Net.WebClient).DownloadFile($QemuGuestAgentUrl, $dst)
     }
+
+    if ($Checksum) {
+        Write-Log "Verifying QEMU guest agent installer SHA256 checksum ..."
+        $expectedChecksum = $Checksum.Trim().ToUpper()
+        $actualChecksum = (Get-FileHash -Path $dst -Algorithm SHA256).Hash.ToUpper()
+        if ($actualChecksum -ne $expectedChecksum) {
+            throw ("QEMU guest agent checksum verification failed. " + `
+                   "Expected: ${expectedChecksum}, got: ${actualChecksum}")
+        }
+        Write-Log "QEMU guest agent installer checksum verified successfully."
+    } elseif ($CustomUrl) {
+        Write-Log ("WARNING: a custom QEMU guest agent URL was provided without a checksum; " + `
+                   "the installer integrity will not be verified.")
+    }
+
     Write-Log "QEMU guest agent installer path is: $dst"
 }
 
@@ -1713,7 +1734,8 @@ function New-WindowsCloudImage {
             }
             if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
                 Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
-                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture)
+                    -ResourcesDir $resourcesDir -OsArch ([string]$image.ImageArchitecture) `
+                    -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum
             }
             Download-CloudbaseInit -resourcesDir $resourcesDir -osArch ([string]$image.ImageArchitecture) `
                                    -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
@@ -1894,7 +1916,8 @@ function New-WindowsFromGoldenImage {
         }
         if ($windowsImageConfig.install_qemu_ga -and $windowsImageConfig.install_qemu_ga -ne 'False') {
             Download-QemuGuestAgent -QemuGuestAgentConfig $windowsImageConfig.install_qemu_ga `
-                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture
+                -ResourcesDir $resourcesDir -OsArch $imageInfo.imageArchitecture `
+                -CustomUrl $windowsImageConfig.url -Checksum $windowsImageConfig.checksum
         }
         Download-CloudbaseInit -resourcesDir $resourcesDir -osArch $imageInfo.imageArchitecture `
                                -BetaRelease:$windowsImageConfig.beta_release -MsiPath $windowsImageConfig.msi_path `
