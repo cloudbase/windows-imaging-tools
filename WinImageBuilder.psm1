@@ -668,6 +668,19 @@ function Add-PackageToImage {
     }
 }
 
+function ConvertFrom-CommaSeparatedString {
+    # Splits a comma separated config value into a clean array, trimming whitespace
+    # around each entry and dropping empty entries (e.g. from a trailing comma).
+    Param(
+        [Parameter(Mandatory=$false)]
+        [string]$Value
+    )
+    if (!$Value) {
+        return @()
+    }
+    return @($Value.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
 function Enable-FeaturesInImage {
     Param(
         [Parameter(Mandatory=$true)]
@@ -1737,15 +1750,15 @@ function New-WindowsCloudImage {
                     -driversBasePath $windowsImageConfig.virtio_base_path
             }
             if ($windowsImageConfig.extra_features) {
-                Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features.split(",")
+                Enable-FeaturesInImage $winImagePath (ConvertFrom-CommaSeparatedString $windowsImageConfig.extra_features)
             }
             if ($windowsImageConfig.extra_packages) {
-                foreach ($package in $windowsImageConfig.extra_packages.split(",")) {
+                foreach ($package in (ConvertFrom-CommaSeparatedString $windowsImageConfig.extra_packages)) {
                     Add-PackageToImage $winImagePath $package -ignoreErrors $windowsImageConfig.extra_packages_ignore_errors
                 }
             }
             if ($windowsImageConfig.extra_capabilities) {
-                Add-CapabilitiesToImage $winImagePath $windowsImageConfig.extra_capabilities
+                Add-CapabilitiesToImage $winImagePath (ConvertFrom-CommaSeparatedString $windowsImageConfig.extra_capabilities)
             }
             if ($windowsImageConfig.clean_updates_offline) {
                 Clean-WindowsUpdates $winImagePath -PurgeUpdates $windowsImageConfig.purge_updates

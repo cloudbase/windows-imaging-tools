@@ -249,3 +249,33 @@ Describe "Test New-WindowsOnlineImage" {
 
     Remove-Item -Force -ErrorAction SilentlyContinue "${fakeConfigPath}.offline"
 }
+
+Describe "Test ConvertFrom-CommaSeparatedString" {
+    InModuleScope $moduleName {
+        It "splits comma separated values into separate entries" {
+            $result = @(ConvertFrom-CommaSeparatedString "OpenSSH.Server,OpenSSH.Client")
+            $result.Count | Should -Be 2
+            $result[0] | Should -Be "OpenSSH.Server"
+            $result[1] | Should -Be "OpenSSH.Client"
+        }
+        It "trims whitespace around each entry" {
+            $result = @(ConvertFrom-CommaSeparatedString "Microsoft-Hyper-V, Microsoft-Hyper-V-Management-Clients")
+            $result[0] | Should -Be "Microsoft-Hyper-V"
+            $result[1] | Should -Be "Microsoft-Hyper-V-Management-Clients"
+        }
+        It "drops empty entries produced by a trailing comma" {
+            $result = @(ConvertFrom-CommaSeparatedString "OpenSSH.Server,")
+            $result.Count | Should -Be 1
+            $result[0] | Should -Be "OpenSSH.Server"
+        }
+        It "returns an empty array for an empty value" {
+            $result = @(ConvertFrom-CommaSeparatedString "")
+            $result.Count | Should -Be 0
+        }
+        It "returns a single entry for a value without commas" {
+            $result = @(ConvertFrom-CommaSeparatedString "OpenSSH.Server")
+            $result.Count | Should -Be 1
+            $result[0] | Should -Be "OpenSSH.Server"
+        }
+    }
+}
