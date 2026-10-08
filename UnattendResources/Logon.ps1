@@ -287,6 +287,10 @@ function Get-AdministratorAccount {
 function Enable-AdministratorAccount {
     [string]$username = Get-AdministratorAccount
     $setupCompletePath = "$env:windir\Setup\Scripts\SetupComplete.cmd"
+    $setupCompleteDir = Split-Path -Parent $setupCompletePath
+    if (!(Test-Path $setupCompleteDir)) {
+        New-Item -ItemType Directory -Force -Path $setupCompleteDir | Out-Null
+    }
     $activate = "powershell -c net user {0} /active:yes" -f $username
     $expiration = 'wmic path Win32_UserAccount WHERE Name="{0}" set PasswordExpires=true' -f $username
     $logonReset = "net.exe user {0} /logonpasswordchg:yes" -f $username
