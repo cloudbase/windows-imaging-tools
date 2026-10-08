@@ -271,6 +271,12 @@ function Create-BCDBootConfig {
         $bcdbootPath = $bcdbootLocalPath
     }
 
+    if ($diskLayout -eq "UEFI") {
+        # on newer WS 2025 builds BCDBoot copies the boot manager before creating its destination.
+        New-Item -Path "${systemDrive}\EFI\Microsoft\Boot" -ItemType Directory `
+            -Force -ErrorAction Stop | Out-Null
+    }
+
     $ErrorActionPreference = "SilentlyContinue"
     # Note: older versions of bcdboot.exe don't have a /f argument
     if ($image.ImageVersion.Major -eq 6 -and $image.ImageVersion.Minor -lt 2) {
