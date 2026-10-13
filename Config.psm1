@@ -115,12 +115,24 @@ function Get-AvailableConfigOptions {
         @{"Name" = "install_qemu_ga"; "GroupName" = "custom";"DefaultValue" = "False";
           "Description" = "Installs QEMU guest agent services from the Fedora VirtIO website.
                            Defaults to 'False' (no installation will be performed).
-                           If set to 'True', the following MSI installer will be downloaded and installed:
+                           If set to 'True', by default the following MSI installer will be downloaded and installed:
                              * for x86: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-x86.msi
                              * for x64: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-qemu-ga/qemu-ga-win-100.0.0.0-3.el7ev/qemu-ga-x64.msi
                            The value can be changed to a custom URL, to allow other QEMU guest agent versions to be installed.
+                           For a safer alternative that also verifies the installer integrity, set 'install_qemu_ga = True'
+                           and use the 'url' and 'checksum' options in the [virtio_qemu_guest_agent] section instead.
                            Note: QEMU guest agent requires VirtIO drivers to be present on the image.
                           "},
+        @{"Name" = "url"; "GroupName" = "virtio_qemu_guest_agent";
+          "Description" = "Optional custom URL for the QEMU guest agent MSI installer.
+                           When set, it overrides the default installer URL selected by 'install_qemu_ga'.
+                           Requires 'install_qemu_ga' to be set to 'True' and is intended to be used together
+                           with the 'checksum' option below to verify the downloaded installer."},
+        @{"Name" = "checksum"; "GroupName" = "virtio_qemu_guest_agent";
+          "Description" = "Optional SHA256 checksum of the QEMU guest agent MSI installer.
+                           When set, the downloaded installer is verified against this value and the build
+                           fails on mismatch. It applies to the installer selected by 'url' or by 'install_qemu_ga'.
+                           Compute it with: (Get-FileHash -Algorithm SHA256 <path-to-msi>).Hash"},
         @{"Name" = "drivers_path"; "GroupName" = "drivers";
           "Description" = "The location where additional drivers that are needed for the image are located."},
         @{"Name" = "install_updates"; "GroupName" = "updates"; "DefaultValue" = $false; "AsBoolean" = $true;

@@ -73,6 +73,34 @@ popd
 
 ```
 
+## QEMU Guest Agent installer verification
+
+When `install_qemu_ga` is set to `True`, the QEMU guest agent MSI is downloaded from the
+default Fedora VirtIO location. You can optionally pin and verify the installer through the
+`[virtio_qemu_guest_agent]` section of the config file:
+
+```ini
+[custom]
+install_qemu_ga=True
+
+[virtio_qemu_guest_agent]
+# Optional custom installer URL (overrides the default selected by install_qemu_ga)
+url=https://example.com/qemu-ga-x86-64.msi
+# Optional SHA256 checksum; the build fails if the downloaded installer does not match
+checksum=ABCDEF0123456789...
+```
+
+- `url` overrides the default installer URL. It requires `install_qemu_ga=True`.
+- `checksum` is the SHA256 hash of the installer. When set, the downloaded MSI is verified
+  and the image build fails on mismatch. It applies whether the installer comes from `url`
+  or from the default URL.
+
+Compute the checksum with:
+
+```powershell
+(Get-FileHash -Algorithm SHA256 .\qemu-ga.msi).Hash
+```
+
 ## Image generation workflow
 
 ### New-WindowsCloudImage
